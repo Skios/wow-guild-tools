@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ResponseStatus {
+  IN
+  OUT
+  TENTATIVE
+  BENCH
+}
+
+enum WoWClass {
+  WARRIOR
+  PALADIN
+  HUNTER
+  ROGUE
+  PRIEST
+  SHAMAN
+  MAGE
+  WARLOCK
+  DRUID
+  DEATHKNIGHT
+  MONK
+  EVOKER
+}
+
+enum WoWRole {
+  TANK
+  HEALER
+  DPS
+}
+
+model User {
+  id           String      @id @default(uuid())
+  platformId   String      @unique // e.g. Telegram user ID
+  username     String
+  preferredChannel String?    @default("telegram")
+  characters   Character[]
+  eventsCreated Event[]
+  groups       GroupMember[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@map("users")
+}
+
+model Character {
+  id        String     @id @default(uuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id])
+  name      String
+  realm     String
+  class     WoWClass   @default(WARRIOR)
+  role      WoWRole    @default(DPS)
+  isMain    Boolean    @default(true)
+  responses Response[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@map("characters")
+}
+
+model RosterGroup {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  members     GroupMember[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@map("roster_groups")
+}
+
+model GroupMember {
+  userId    String
+  groupId   String
+  user      User         @relation(fields: [userId], references: [id])
+  group     RosterGroup  @relation(fields: [groupId], references: [id])
+  joinedAt  DateTime     @default(now())
+
+  @@id([userId, groupId])
+  @@map("group_members")
+}
+
+model Event {
+  id          String     @id @default(uuid())
+  title       String
+  startTime   DateTime
+  endTime     DateTime
+  description String?
+  createdBy   String
+  creator     User       @relation(fields: [createdBy], references: [id])
+  isPublished  Boolean    @default(false)
+  responses   Response[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("events")
+}
+
+model Response {
+  id           String         @id @default(uuid())
+  eventId      String
+  event        Event          @relation(fields: [eventId], references: [id])
+  characterId  String
+  character    Character      @relation(fields: [characterId], references: [id])
+  status       ResponseStatus @default(TENTATIVE)
+  isConfirmed   Boolean    @default(false)
+  arrivalTime  DateTime?
+  note         String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@unique([eventId, characterId])
+  @@map("responses")
+}
