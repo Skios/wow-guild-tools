@@ -74,7 +74,7 @@ export class EventService {
     return event;
   }
 
-  async listEvents() {
-    return this.eventRepo.findAll();
+  async listEvents(limit: number = 20, offset: number = 0) {
+    return this.eventRepo.findAll(limit, offset);
   }
 }

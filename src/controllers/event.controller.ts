@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { EventService } from '../services/event.service';
-import { CreateEventSchema } from '../validators/event.validator';
+import { CreateEventSchema, EventIdSchema, FinalizeRosterSchema } from '../validators/event.validator';
 import { ResponseStatus } from '@prisma/client';
 
 export async function eventRoutes(fastify: FastifyInstance) {
@@ -17,10 +17,10 @@ export async function eventRoutes(fastify: FastifyInstance) {
   });
 
   fastify.patch('/events/:id/roster', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { selections } = request.body as { selections: { characterId: string, status: ResponseStatus, isConfirmed: boolean }[] };
     try {
-      await eventService.finalizeRoster(id, selections);
+      const id = EventIdSchema.parse(request.params.id);
+      const body = FinalizeRosterSchema.parse(request.body);
+      await eventService.finalizeRoster(id, body.selections);
       return reply.send({ success: true });
     } catch (error: any) {
       return reply.code(400).send({ error: error.message });
@@ -28,8 +28,8 @@ export async function eventRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post('/events/:id/publish', async (request, reply) => {
-    const { id } = request.params as { id: string };
     try {
+      const id = EventIdSchema.parse(request.params.id);
       await eventService.publishEvent(id);
       return reply.send({ success: true });
     } catch (error: any) {
@@ -38,8 +38,8 @@ export async function eventRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get('/events/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
     try {
+      const id = EventIdSchema.parse(request.params.id);
       const event = await eventService.getEvent(id);
       return event;
     } catch (error: any) {
@@ -47,7 +47,9 @@ export async function eventRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.get('/events', async () => {
-    return eventService.listEvents();
+  fastify.get('/events', async (request, reply) => {
+    const limit = parseInt(request.query.limit as string) || 20;
+    const offset = parseInt(request.query.offset as string) || 0;
+    return eventService.listEvents(limit, offset);
   });
 }

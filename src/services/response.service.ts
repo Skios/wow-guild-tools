@@ -44,6 +44,6 @@ export class ResponseService {
       })
     );
 
-    return Promise.all(updates);
+    return prisma.$transaction(updates);
   }
 }

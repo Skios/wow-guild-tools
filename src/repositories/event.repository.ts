@@ -25,8 +25,10 @@ export class EventRepository {
     });
   }
 
-  async findAll() {
+  async findAll(limit?: number, offset?: number) {
     return prisma.event.findMany({
+      take: limit,
+      skip: offset,
       orderBy: { startTime: 'asc' },
     });
   }
