@@ -13,5 +13,5 @@
 
 ## CI/CD Pipeline
 - **GitHub Actions**: 
-  - Run `scripts/verify-core.ts` on every PR to `main`.
-  - Block merge if integration tests fail.
+  - `.github/workflows/ci.yml`: `tsc --noEmit`, tests and build on every PR.
+  - Block merge if CI fails (branch protection).
