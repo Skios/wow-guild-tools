@@ -1,55 +1,26 @@
 import type { FastifyInstance } from 'fastify';
-import { UserRepository } from '../repositories/user.repository.js';
-import { ResponseService } from '../services/response.service.js';
+import { z } from 'zod';
+import { safeEqual } from '../lib/safe-equal.js';
 import { telegramConfig } from '../config/telegram.js';
-import { prisma } from '../config/db.js';
+import { TelegramClient } from '../integrations/telegram/telegram.client.js';
+import { CallbackQuerySchema, handleCallbackQuery } from '../services/telegram-callback.service.js';
 
-function validateWebhookSecret(secret: string): boolean {
-  return secret === telegramConfig.webhookSecret;
-}
+const UpdateSchema = z.object({ callback_query: CallbackQuerySchema.optional() });
 
 export async function telegramRoutes(fastify: FastifyInstance) {
-  const userRepo = new UserRepository();
-  const responseService = new ResponseService();
+  const client = new TelegramClient();
 
-  fastify.post(`/webhooks/telegram/${telegramConfig.webhookSecret}`, async (request, reply) => {
-    const body = request.body as any;
-
-    if (body.callback_query) {
-      const { data, from } = body.callback_query;
-
-      // data format: raid_in_UUID
-      const parts = data.split('_');
-      if (parts.length < 3) {
-        return reply.code(400).send({ error: 'Invalid callback data format' });
-      }
-
-      const action = parts[0] + '_' + parts[1]; // raid_in, raid_out, etc.
-      const eventId = parts[2];
-
-      const statusMap: Record<string, any> = {
-        raid_in: 'IN',
-        raid_out: 'OUT',
-        raid_tent: 'TENTATIVE'
-      };
-      const status = statusMap[action];
-
-      if (!status) {
-        return reply.code(400).send({ error: 'Unknown action' });
-      }
-
-      const user = await userRepo.findByPlatformId(from.id.toString());
-      if (!user) return reply.send({ error: 'User not registered' });
-
-      const character = await prisma.character.findFirst({
-        where: { userId: user.id, isMain: true }
-      });
-      if (!character) return reply.send({ error: 'Main character not found' });
-
-      await responseService.updateResponse(eventId, character.id, status);
-      return reply.send({ ok: true });
+  fastify.post('/webhooks/telegram', async (request, reply) => {
+    if (!safeEqual(request.headers['x-telegram-bot-api-secret-token'], telegramConfig.webhookSecret)) {
+      return reply.code(401).send({ error: 'Unauthorized' });
     }
 
+    const update = UpdateSchema.safeParse(request.body);
+    const query = update.success ? update.data.callback_query : undefined;
+    if (!query) return reply.send({ ok: true });
+
+    const text = await handleCallbackQuery(query);
+    await client.answerCallback(query.id, text).catch(err => request.log.warn({ err }, 'answerCallbackQuery failed'));
     return reply.send({ ok: true });
   });
 }

@@ -1,5 +1,7 @@
+import { getEnv } from './env.js';
+
 export const telegramConfig = {
-  token: process.env.TELEGRAM_BOT_TOKEN || '',
-  channelId: process.env.TELEGRAM_CHANNEL_ID || '',
-  webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET || '',
+  get token() { return getEnv().TELEGRAM_BOT_TOKEN; },
+  get channelId() { return getEnv().TELEGRAM_CHANNEL_ID; },
+  get webhookSecret() { return getEnv().TELEGRAM_WEBHOOK_SECRET; },
 };

@@ -19,7 +19,13 @@ export class TelegramClient {
   }
 
   async setWebhook(url: string) {
-    return this.bot.telegram.setWebhook(`${url}/${telegramConfig.webhookSecret}`);
+    return this.bot.telegram.setWebhook(`${url}/webhooks/telegram`, {
+      secret_token: telegramConfig.webhookSecret,
+    });
+  }
+
+  async answerCallback(callbackQueryId: string, text: string) {
+    return this.bot.telegram.answerCbQuery(callbackQueryId, text, { show_alert: false });
   }
 
   getBot() {

@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { prisma } from '../src/config/db.js';
 
+const auth = { headers: { 'x-api-key': process.env.API_KEY ?? '' } };
+
 async function runVerification() {
   console.log('🧪 Starting Core Engine Verification...');
 
@@ -8,10 +10,10 @@ async function runVerification() {
     // 1. Setup: Create Dummy User and Character
     console.log('Creating dummy data...');
     const user = await prisma.user.upsert({
-      where: { platformId: 'tg_123456789' },
+      where: { platformId: '123456789' },
       update: {},
       create: {
-        platformId: 'tg_123456789',
+        platformId: '123456789',
         username: 'RaidLeader_Test',
       },
     });
@@ -38,13 +40,13 @@ async function runVerification() {
       createdByUserId: user.id,
     };
 
-    const createRes = await axios.post('http://localhost:3000/events', eventPayload);
+    const createRes = await axios.post('http://localhost:3000/events', eventPayload, auth);
     const eventId = createRes.data.id;
     console.log(`✅ Event Created! ID: ${eventId}`);
 
     // 3. Test Event Retrieval
     console.log('\nTesting Event Retrieval...');
-    const getRes = await axios.get(`http://localhost:3000/events/${eventId}`);
+    const getRes = await axios.get(`http://localhost:3000/events/${eventId}`, auth);
     if (getRes.data.title === eventPayload.title) {
       console.log(`✅ Event retrieved correctly: ${getRes.data.title}`);
     } else {
@@ -53,7 +55,7 @@ async function runVerification() {
 
     // 4. Test Event Listing
     console.log('\nTesting Event Listing...');
-    const listRes = await axios.get('http://localhost:3000/events');
+    const listRes = await axios.get('http://localhost:3000/events', auth);
     if (listRes.data.length > 0) {
       console.log(`✅ Events listed. Found ${listRes.data.length} events.`);
     } else {
