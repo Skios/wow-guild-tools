@@ -1,5 +1,5 @@
-import { FastifyInstance } from 'fastify';
-import { ProfileService } from '../services/profile.service';
+import type { FastifyInstance } from 'fastify';
+import { ProfileService } from '../services/profile.service.js';
 import { z } from 'zod';
 import { WoWClass, WoWRole } from '@prisma/client';
 

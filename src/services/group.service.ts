@@ -1,4 +1,4 @@
-import { GroupRepository } from '../repositories/group.repository';
+import { GroupRepository } from '../repositories/group.repository.js';
 
 export class GroupService {
   private groupRepo = new GroupRepository();

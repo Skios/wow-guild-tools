@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { UserRepository } from '../repositories/user.repository.js';
 import { ResponseService } from '../services/response.service.js';
 import { telegramConfig } from '../config/telegram.js';

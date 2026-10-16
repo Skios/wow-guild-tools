@@ -1,9 +1,9 @@
-import { prisma } from '../config/db';
+import { prisma } from '../config/db.js';
 
 export class GroupRepository {
   async create(name: string, description?: string) {
     return prisma.rosterGroup.create({
-      data: { name, description },
+      data: { name, description: description ?? null },
     });
   }
 

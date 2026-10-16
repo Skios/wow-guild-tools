@@ -1,5 +1,5 @@
-import { prisma } from '../config/db';
-import { Character, WoWClass, WoWRole } from '@prisma/client';
+import { prisma } from '../config/db.js';
+import type { Character, WoWClass, WoWRole } from '@prisma/client';
 
 export interface CharacterInput {
   userId: string;

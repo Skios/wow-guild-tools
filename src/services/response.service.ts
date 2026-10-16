@@ -1,4 +1,4 @@
-import { prisma } from '../config/db';
+import { prisma } from '../config/db.js';
 import { ResponseStatus } from '@prisma/client';
 
 export class ResponseService {

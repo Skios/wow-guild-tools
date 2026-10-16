@@ -1,6 +1,14 @@
 import { z } from 'zod';
+import { ResponseStatus } from '@prisma/client';
 
 export const EventIdSchema = z.string().uuid("Invalid event ID");
+
+export const EventParamsSchema = z.object({ id: EventIdSchema });
+
+export const ListEventsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+});
 
 export const CreateEventSchema = z.object({
   title: z.string().min(1, "Title is required").max(100),
@@ -14,7 +22,7 @@ export const FinalizeRosterSchema = z.object({
   selections: z.array(
     z.object({
       characterId: z.string().uuid("Invalid character ID"),
-      status: z.enum(['confirmed', 'pending', 'declined']),
+      status: z.enum(ResponseStatus),
       isConfirmed: z.boolean(),
     })
   ),

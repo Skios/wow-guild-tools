@@ -1,10 +1,8 @@
-import { Event } from '@prisma/client';
-
 export interface NotificationPayload {
   eventId: string;
   eventTitle: string;
   startTime: Date;
-  description?: string;
+  description?: string | null;
 }
 
 export interface PublicationPayload extends NotificationPayload {

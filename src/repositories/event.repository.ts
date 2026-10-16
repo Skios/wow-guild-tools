@@ -1,5 +1,5 @@
 import { prisma } from '../config/db.js';
-import { CreateEventInput } from '../validators/event.validator.js';
+import type { CreateEventInput } from '../validators/event.validator.js';
 
 export class EventRepository {
   async create(data: CreateEventInput) {
@@ -8,7 +8,7 @@ export class EventRepository {
         title: data.title,
         startTime: new Date(data.startTime),
         endTime: new Date(data.endTime),
-        description: data.description,
+        ...(data.description !== undefined && { description: data.description }),
         createdBy: data.createdByUserId,
       },
     });
@@ -25,7 +25,7 @@ export class EventRepository {
     });
   }
 
-  async findAll(limit?: number, offset?: number) {
+  async findAll(limit: number, offset: number) {
     return prisma.event.findMany({
       take: limit,
       skip: offset,

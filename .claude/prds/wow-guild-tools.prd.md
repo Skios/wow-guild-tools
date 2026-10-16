@@ -41,7 +41,7 @@ We'll know we're right when **the time spent by officers on roster coordination 
 |---|---|---|---|---|
 | 1 | Core Engine | Ability to create event and store responses | pending | — |
 | 2 | Notification Layer | Automated invites sent to the channel | pending | — |
-| 3 | Roster Finalizer | Officer can select final team and publish table | pending | — |
+| 3 | Roster Finalizer | Officer can select final team and publish table | in-progress | .claude/plans/wow-guild-tools.plan.md |
 | 4 | Nudge System | Automated reminders for non-responders | pending | — |
 
 ## Open Questions

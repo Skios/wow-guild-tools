@@ -1,5 +1,5 @@
 import { Telegraf } from 'telegraf';
-import { telegramConfig } from '../../config/telegram';
+import { telegramConfig } from '../../config/telegram.js';
 
 export class TelegramClient {
   private bot: Telegraf<any>;

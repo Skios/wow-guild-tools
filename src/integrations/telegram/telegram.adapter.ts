@@ -1,6 +1,6 @@
-import { NotificationAdapter, NotificationPayload, PublicationPayload } from '../../types/notification.types';
-import { TelegramClient } from './telegram.client';
-import { telegramConfig } from '../../config/telegram';
+import type { NotificationAdapter, NotificationPayload, PublicationPayload } from '../../types/notification.types.js';
+import { TelegramClient } from './telegram.client.js';
+import { telegramConfig } from '../../config/telegram.js';
 
 export class TelegramAdapter implements NotificationAdapter {
   name = 'telegram';

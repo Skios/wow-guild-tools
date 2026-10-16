@@ -1,5 +1,5 @@
-import { FastifyInstance } from 'fastify';
-import { GroupService } from '../services/group.service';
+import type { FastifyInstance } from 'fastify';
+import { GroupService } from '../services/group.service.js';
 import { z } from 'zod';
 
 const GroupSchema = z.object({
