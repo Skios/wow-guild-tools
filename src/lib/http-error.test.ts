@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { AppError, ConflictError, NotFoundError } from './errors.js';
 import { sendError } from './http-error.js';
 
 function fakeReply() {
@@ -10,48 +11,78 @@ function fakeReply() {
   return reply;
 }
 const request = { log: { error: vi.fn() } };
+const run = (error: unknown, status = 400) => {
+  const reply = fakeReply();
+  sendError(request as never, reply as never, error, status);
+  return { code: reply.code.mock.calls[0]![0], body: reply.send.mock.calls[0]![0] };
+};
+const known = (code: string) =>
+  new Prisma.PrismaClientKnownRequestError('Unique constraint failed on users_email', { code, clientVersion: '5' });
 
 describe('sendError', () => {
   test('turns a zod error into 400 with readable issues, not raw JSON', () => {
-    const reply = fakeReply();
     const error = z.object({ limit: z.number().max(100) }).safeParse({ limit: 500 }).error!;
 
-    sendError(request as never, reply as never, error, 404);
+    const { code, body } = run(error, 404);
 
-    expect(reply.code).toHaveBeenCalledWith(400);
-    expect(reply.send).toHaveBeenCalledWith({
-      error: 'Invalid request',
-      issues: [{ path: 'limit', message: expect.any(String) }],
-    });
+    expect(code).toBe(400);
+    expect(body).toEqual({ error: 'Invalid request', issues: [{ path: 'limit', message: expect.any(String) }] });
   });
 
-  test('hides database error details and logs them', () => {
-    const reply = fakeReply();
-    const error = new Prisma.PrismaClientKnownRequestError('Unique constraint failed on users_email', {
-      code: 'P2002',
+  test.each([
+    ['P2002', 409, 'Already exists'],
+    ['P2025', 404, 'Not found'],
+    ['P2003', 400, 'Invalid reference'],
+    ['P2000', 400, 'Invalid data'],
+    ['P9999', 400, 'Invalid data'],
+  ])('maps Prisma %s to %i without leaking details', (prismaCode, status, message) => {
+    const { code, body } = run(known(prismaCode));
+
+    expect(code).toBe(status);
+    expect(body).toEqual({ error: message });
+    expect(JSON.stringify(body)).not.toMatch(/users_email|constraint/i);
+  });
+
+  test('hides Prisma validation errors, which embed the query', () => {
+    const error = new Prisma.PrismaClientValidationError('Argument `where` is missing at prisma.user.findUnique()', {
       clientVersion: '5',
     });
 
-    sendError(request as never, reply as never, error, 400);
+    const { code, body } = run(error);
 
-    expect(reply.send).toHaveBeenCalledWith({ error: 'Invalid data' });
-    expect(request.log.error).toHaveBeenCalled();
+    expect(code).toBe(400);
+    expect(body).toEqual({ error: 'Invalid data' });
   });
 
-  test('keeps our own business messages with the status the route chose', () => {
-    const reply = fakeReply();
+  test('reports an unreachable database as 503', () => {
+    const error = new Prisma.PrismaClientInitializationError("Can't reach database server at db.internal:5432", '5');
 
-    sendError(request as never, reply as never, new Error('Event not found'), 404);
+    const { code, body } = run(error);
 
-    expect(reply.code).toHaveBeenCalledWith(404);
-    expect(reply.send).toHaveBeenCalledWith({ error: 'Event not found' });
+    expect(code).toBe(503);
+    expect(body).toEqual({ error: 'Service unavailable' });
   });
 
-  test('does not leak non-Error throwables', () => {
-    const reply = fakeReply();
-
-    sendError(request as never, reply as never, 'secret string', 400);
-
-    expect(reply.send).toHaveBeenCalledWith({ error: 'Request failed' });
+  test('logs every database error', () => {
+    request.log.error.mockClear();
+    run(known('P2002'));
+    expect(request.log.error).toHaveBeenCalledTimes(1);
   });
+
+  test('uses the status carried by our own errors, whatever the route asked for', () => {
+    expect(run(new NotFoundError('Event not found'), 400)).toEqual({ code: 404, body: { error: 'Event not found' } });
+    expect(run(new ConflictError('Locked'), 400)).toEqual({ code: 409, body: { error: 'Locked' } });
+    expect(run(new AppError('Teapot', 418), 400)).toEqual({ code: 418, body: { error: 'Teapot' } });
+  });
+
+  test('keeps plain business messages with the status the route chose', () => {
+    expect(run(new Error('Event not found'), 404)).toEqual({ code: 404, body: { error: 'Event not found' } });
+  });
+
+  test.each(['secret string', 42, null, undefined, { message: 'leak' }])(
+    'does not leak non-Error throwable %j',
+    (thrown) => {
+      expect(run(thrown)).toEqual({ code: 400, body: { error: 'Request failed' } });
+    },
+  );
 });

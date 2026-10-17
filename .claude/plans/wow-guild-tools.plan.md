@@ -77,3 +77,23 @@ npx tsx scripts/verify-core.ts
 - [ ] All tasks complete
 - [ ] Validation passes
 - [ ] Patterns mirrored, not reinvented
+
+---
+
+# Phase 2: Admin MVP (decided with the user)
+
+Decisions: admin site first (connectivity later); officers compile the roster from the admin section;
+roster shown as a table with class colour and role icon (Tank / Healer / Melee DPS / Ranged DPS);
+nudges and account linking are later milestones; a member-facing site is possible later;
+test coverage is a hard requirement (>= 80% enforced in CI, edge cases included).
+
+## Steps
+1. **Backend hardening, tests first**: add DEMONHUNTER and RANGED_DPS; class/role validity map; Prisma error mapping (409/404);
+   roster rules (unique characters, confirm only IN, caps); ownership check on main character; 404s; controller tests for events, groups, profiles.
+2. **Admin API**: `/meta/wow` (colours, labels, valid roles), `/characters`, event list with response counts, event detail with usernames.
+3. **Admin SPA** in `web/` (Vite + React + TS): login with API key, events list + create, event detail with roster table
+   (class colour, role icon, status, confirm/bench, add character), publish. Component tests with Testing Library.
+4. **CI**: coverage gate for api and web.
+
+## Not in this phase
+Nudges (M4), account linking, member login, spec icons (needs a `spec` column; role icon is enough for now).

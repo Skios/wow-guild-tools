@@ -8,6 +8,7 @@
     "start": "node dist/index.js",
     "build": "prisma generate && tsup src/index.ts --format esm",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "postinstall": "prisma skills sync || exit 0"
   },
   "keywords": [],
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "@vitest/coverage-v8": "^5.0.3",
     "prisma": "^5.22.0",
     "tsup": "^8.5.1",
     "tsx": "^4.23.15",

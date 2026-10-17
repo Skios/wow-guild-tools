@@ -1,0 +1,5 @@
+-- AlterEnum
+ALTER TYPE "WoWClass" ADD VALUE 'DEMONHUNTER';
+
+-- AlterEnum
+ALTER TYPE "WoWRole" ADD VALUE 'RANGED_DPS';

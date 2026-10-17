@@ -27,12 +27,14 @@ enum WoWClass {
   DEATHKNIGHT
   MONK
   EVOKER
+  DEMONHUNTER
 }
 
 enum WoWRole {
   TANK
   HEALER
-  DPS
+  DPS        // melee DPS
+  RANGED_DPS
 }
 
 model User {
