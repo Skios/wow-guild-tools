@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { telegramConfig } from '../config/telegram.js';
 import { TelegramClient } from '../integrations/telegram/telegram.client.js';
 import { safeEqual } from '../lib/safe-equal.js';
+import { handleLateMessage } from '../services/late.service.js';
 import { handleRegistrationCallback, handleRegistrationMessage, type Reply } from '../services/registration.service.js';
 import { CallbackQuerySchema, handleCallbackQuery } from '../services/telegram-callback.service.js';
 
@@ -40,7 +41,9 @@ export async function telegramRoutes(fastify: FastifyInstance) {
     const { callback_query: query, message } = update.data;
 
     if (message?.text && message.chat.type === 'private') {
-      await reply(message.chat.id, await handleRegistrationMessage({ from: message.from, text: message.text }));
+      // A player who just pressed LATE is answering "how many minutes?"; everything else is registration.
+      const late = await handleLateMessage({ from: message.from, text: message.text });
+      await reply(message.chat.id, late ?? await handleRegistrationMessage({ from: message.from, text: message.text }));
     } else if (query?.data.startsWith('reg_')) {
       await reply(query.from.id, await handleRegistrationCallback(query));
       await client.answerCallback(query.id, '').catch(err => request.log.warn({ err }, 'answerCallbackQuery failed'));
@@ -50,6 +53,7 @@ export async function telegramRoutes(fastify: FastifyInstance) {
       const username = result.register ? await client.getBotUsername().catch(() => undefined) : undefined;
       const url = username ? `https://t.me/${username}?start=register` : undefined;
       await client.answerCallback(query.id, result.text, url).catch(err => request.log.warn({ err }, 'answerCallbackQuery failed'));
+      if (result.dm) await reply(query.from.id, { text: result.dm });
     }
     return response.send({ ok: true });
   });

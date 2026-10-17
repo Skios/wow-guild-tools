@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/db.js';
-import { CLASS_INFO, ROLE_LABEL } from '../domain/wow.js';
+import { CLASS_INFO, ROLE_LABEL, SPECS } from '../domain/wow.js';
 import { sendError } from '../lib/http-error.js';
 
 const MAX_CHARACTERS = 200;
@@ -13,7 +13,12 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
   // Single source of truth for class colours, labels and valid roles.
   fastify.get('/meta/wow', async () => ({
-    classes: Object.entries(CLASS_INFO).map(([id, info]) => ({ id, ...info, roles: [...info.roles] })),
+    classes: (Object.keys(CLASS_INFO) as (keyof typeof CLASS_INFO)[]).map(id => ({
+      id,
+      ...CLASS_INFO[id],
+      roles: [...CLASS_INFO[id].roles],
+      specs: SPECS[id],
+    })),
     roles: Object.entries(ROLE_LABEL).map(([id, label]) => ({ id, label })),
   }));
 

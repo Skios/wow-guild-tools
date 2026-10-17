@@ -1,129 +1,173 @@
 import { Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
 
-const db = vi.hoisted(() => ({
-  identity: { upsert: vi.fn() },
-  character: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
-}));
-vi.mock('../config/db.js', () => ({ prisma: db }));
+vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 
 import { handleRegistrationCallback, handleRegistrationMessage } from './registration.service.js';
 
 let nextId = 1000;
-const newUser = () => ({ id: nextId++, username: 'thrall' });
-const say = (from: { id: number; username: string }, text: string) => handleRegistrationMessage({ from, text });
-const press = (from: { id: number; username: string }, data: string) => handleRegistrationCallback({ from, data });
+type Person = { id: number; username: string };
+const newUser = (): Person => ({ id: nextId++, username: 'thrall' });
+const say = (from: Person, text: string) => handleRegistrationMessage({ from, text });
+const press = (from: Person, data: string) => handleRegistrationCallback({ from, data });
+const buttons = (reply: Awaited<ReturnType<typeof say>>) => reply?.keyboard?.inline_keyboard.flat().map(b => b.callback_data) ?? [];
 
-describe('registration conversation', () => {
+const slot = (id: string, name: string, cls = 'WARRIOR', spec = 'PROTECTION') => ({ id, name, realm: 'Silvermoon', class: cls, spec, role: 'TANK' });
+const CLAIM_ID = '3f2b8c1e-8a4d-4c55-9d7e-000000000001';
+
+/** Walks the manual path up to the class question. */
+async function toClassStep(me: Person, name = 'Thrall', realm = 'Silvermoon') {
+  await say(me, '/start');
+  await say(me, name);
+  return say(me, realm);
+}
+
+beforeEach(() => {
+  resetPrismaMock();
+  prismaMock.identity.upsert.mockResolvedValue({ user: { id: 'u1' } });
+  prismaMock.character.findMany.mockResolvedValue([]); // nothing unclaimed unless a test says so
+  prismaMock.character.findFirst.mockResolvedValue(null);
+  prismaMock.character.create.mockResolvedValue({});
+});
+
+describe('claiming a roster name', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    db.identity.upsert.mockResolvedValue({ user: { id: 'u1' } });
-    db.character.findFirst.mockResolvedValue(null);
-    db.character.create.mockResolvedValue({});
+    prismaMock.character.findMany.mockResolvedValue([slot(CLAIM_ID, 'Brannock'), slot('c2', 'Aurelion', 'PALADIN', 'HOLY')]);
   });
 
-  test('walks name, realm, class and role, then saves the main character', async () => {
+  test('/start offers the names officers left empty, plus a way out', async () => {
+    const reply = await say(newUser(), '/start');
+
+    expect(reply?.text).toMatch(/roster/i);
+    expect(buttons(reply)).toEqual([`reg_claim_${CLAIM_ID}`, 'reg_claim_c2', 'reg_claim_none']);
+    expect(reply?.keyboard?.inline_keyboard[0]?.[0]?.text).toMatch(/Brannock.*Protection.*Warrior/);
+  });
+
+  test('picking a name claims it for the player', async () => {
+    prismaMock.character.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.character.findUnique.mockResolvedValue(slot(CLAIM_ID, 'Brannock'));
+    const me = newUser();
+    await say(me, '/start');
+
+    const reply = await press(me, `reg_claim_${CLAIM_ID}`);
+
+    expect(reply?.text).toMatch(/Brannock/);
+    expect(prismaMock.character.updateMany.mock.calls[0]![0].where).toEqual({ id: CLAIM_ID, inRoster: true, userId: null });
+    expect(prismaMock.character.updateMany.mock.calls[0]![0].data.userId).toBe('u1');
+  });
+
+  test('if somebody took the name a second earlier, says so and lists what is still free', async () => {
+    prismaMock.character.updateMany.mockResolvedValue({ count: 0 });
+    const me = newUser();
+    await say(me, '/start');
+
+    const reply = await press(me, `reg_claim_${CLAIM_ID}`);
+
+    expect(reply?.text).toMatch(/just (been )?(taken|claimed)/i);
+    expect(buttons(reply)).toContain('reg_claim_none');
+  });
+
+  test('"my character is not listed" moves on to typing the name', async () => {
+    const me = newUser();
+    await say(me, '/start');
+
+    expect((await press(me, 'reg_claim_none'))?.text).toMatch(/name/i);
+    expect((await say(me, 'Thrall'))?.text).toMatch(/realm/i);
+  });
+
+  test.each(['reg_claim_', 'reg_claim_not-a-uuid', 'reg_claim_../../x'])('ignores the forged button %j', async (data) => {
+    const reply = await press(newUser(), data);
+    expect(reply?.text).toMatch(/invalid/i);
+    expect(prismaMock.character.updateMany).not.toHaveBeenCalled();
+  });
+
+  test('a claim button works even if the bot restarted since /start', async () => {
+    prismaMock.character.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.character.findUnique.mockResolvedValue(slot(CLAIM_ID, 'Brannock'));
+
+    expect((await press(newUser(), `reg_claim_${CLAIM_ID}`))?.text).toMatch(/Brannock/);
+  });
+
+  test('when there is nothing to claim, /start goes straight to the name question', async () => {
+    prismaMock.character.findMany.mockResolvedValue([]);
+    expect((await say(newUser(), '/start'))?.text).toMatch(/name/i);
+  });
+});
+
+describe('registering a new character by hand', () => {
+  test('walks name, realm, class and specialization, then saves the main character', async () => {
     const me = newUser();
 
     expect((await say(me, '/start register'))?.text).toMatch(/name/i);
     expect((await say(me, 'Thrall'))?.text).toMatch(/realm/i);
     const classStep = await say(me, 'Silvermoon');
     expect(classStep?.text).toMatch(/class/i);
-    expect(classStep?.keyboard?.inline_keyboard.flat().map(b => b.callback_data)).toContain('reg_class_SHAMAN');
-    const roleStep = await press(me, 'reg_class_SHAMAN');
-    expect(roleStep?.keyboard?.inline_keyboard.flat().map(b => b.callback_data)).toContain('reg_role_HEALER');
-    const done = await press(me, 'reg_role_HEALER');
+    expect(buttons(classStep)).toContain('reg_class_SHAMAN');
+    const specStep = await press(me, 'reg_class_SHAMAN');
+    expect(buttons(specStep)).toEqual(['reg_spec_ELEMENTAL', 'reg_spec_ENHANCEMENT', 'reg_spec_RESTORATION']);
+    const done = await press(me, 'reg_spec_RESTORATION');
 
-    expect(db.character.create).toHaveBeenCalledWith({
-      data: { userId: 'u1', name: 'Thrall', realm: 'Silvermoon', class: 'SHAMAN', role: 'HEALER', isMain: true },
+    expect(prismaMock.character.create).toHaveBeenCalledWith({
+      data: { userId: 'u1', name: 'Thrall', realm: 'Silvermoon', class: 'SHAMAN', spec: 'RESTORATION', role: 'HEALER', isMain: true },
     });
-    expect(done?.text).toMatch(/registered/i);
+    expect(done?.text).toMatch(/registered.*Restoration.*Shaman/i);
+  });
+
+  test('the role follows the spec: a Hunter can be melee (Survival) or ranged', async () => {
+    const me = newUser();
+    await toClassStep(me);
+    await press(me, 'reg_class_HUNTER');
+    await press(me, 'reg_spec_SURVIVAL');
+
+    expect(prismaMock.character.create.mock.calls[0]![0].data.role).toBe('DPS');
   });
 
   test('updates the existing main character instead of creating a second one', async () => {
+    prismaMock.character.findFirst.mockResolvedValue({ id: 'c1' });
     const me = newUser();
-    db.character.findFirst.mockResolvedValue({ id: 'c1' });
-    await say(me, '/start');
-    await say(me, 'Thrall');
-    await say(me, 'Silvermoon');
+    await toClassStep(me);
     await press(me, 'reg_class_SHAMAN');
-    await press(me, 'reg_role_DPS');
+    await press(me, 'reg_spec_ENHANCEMENT');
 
-    expect(db.character.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'c1' } }));
-    expect(db.character.create).not.toHaveBeenCalled();
+    expect(prismaMock.character.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'c1' } }));
+    expect(prismaMock.character.create).not.toHaveBeenCalled();
   });
 
-  test('rejects an invalid character name and asks again', async () => {
+  test('offers every class, including Demon Hunter', async () => {
+    const step = await toClassStep(newUser());
+    expect(buttons(step)).toContain('reg_class_DEMONHUNTER');
+    expect(buttons(step)).toHaveLength(13);
+  });
+
+  test('Druid has four specializations', async () => {
     const me = newUser();
-    await say(me, '/start');
-
-    expect((await say(me, 'x'))?.text).toMatch(/2.*12|letters/i);
-    expect((await say(me, 'Thrall'))?.text).toMatch(/realm/i);
+    await toClassStep(me);
+    expect(buttons(await press(me, 'reg_class_DRUID'))).toHaveLength(4);
   });
 
-  test('tells a user who never started to send /start', async () => {
-    expect((await say(newUser(), 'hello'))?.text).toMatch(/\/start/);
-  });
-
-  test('ignores class buttons pressed outside the matching step', async () => {
+  test('rejects a forged specialization that the class does not have (Mage with Arms)', async () => {
     const me = newUser();
-    await say(me, '/start');
-
-    expect((await press(me, 'reg_class_SHAMAN'))?.text).toMatch(/out of date/i);
-    expect(db.character.create).not.toHaveBeenCalled();
-  });
-
-  test('sends a user who never started to /start when they press a stale button', async () => {
-    expect((await press(newUser(), 'reg_role_DPS'))?.text).toMatch(/\/start/);
-  });
-
-  test('rejects an unknown class value', async () => {
-    const me = newUser();
-    await say(me, '/start');
-    await say(me, 'Thrall');
-    await say(me, 'Silvermoon');
-
-    expect((await press(me, 'reg_class_NINJA'))?.text).toMatch(/invalid/i);
-  });
-
-  test('only offers the roles the picked class can actually play', async () => {
-    const me = newUser();
-    await say(me, '/start');
-    await say(me, 'Jaina');
-    await say(me, 'Silvermoon');
-
-    const mage = await press(me, 'reg_class_MAGE');
-    expect(mage?.keyboard?.inline_keyboard.flat().map(b => b.callback_data)).toEqual(['reg_role_RANGED_DPS']);
-
-    await say(me, '/start');
-    await say(me, 'Jaina');
-    await say(me, 'Silvermoon');
-    const druid = await press(me, 'reg_class_DRUID');
-    expect(druid?.keyboard?.inline_keyboard.flat().map(b => b.callback_data).sort()).toEqual(
-      ['reg_role_DPS', 'reg_role_HEALER', 'reg_role_RANGED_DPS', 'reg_role_TANK'],
-    );
-  });
-
-  test('rejects a forged role button that the class cannot play (Mage tank)', async () => {
-    const me = newUser();
-    await say(me, '/start');
-    await say(me, 'Jaina');
-    await say(me, 'Silvermoon');
+    await toClassStep(me);
     await press(me, 'reg_class_MAGE');
 
-    const result = await press(me, 'reg_role_TANK');
+    const result = await press(me, 'reg_spec_ARMS');
 
-    expect(result?.text).toMatch(/cannot play|invalid/i);
-    expect(db.character.create).not.toHaveBeenCalled();
+    expect(result?.text).toMatch(/not a|invalid/i);
+    expect(prismaMock.character.create).not.toHaveBeenCalled();
   });
 
-  test('offers Demon Hunter and Ranged DPS', async () => {
+  test.each(['reg_class_NINJA', 'reg_class_', 'reg_class___proto__'])('rejects the unknown class button %j', async (data) => {
     const me = newUser();
-    await say(me, '/start');
-    await say(me, 'Illidan');
-    const step = await say(me, 'Silvermoon');
+    await toClassStep(me);
+    expect((await press(me, data))?.text).toMatch(/invalid/i);
+  });
 
-    expect(step?.keyboard?.inline_keyboard.flat().map(b => b.callback_data)).toContain('reg_class_DEMONHUNTER');
+  test('the old role buttons are treated as out of date', async () => {
+    const me = newUser();
+    await toClassStep(me);
+    await press(me, 'reg_class_MAGE');
+    expect((await press(me, 'reg_role_RANGED_DPS'))?.text).toMatch(/out of date|invalid/i);
   });
 
   test.each(['Thr4ll', '<b>Hi</b>', 'Thrall😀', 'A', 'Abcdefghijklm', "x'; DROP TABLE characters;--"])(
@@ -146,20 +190,20 @@ describe('registration conversation', () => {
     expect((await say(me, 'Silvermoon'))?.keyboard).toBeDefined();
   });
 
-  test('trims name and realm and accepts apostrophes in realm names', async () => {
+  test('normalises the name, trims, and accepts apostrophes in realm names', async () => {
     const me = newUser();
     await say(me, '/start');
-    await say(me, '  Thrall  ');
+    await say(me, '  tHRALL  ');
     await say(me, "  Mal'Ganis ");
     await press(me, 'reg_class_SHAMAN');
-    await press(me, 'reg_role_HEALER');
+    await press(me, 'reg_spec_ELEMENTAL');
 
-    expect(db.character.create).toHaveBeenCalledWith({
+    expect(prismaMock.character.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ name: 'Thrall', realm: "Mal'Ganis" }),
     });
   });
 
-  test('restarting with /start in the middle of the flow discards the old draft', async () => {
+  test('restarting with /start in the middle discards the old draft', async () => {
     const me = newUser();
     await say(me, '/start');
     await say(me, 'Thrall');
@@ -179,63 +223,64 @@ describe('registration conversation', () => {
     await say(b, 'Stormrage');
     await press(a, 'reg_class_SHAMAN');
     await press(b, 'reg_class_MAGE');
-    await press(a, 'reg_role_HEALER');
-    await press(b, 'reg_role_RANGED_DPS');
+    await press(a, 'reg_spec_ELEMENTAL');
+    await press(b, 'reg_spec_FIRE');
 
-    const created = db.character.create.mock.calls.map(c => c[0].data.name).sort();
-    expect(created).toEqual(['Jaina', 'Thrall']);
+    const created = prismaMock.character.create.mock.calls.map(c => `${c[0].data.name}-${c[0].data.spec}`).sort();
+    expect(created).toEqual(['Jaina-FIRE', 'Thrall-ELEMENTAL']);
   });
 
-  test('falls back to first_name, then to the numeric id, when the user has no @username', async () => {
-    const me = { id: nextId++, first_name: 'Cairne' } as unknown as { id: number; username: string };
-    await say(me, '/start');
-    await say(me, 'Cairne');
-    await say(me, 'Thunderbluff');
+  test('falls back to first_name when the user has no @username', async () => {
+    const me = { id: nextId++, first_name: 'Cairne' } as unknown as Person;
+    await toClassStep(me, 'Cairne', 'Thunderbluff');
     await press(me, 'reg_class_DRUID');
-    await press(me, 'reg_role_TANK');
+    await press(me, 'reg_spec_GUARDIAN');
 
-    expect(db.identity.upsert).toHaveBeenLastCalledWith(
+    expect(prismaMock.identity.upsert).toHaveBeenLastCalledWith(
       expect.objectContaining({ create: expect.objectContaining({ user: { create: { username: 'Cairne' } } }) }),
     );
   });
 
-  test.each(['', '   ', '\n', '/'])('treats the message %j from a user without a draft as a request to /start', async (text) => {
+  test.each(['', '   ', '\n', '/'])('treats %j from a user without a draft as a request to /start', async (text) => {
     expect((await say(newUser(), text))?.text).toMatch(/\/start/);
   });
 
-  test('a text message sent while a button is expected asks again instead of crashing', async () => {
+  test('a stale button from a user who never started points them to /start', async () => {
+    expect((await press(newUser(), 'reg_spec_FIRE'))?.text).toMatch(/\/start/);
+  });
+
+  test('a stale button in the middle of the flow says it is out of date', async () => {
     const me = newUser();
     await say(me, '/start');
-    await say(me, 'Thrall');
-    await say(me, 'Silvermoon');
+    expect((await press(me, 'reg_class_SHAMAN'))?.text).toMatch(/out of date/i);
+  });
 
+  test('text while a button is expected asks again instead of crashing', async () => {
+    const me = newUser();
+    await toClassStep(me);
     expect((await say(me, 'shaman please'))?.text).toMatch(/\/start|button/i);
   });
 
-  test('tells the user when somebody else already registered that character, and keeps the draft usable', async () => {
-    const me = newUser();
-    db.character.create.mockRejectedValue(
+  test('tells the user when somebody else already registered that character', async () => {
+    prismaMock.character.create.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError('Unique constraint', { code: 'P2002', clientVersion: '5' }),
     );
-    await say(me, '/start');
-    await say(me, 'Thrall');
-    await say(me, 'Silvermoon');
+    const me = newUser();
+    await toClassStep(me);
     await press(me, 'reg_class_SHAMAN');
 
-    const result = await press(me, 'reg_role_HEALER');
+    const result = await press(me, 'reg_spec_ELEMENTAL');
 
     expect(result?.text).toMatch(/already registered/i);
     expect((await say(me, 'Jaina'))?.text).toMatch(/\/start/);
   });
 
   test('other database errors are not swallowed', async () => {
+    prismaMock.character.create.mockRejectedValue(new Error('db down'));
     const me = newUser();
-    db.character.create.mockRejectedValue(new Error('db down'));
-    await say(me, '/start');
-    await say(me, 'Thrall');
-    await say(me, 'Silvermoon');
+    await toClassStep(me);
     await press(me, 'reg_class_SHAMAN');
 
-    await expect(press(me, 'reg_role_HEALER')).rejects.toThrow('db down');
+    await expect(press(me, 'reg_spec_ELEMENTAL')).rejects.toThrow('db down');
   });
 });

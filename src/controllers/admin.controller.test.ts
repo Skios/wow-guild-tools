@@ -17,6 +17,13 @@ describe('GET /meta/wow', () => {
     expect(body.classes.find((c: { id: string }) => c.id === 'DEMONHUNTER')).toMatchObject({
       label: 'Demon Hunter', color: '#A330C9', roles: ['TANK', 'DPS', 'RANGED_DPS'],
     });
+    expect(body.classes.find((c: { id: string }) => c.id === 'DRUID').specs).toEqual([
+      { id: 'BALANCE', label: 'Balance', role: 'RANGED_DPS' },
+      { id: 'FERAL', label: 'Feral', role: 'DPS' },
+      { id: 'GUARDIAN', label: 'Guardian', role: 'TANK' },
+      { id: 'RESTORATION', label: 'Restoration', role: 'HEALER' },
+    ]);
+    expect(body.classes.every((c: { specs: unknown[] }) => c.specs.length >= 3)).toBe(true);
     expect(body.roles).toEqual([
       { id: 'TANK', label: 'Tank' },
       { id: 'HEALER', label: 'Healer' },
@@ -28,7 +35,7 @@ describe('GET /meta/wow', () => {
 
 describe('GET /characters', () => {
   const row = (name: string, isMain: boolean) => ({
-    id: name, name, realm: 'Silvermoon', class: 'MAGE', role: 'RANGED_DPS', isMain, user: { username: 'u' },
+    id: name, name, realm: 'Silvermoon', class: 'MAGE', role: 'RANGED_DPS', isMain, user: { username: 'u' } as { username: string } | null,
   });
 
   test('lists characters with their owner', async () => {
@@ -39,6 +46,14 @@ describe('GET /characters', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()[0]).toMatchObject({ name: 'Jaina', username: 'u', class: 'MAGE' });
     expect(res.json()[0]).not.toHaveProperty('user');
+  });
+
+  test('an unclaimed roster slot has no owner', async () => {
+    prismaMock.character.findMany.mockResolvedValue([{ ...row('Brannock', false), user: null }]);
+
+    const res = await (await app()).inject('/characters');
+
+    expect(res.json()[0].username).toBeNull();
   });
 
   test('filters by name, case-insensitively and trimmed', async () => {

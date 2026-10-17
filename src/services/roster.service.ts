@@ -69,6 +69,29 @@ export class RosterService {
     }
   }
 
+  /** Roster names nobody has picked yet: what a new player chooses from. */
+  async listUnclaimed() {
+    return prisma.character.findMany({ where: { inRoster: true, userId: null }, orderBy: { name: 'asc' } });
+  }
+
+  /** A player takes a roster name. Atomic: of two players racing for it, exactly one wins. */
+  async claim(characterId: string, userId: string) {
+    return prisma.$transaction(async (tx) => {
+      const taken = await tx.character.updateMany({
+        where: { id: characterId, inRoster: true, userId: null },
+        data: { userId, isMain: true },
+      });
+      if (taken.count === 0) throw new ConflictError('That name has already been claimed');
+
+      // A player has one main character: the one they had before is demoted.
+      await tx.character.updateMany({
+        where: { userId, isMain: true, id: { not: characterId } },
+        data: { isMain: false },
+      });
+      return tx.character.findUnique({ where: { id: characterId } });
+    });
+  }
+
   async release(id: string) {
     const character = await findInRoster(id);
     if (!character.userId) throw new ConflictError('Nobody has claimed this character');

@@ -8,6 +8,9 @@ const db = vi.hoisted(() => ({
 }));
 vi.mock('../config/db.js', () => ({ prisma: db }));
 
+const late = vi.hoisted(() => ({ expectLateMinutes: vi.fn() }));
+vi.mock('./late.service.js', () => late);
+
 import { handleCallbackQuery } from './telegram-callback.service.js';
 
 const EVENT_ID = '3f2b8c1e-8a4d-4c55-9d7e-1b2c3d4e5f60';
@@ -69,5 +72,48 @@ describe('handleCallbackQuery', () => {
     db.event.findUnique.mockRejectedValue(new Error('db down'));
 
     await expect(handleCallbackQuery(query(`raid_in_${EVENT_ID}`))).rejects.toThrow('db down');
+  });
+
+  describe('LATE', () => {
+    test('saves LATE straight away, then asks for the minutes in the private chat', async () => {
+      const result = await handleCallbackQuery(query(`raid_late_${EVENT_ID}`));
+
+      expect(db.response.upsert.mock.calls[0]![0].create.status).toBe('LATE');
+      expect(result.text).toMatch(/private chat/i);
+      expect(result.dm).toMatch(/how many minutes/i);
+      expect(late.expectLateMinutes).toHaveBeenCalledWith(42, EVENT_ID, 'c1');
+    });
+
+    test('does not ask for minutes when sign-ups are closed', async () => {
+      db.event.findUnique.mockResolvedValue({ isPublished: true });
+
+      const result = await handleCallbackQuery(query(`raid_late_${EVENT_ID}`));
+
+      expect(result.text).toMatch(/closed/i);
+      expect(result.dm).toBeUndefined();
+      expect(late.expectLateMinutes).not.toHaveBeenCalled();
+    });
+
+    test('an unregistered player is sent to registration first', async () => {
+      db.character.findFirst.mockResolvedValue(null);
+
+      const result = await handleCallbackQuery(query(`raid_late_${EVENT_ID}`));
+
+      expect(result.register).toBe(true);
+      expect(late.expectLateMinutes).not.toHaveBeenCalled();
+    });
+
+    test('the other buttons never open the question', async () => {
+      await handleCallbackQuery(query(`raid_in_${EVENT_ID}`));
+      expect(late.expectLateMinutes).not.toHaveBeenCalled();
+    });
+  });
+
+  test('an event that does not exist is reported, not a database error', async () => {
+    db.event.findUnique.mockResolvedValue(null);
+
+    const result = await handleCallbackQuery(query(`raid_in_${EVENT_ID}`));
+
+    expect(result.text).toMatch(/no longer exists|not found/i);
   });
 });

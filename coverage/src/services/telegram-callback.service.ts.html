@@ -25,14 +25,14 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>21/21</span>
+                <span class='fraction'>26/26</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">81.81% </span>
+                <span class="strong">86.66% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>9/11</span>
+                <span class='fraction'>13/15</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>18/18</span>
+                <span class='fraction'>22/22</span>
             </div>
         
             
@@ -113,7 +113,22 @@
 <a name='L48'></a><a href='#L48'>48</a>
 <a name='L49'></a><a href='#L49'>49</a>
 <a name='L50'></a><a href='#L50'>50</a>
-<a name='L51'></a><a href='#L51'>51</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a>
+<a name='L64'></a><a href='#L64'>64</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -144,29 +159,42 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">5x</span>
-<span class="cline-any cline-yes">5x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">5x</span>
-<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">11x</span>
+<span class="cline-any cline-yes">11x</span>
+<span class="cline-any cline-yes">11x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">8x</span>
+<span class="cline-any cline-yes">8x</span>
+<span class="cline-any cline-yes">8x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { z } from 'zod';
 import { prisma } from '../config/db.js';
 import { UserRepository } from '../repositories/user.repository.js';
 import { EventIdSchema } from '../validators/event.validator.js';
+import { NotFoundError } from '../lib/errors.js';
+import { expectLateMinutes } from './late.service.js';
 import { EventLockedError, ResponseService } from './response.service.js';
 &nbsp;
 export const CallbackQuerySchema = z.object({
@@ -180,8 +208,8 @@ export const CallbackQuerySchema = z.object({
 });
 export type CallbackQuery = z.infer&lt;typeof CallbackQuerySchema&gt;;
 &nbsp;
-const STATUS_BY_ACTION = { in: 'IN', out: 'OUT', tent: 'TENTATIVE' } as const;
-const CALLBACK_DATA = /^raid_(in|out|tent)_(.+)$/;
+const STATUS_BY_ACTION = { in: 'IN', out: 'OUT', tent: 'TENTATIVE', late: 'LATE' } as const;
+const CALLBACK_DATA = /^raid_(in|out|tent|late)_(.+)$/;
 &nbsp;
 const userRepo = new UserRepository();
 const responseService = new ResponseService();
@@ -190,6 +218,8 @@ export interface CallbackResult {
   text: string;
   /** True when the user must register before answering. */
   register?: true;
+  /** A follow-up to send privately to the user (e.g. asking for the minutes of delay). */
+  dm?: string;
 }
 &nbsp;
 /** Applies a button press and returns what to show to the user. */
@@ -209,7 +239,16 @@ export async function handleCallbackQuery(query: CallbackQuery): Promise&lt;Call
     await responseService.updateResponse(eventId.data, character.id, status);
   } catch (error) {
     if (error instanceof EventLockedError) return { text: 'Sign-ups are closed for this event.' };
+    if (error instanceof NotFoundError) return { text: 'This event no longer exists.' };
     throw error;
+  }
+&nbsp;
+  if (status === 'LATE') {
+    expectLateMinutes(query.from.id, eventId.data, character.id);
+    return {
+      text: 'Late noted. Tell me the minutes in our private chat.',
+      dm: 'How many minutes late will you be? Send a number, for example 15. Ignore this if you are not sure yet.',
+    };
   }
   return { text: `Response saved: ${status}` };
 }
@@ -220,7 +259,7 @@ export async function handleCallbackQuery(query: CallbackQuery): Promise&lt;Call
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-17T14:56:45.099Z
+                at 2026-10-17T16:05:43.841Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

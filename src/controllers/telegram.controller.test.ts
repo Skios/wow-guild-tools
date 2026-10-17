@@ -7,10 +7,12 @@ const send = vi.hoisted(() => vi.fn());
 const regMessage = vi.hoisted(() => vi.fn());
 const regCallback = vi.hoisted(() => vi.fn());
 const botUsername = vi.hoisted(() => vi.fn());
+const lateMessage = vi.hoisted(() => vi.fn());
 vi.mock('../services/telegram-callback.service.js', async (orig) => ({
   ...(await orig<object>()),
   handleCallbackQuery: handle,
 }));
+vi.mock('../services/late.service.js', () => ({ handleLateMessage: lateMessage }));
 vi.mock('../services/registration.service.js', () => ({
   handleRegistrationMessage: regMessage,
   handleRegistrationCallback: regCallback,
@@ -42,6 +44,7 @@ describe('POST /webhooks/telegram', () => {
     handle.mockResolvedValue({ text: 'Saved' });
     send.mockResolvedValue({});
     botUsername.mockResolvedValue('guild_bot');
+    lateMessage.mockResolvedValue(null);
     answer.mockResolvedValue(true);
   });
 
@@ -152,5 +155,55 @@ describe('POST /webhooks/telegram', () => {
 
     expect(res.statusCode).toBe(200);
     expect(answer).toHaveBeenCalledWith('q1', 'Register first', undefined);
+  });
+
+  test('a private message that answers the late question never reaches registration', async () => {
+    lateMessage.mockResolvedValue({ text: 'Noted: late by 15 min.' });
+    const payload = { update_id: 7, message: { chat: { id: 42, type: 'private' }, from: { id: 42 }, text: '15' } };
+
+    await (await app()).inject({
+      method: 'POST', url: '/webhooks/telegram', payload,
+      headers: { 'x-telegram-bot-api-secret-token': 's3cret_token_value' },
+    });
+
+    expect(send).toHaveBeenCalledWith('42', 'Noted: late by 15 min.', {});
+    expect(regMessage).not.toHaveBeenCalled();
+  });
+
+  test('any other private message goes to registration', async () => {
+    regMessage.mockResolvedValue({ text: 'Send /start' });
+    const payload = { update_id: 8, message: { chat: { id: 42, type: 'private' }, from: { id: 42 }, text: 'hello' } };
+
+    await (await app()).inject({
+      method: 'POST', url: '/webhooks/telegram', payload,
+      headers: { 'x-telegram-bot-api-secret-token': 's3cret_token_value' },
+    });
+
+    expect(lateMessage).toHaveBeenCalledWith({ from: { id: 42 }, text: 'hello' });
+    expect(regMessage).toHaveBeenCalled();
+  });
+
+  test('a LATE press answers the button and asks for the minutes privately', async () => {
+    handle.mockResolvedValue({ text: 'Late noted.', dm: 'How many minutes late will you be?' });
+
+    await (await app()).inject({
+      method: 'POST', url: '/webhooks/telegram', payload: body,
+      headers: { 'x-telegram-bot-api-secret-token': 's3cret_token_value' },
+    });
+
+    expect(answer).toHaveBeenCalledWith('q1', 'Late noted.', undefined);
+    expect(send).toHaveBeenCalledWith('42', 'How many minutes late will you be?', {});
+  });
+
+  test('if the private follow-up cannot be delivered the webhook still answers 200', async () => {
+    handle.mockResolvedValue({ text: 'Late noted.', dm: 'How many minutes?' });
+    send.mockRejectedValue(new Error('403 bot was blocked'));
+
+    const res = await (await app()).inject({
+      method: 'POST', url: '/webhooks/telegram', payload: body,
+      headers: { 'x-telegram-bot-api-secret-token': 's3cret_token_value' },
+    });
+
+    expect(res.statusCode).toBe(200);
   });
 });
