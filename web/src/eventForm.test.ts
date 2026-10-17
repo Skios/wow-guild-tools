@@ -7,7 +7,6 @@ const valid: EventFormValues = {
   start: '2026-10-18T19:00',
   end: '2026-10-18T22:00',
   description: '',
-  createdByUserId: 'user-1',
 };
 const check = (patch: Partial<EventFormValues> = {}) => validateNewEvent({ ...valid, ...patch }, NOW);
 
@@ -21,7 +20,6 @@ describe('validateNewEvent', () => {
       startTime: '2026-10-18T19:00:00.000Z',
       endTime: '2026-10-18T22:00:00.000Z',
       description: 'Bring flasks',
-      createdByUserId: 'user-1',
     });
   });
 
@@ -68,12 +66,8 @@ describe('validateNewEvent', () => {
     expect(check({ start: '2026-10-17T11:00', end: '2026-10-17T14:00' }).errors).toEqual({});
   });
 
-  test('requires someone to be the creator', () => {
-    expect(check({ createdByUserId: '' }).errors.createdByUserId).toBeDefined();
-  });
-
   test('reports every problem at once', () => {
-    const result = check({ title: '', end: '', createdByUserId: '' });
-    expect(Object.keys(result.errors).sort()).toEqual(['createdByUserId', 'end', 'title']);
+    const result = check({ title: '', end: '', start: '' });
+    expect(Object.keys(result.errors).sort()).toEqual(['end', 'start', 'title']);
   });
 });

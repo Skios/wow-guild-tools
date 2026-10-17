@@ -19,6 +19,17 @@ describe('parseHash', () => {
   });
 });
 
+describe('roster page', () => {
+  test('has its own address', () => {
+    expect(parseHash('#/roster')).toEqual({ name: 'roster' });
+    expect(parseHash('#roster')).toEqual({ name: 'roster' });
+  });
+
+  test('anything after it is not the roster page', () => {
+    expect(parseHash('#/roster/extra')).toEqual({ name: 'events' });
+  });
+});
+
 describe('eventPath', () => {
   test('encodes the id so it survives a round trip', () => {
     const id = 'a/b c?d';

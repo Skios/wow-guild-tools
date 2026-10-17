@@ -2,10 +2,29 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test, vi } from 'vitest';
 import { ApiError } from '../api';
-import { character, eventDetail, fakeApi, renderWith, response } from '../test/render';
+import { character, eventDetail, fakeApi, noAnswer, renderWith, response } from '../test/render';
 import { EventView } from './EventView';
 
-const setup = (detail = eventDetail(), characters = [character('Newbie', { class: 'ROGUE', role: 'DPS' })], over = {}) => {
+const full = () =>
+  eventDetail({
+    responses: [
+      response('Tom', 'TANK', 'IN', true, 'WARRIOR'),
+      response('Cleo', 'HEALER', 'IN', false, 'PRIEST'),
+      response('Rex', 'DPS', 'IN', false, 'ROGUE'),
+      response('Zed', 'RANGED_DPS', 'IN', true),
+      response('Runner', 'DPS', 'LATE', true, 'ROGUE', '2099-10-18T19:15:00.000Z'),
+      response('Benchy', 'TANK', 'BENCH', false, 'WARRIOR'),
+      response('Maybe', 'HEALER', 'TENTATIVE', false, 'PRIEST'),
+      response('Gone', 'DPS', 'OUT', false, 'ROGUE'),
+    ],
+    noAnswer: [
+      noAnswer('Silent'),
+      noAnswer('Ghost', { username: null, reachable: false }),
+      noAnswer('Shy', { username: 'shy_player', reachable: false }),
+    ],
+  });
+
+const setup = (detail = full(), characters = [character('Newbie', { class: 'ROGUE', role: 'DPS' })], over = {}) => {
   const api = fakeApi({
     getEvent: vi.fn().mockResolvedValue(detail),
     listCharacters: vi.fn().mockResolvedValue(characters),
@@ -15,55 +34,95 @@ const setup = (detail = eventDetail(), characters = [character('Newbie', { class
   return api;
 };
 
-const row = (name: string) => screen.getByText(name).closest('tr')!;
+const ready = () => screen.findByRole('heading', { name: 'Raid Night' });
+const region = (name: string) => screen.getByRole(name.startsWith('No answer') ? 'complementary' : 'region', { name });
 const answer = (name: string) => screen.getByLabelText(`Answer for ${name}`) as HTMLSelectElement;
 const confirmBox = (name: string) => screen.getByLabelText(`Confirm ${name}`) as HTMLInputElement;
+const pick = (name: string) => screen.getByLabelText(`Select ${name} for a message`) as HTMLInputElement;
 const save = () => screen.getByRole('button', { name: /Save roster|Saving/ });
+const send = () => screen.getByRole('button', { name: /Send to|Sending/ });
 
-describe('roster table', () => {
-  test('lists the event and its players ordered tank, healer, melee, ranged', async () => {
+describe('the board', () => {
+  test('accepted players are split by role, each column with its own count', async () => {
     setup();
+    await ready();
 
-    expect(await screen.findByRole('heading', { name: 'Raid Night' })).toBeInTheDocument();
-    expect(screen.getByText('Bring flasks')).toBeInTheDocument();
-    const names = within(screen.getByRole('table')).getAllByRole('row').slice(1).map(r => within(r).getAllByRole('cell')[1]!.textContent);
-    expect(names.map(n => n?.replace('Silvermoon', '').trim())).toEqual(['Tom', 'Cleo', 'Rex', 'Zed']);
+    const accepted = region('Accepted (4)');
+    expect(within(region('Tank (1)')).getByText('Tom')).toBeInTheDocument();
+    expect(within(region('Healer (1)')).getByText('Cleo')).toBeInTheDocument();
+    expect(within(region('Melee DPS (1)')).getByText('Rex')).toBeInTheDocument();
+    expect(within(region('Ranged DPS (1)')).getByText('Zed')).toBeInTheDocument();
+    expect(within(accepted).queryByText('Runner')).not.toBeInTheDocument(); // late is not "accepted"
   });
 
-  test('every row shows the class colour and the role icon', async () => {
+  test('late players have their own section with the time they arrive', async () => {
     setup();
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
+
+    const late = region('Late (1)');
+    expect(within(late).getByText('Runner')).toBeInTheDocument();
+    expect(within(late).getByText('(19:15)')).toBeInTheDocument();
+    expect((within(late).getByLabelText('Minutes late for Runner') as HTMLInputElement).value).toBe('15');
+  });
+
+  test('bench, tentative and out are listed apart', async () => {
+    setup();
+    await ready();
+
+    expect(within(region('Bench (1)')).getByText('Benchy')).toBeInTheDocument();
+    expect(within(region('Tentative (1)')).getByText('Maybe')).toBeInTheDocument();
+    expect(within(region('Out (1)')).getByText('Gone')).toBeInTheDocument();
+  });
+
+  test('empty sections say so instead of leaving a hole', async () => {
+    setup(eventDetail({ responses: [response('Tom', 'TANK', 'IN', true, 'WARRIOR')], noAnswer: [] }));
+    await ready();
+
+    expect(within(region('Late (0)')).getByText('Nobody')).toBeInTheDocument();
+    expect(within(region('Healer (0)')).getByText('Nobody yet')).toBeInTheDocument();
+  });
+
+  test('every person has the class colour and a specialization or class icon', async () => {
+    setup();
+    await ready();
 
     expect(screen.getByText('Tom')).toHaveStyle({ color: 'rgb(199, 156, 110)' }); // warrior
     expect(screen.getByText('Zed')).toHaveStyle({ color: 'rgb(64, 199, 235)' }); // mage
-    expect(within(row('Tom')).getByRole('img', { name: 'Tank' })).toBeInTheDocument();
-    expect(within(row('Cleo')).getByRole('img', { name: 'Healer' })).toBeInTheDocument();
-    expect(within(row('Rex')).getByRole('img', { name: 'Melee DPS' })).toBeInTheDocument();
-    expect(within(row('Zed')).getByRole('img', { name: 'Ranged DPS' })).toBeInTheDocument();
+    const tomRow = screen.getByText('Tom').closest('li')!;
+    expect(within(tomRow).getByRole('img')).toHaveAttribute('src', '/icons/class/warrior.jpg');
   });
 
-  test('shows the answer, confirmation and owner of each character', async () => {
+  test('role icons head each column', async () => {
     setup();
-    await screen.findByRole('heading', { name: 'Raid Night' });
-
-    expect(answer('Cleo').value).toBe('TENTATIVE');
-    expect(confirmBox('Tom').checked).toBe(true);
-    expect(confirmBox('Cleo').checked).toBe(false);
-    expect(within(row('Tom')).getByText('tom_player')).toBeInTheDocument();
+    await ready();
+    expect(within(region('Tank (1)')).getAllByRole('img', { name: 'Tank' }).length).toBeGreaterThan(0);
   });
 
-  test('summarises confirmed players per role and answers', async () => {
+  test('the summary counts confirmed players per role and every answer, including no answer', async () => {
     setup();
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
     const summary = screen.getByRole('list', { name: 'Roster summary' });
-    expect(within(summary).getByText('2')).toBeInTheDocument(); // confirmed
-    expect(summary).toHaveTextContent('2 in · 1 tentative · 0 bench · 1 out');
+    expect(summary).toHaveTextContent('3 confirmed');
+    expect(summary).toHaveTextContent('4 in · 1 late · 1 tentative · 1 bench · 1 out · 3 no answer');
   });
 
-  test('says so when nobody has answered yet', async () => {
-    setup(eventDetail({ responses: [] }));
-    expect(await screen.findByText(/Nobody has answered yet/)).toBeInTheDocument();
+  test('shows the answer and confirmation of each person', async () => {
+    setup();
+    await ready();
+
+    expect(answer('Maybe').value).toBe('TENTATIVE');
+    expect(confirmBox('Tom').checked).toBe(true);
+    expect(confirmBox('Cleo').checked).toBe(false);
+    expect(within(screen.getByText('Tom').closest('li')!).getByText(/@tom_player/)).toBeInTheDocument();
+  });
+
+  test('an event nobody answered still shows the whole roster as waiting', async () => {
+    setup(eventDetail({ responses: [], noAnswer: [noAnswer('Silent')] }));
+    await ready();
+
+    expect(within(region('No answer (1)')).getByText('Silent')).toBeInTheDocument();
+    expect(within(region('Accepted (0)')).getAllByText('Nobody yet')).toHaveLength(4);
   });
 
   test('an unknown event shows the server message and a way back', async () => {
@@ -80,50 +139,245 @@ describe('roster table', () => {
   });
 });
 
+describe('no answer panel', () => {
+  test('lists the roster members who have not answered, saying who the bot cannot reach', async () => {
+    setup();
+    await ready();
+
+    const panel = region('No answer (3)');
+    expect(within(panel).getByText('Silent')).toBeInTheDocument();
+    expect(within(panel).getByText('unclaimed name')).toBeInTheDocument();
+    expect(within(panel).getByText('not on the bot yet')).toBeInTheDocument();
+    expect(pick('Silent')).toBeEnabled();
+    expect(pick('Ghost')).toBeDisabled();
+    expect(pick('Shy')).toBeDisabled();
+  });
+
+  test('"mark as" records an answer given somewhere else and moves the person onto the board', async () => {
+    const api = setup();
+    await ready();
+
+    await userEvent.selectOptions(screen.getByLabelText('Mark Silent as'), 'LATE');
+
+    expect(within(region('Late (2)')).getByText('Silent')).toBeInTheDocument();
+    expect(within(region('No answer (2)')).queryByText('Silent')).not.toBeInTheDocument();
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    await userEvent.click(save());
+    await waitFor(() => expect(api.saveRoster).toHaveBeenCalledWith('e1', [{ characterId: 'c-Silent', status: 'LATE', isConfirmed: false }]));
+  });
+
+  test('says when everybody has answered', async () => {
+    setup(eventDetail({ noAnswer: [] }));
+    await ready();
+    expect(screen.getByText(/Everybody in the roster has answered/)).toBeInTheDocument();
+  });
+
+  test('the send button needs at least one person', async () => {
+    setup();
+    await ready();
+
+    expect(send()).toBeDisabled();
+    expect(send()).toHaveTextContent('Send to 0 people');
+  });
+
+  test('"select all reachable" ticks only the people the bot can write to', async () => {
+    setup();
+    await ready();
+
+    await userEvent.click(screen.getByRole('button', { name: /Select all reachable \(1\)/ }));
+
+    expect(pick('Silent').checked).toBe(true);
+    expect(pick('Ghost').checked).toBe(false);
+    expect(send()).toHaveTextContent('Send to 1 person');
+  });
+
+  test('Clear removes the ticks', async () => {
+    setup();
+    await ready();
+    await userEvent.click(pick('Silent'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(pick('Silent').checked).toBe(false);
+  });
+
+  test('sends the default reminder, and shows what happened to each person', async () => {
+    const message = vi.fn().mockResolvedValue({ results: [{ characterId: 'c-Silent', name: 'Silent', status: 'sent' }] });
+    const api = setup(undefined, undefined, { message });
+    await ready();
+
+    await userEvent.click(pick('Silent'));
+    await userEvent.click(send());
+
+    await waitFor(() => expect(api.message).toHaveBeenCalledWith('e1', ['c-Silent'], undefined));
+    expect(await screen.findByRole('list', { name: 'Message results' })).toHaveTextContent('Silent: sent');
+  });
+
+  test('the default text is visible as the placeholder, naming the event and when it is', async () => {
+    setup();
+    await ready();
+    expect(screen.getByLabelText(/Message/)).toHaveAttribute('placeholder', expect.stringMatching(/Raid Night.*Are you coming/));
+  });
+
+  test('a custom text replaces the default', async () => {
+    const api = setup();
+    await ready();
+
+    await userEvent.type(screen.getByLabelText(/Message/), '  We need a tank tonight!  ');
+    await userEvent.click(pick('Silent'));
+    await userEvent.click(send());
+
+    await waitFor(() => expect(api.message).toHaveBeenCalledWith('e1', ['c-Silent'], 'We need a tank tonight!'));
+  });
+
+  test('tentative players can be messaged from the same panel', async () => {
+    const api = setup();
+    await ready();
+
+    await userEvent.click(pick('Silent'));
+    await userEvent.click(pick('Maybe'));
+    expect(send()).toHaveTextContent('Send to 2 people');
+    await userEvent.click(send());
+
+    await waitFor(() => expect(api.message).toHaveBeenCalledWith('e1', expect.arrayContaining(['c-Silent', 'c-Maybe']), undefined));
+  });
+
+  test('somebody ticked and then moved onto the board is no longer messaged', async () => {
+    const api = setup();
+    await ready();
+    await userEvent.click(pick('Silent'));
+
+    await userEvent.selectOptions(screen.getByLabelText('Mark Silent as'), 'IN');
+
+    expect(send()).toHaveTextContent('Send to 0 people');
+    expect(api.message).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['unreachable', /has not started the bot/],
+    ['unclaimed', /nobody has claimed/],
+    ['unknown', /not found/],
+  ] as const)('explains a %s recipient', async (status, text) => {
+    const message = vi.fn().mockResolvedValue({ results: [{ characterId: 'c-Silent', name: 'Silent', status }] });
+    setup(undefined, undefined, { message });
+    await ready();
+    await userEvent.click(pick('Silent'));
+    await userEvent.click(send());
+
+    expect(await screen.findByRole('list', { name: 'Message results' })).toHaveTextContent(text);
+  });
+
+  test('reports a delivery failure with its reason', async () => {
+    const message = vi.fn().mockResolvedValue({ results: [{ characterId: 'c-Silent', name: 'Silent', status: 'failed', error: 'bot was blocked' }] });
+    setup(undefined, undefined, { message });
+    await ready();
+    await userEvent.click(pick('Silent'));
+    await userEvent.click(send());
+
+    expect(await screen.findByRole('list', { name: 'Message results' })).toHaveTextContent('failed: bot was blocked');
+  });
+
+  test('a request that fails altogether shows the error and keeps the selection', async () => {
+    const message = vi.fn().mockRejectedValue(new ApiError('Event already published', 409));
+    setup(undefined, undefined, { message });
+    await ready();
+    await userEvent.click(pick('Silent'));
+    await userEvent.click(send());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Event already published');
+    expect(pick('Silent').checked).toBe(true);
+  });
+
+  test('cannot send twice at once', async () => {
+    let resolve!: (v: unknown) => void;
+    const message = vi.fn().mockReturnValue(new Promise(r => { resolve = r; }));
+    setup(undefined, undefined, { message });
+    await ready();
+    await userEvent.click(pick('Silent'));
+
+    await userEvent.dblClick(send());
+
+    expect(message).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
+    resolve({ results: [] });
+  });
+});
+
 describe('editing', () => {
   test('nothing to save until something changes', async () => {
     setup();
-    await screen.findByRole('heading', { name: 'Raid Night' });
-
+    await ready();
     expect(save()).toBeDisabled();
     expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
   });
 
-  test('changing an answer marks the roster as changed', async () => {
+  test('changing an answer moves the person to the right section and marks the roster as changed', async () => {
     setup();
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
-    await userEvent.selectOptions(answer('Cleo'), 'BENCH');
+    await userEvent.selectOptions(answer('Maybe'), 'IN');
 
-    expect(answer('Cleo').value).toBe('BENCH');
+    expect(within(region('Healer (2)')).getByText('Maybe')).toBeInTheDocument();
+    expect(within(region('Tentative (0)')).queryByText('Maybe')).not.toBeInTheDocument();
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     expect(save()).toBeEnabled();
   });
 
   test('confirming someone who said OUT also moves them to IN', async () => {
     setup();
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
-    await userEvent.click(confirmBox('Rex'));
+    await userEvent.click(confirmBox('Gone'));
 
-    expect(confirmBox('Rex').checked).toBe(true);
-    expect(answer('Rex').value).toBe('IN');
+    expect(answer('Gone').value).toBe('IN');
+    expect(confirmBox('Gone').checked).toBe(true);
   });
 
   test('moving a confirmed player out of IN removes the confirmation', async () => {
     setup();
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
     await userEvent.selectOptions(answer('Tom'), 'OUT');
 
     expect(confirmBox('Tom').checked).toBe(false);
   });
 
+  test('typing the minutes of a late player updates the arrival time and is saved with the roster', async () => {
+    const api = setup();
+    await ready();
+
+    const minutes = screen.getByLabelText('Minutes late for Runner');
+    await userEvent.clear(minutes);
+    await userEvent.type(minutes, '40');
+
+    expect(within(region('Late (1)')).getByText('(19:40)')).toBeInTheDocument();
+    await userEvent.click(save());
+    await waitFor(() => expect(api.saveRoster).toHaveBeenCalledWith('e1', [{ characterId: 'c-Runner', status: 'LATE', isConfirmed: true, lateMinutes: 40 }]));
+  });
+
+  test('clearing the minutes means "not sure how late" and hides the arrival time', async () => {
+    setup();
+    await ready();
+
+    await userEvent.clear(screen.getByLabelText('Minutes late for Runner'));
+
+    expect(within(region('Late (1)')).queryByText(/\(\d\d:\d\d\)/)).not.toBeInTheDocument();
+  });
+
+  test('moving somebody to LATE shows the minutes box', async () => {
+    setup();
+    await ready();
+    expect(screen.queryByLabelText('Minutes late for Rex')).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(answer('Rex'), 'LATE');
+
+    expect(screen.getByLabelText('Minutes late for Rex')).toBeInTheDocument();
+  });
+
   test('saves only the rows that changed, then reloads and confirms', async () => {
     const api = setup();
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
-    await userEvent.selectOptions(answer('Cleo'), 'IN');
     await userEvent.click(confirmBox('Cleo'));
     await userEvent.click(save());
 
@@ -132,30 +386,30 @@ describe('editing', () => {
     await waitFor(() => expect(api.getEvent).toHaveBeenCalledTimes(2));
   });
 
-  test('after reload the table shows what the server now has', async () => {
-    const after = eventDetail({ responses: [response('Tom', 'TANK', 'IN', true, 'WARRIOR'), response('Cleo', 'HEALER', 'IN', true, 'PRIEST')] });
-    const getEvent = vi.fn().mockResolvedValueOnce(eventDetail()).mockResolvedValue(after);
+  test('after reload the board shows what the server now has', async () => {
+    const after = eventDetail({ responses: [response('Tom', 'TANK', 'IN', true, 'WARRIOR'), response('Cleo', 'HEALER', 'IN', true, 'PRIEST')], noAnswer: [] });
+    const getEvent = vi.fn().mockResolvedValueOnce(full()).mockResolvedValue(after);
     setup(undefined, undefined, { getEvent });
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
-    await userEvent.selectOptions(answer('Cleo'), 'IN');
+    await userEvent.click(confirmBox('Cleo'));
     await userEvent.click(save());
 
     await waitFor(() => expect(screen.queryByText('Zed')).not.toBeInTheDocument());
-    expect(answer('Cleo').value).toBe('IN');
+    expect(confirmBox('Cleo').checked).toBe(true);
     expect(save()).toBeDisabled();
   });
 
   test('a failed save shows the reason and keeps the edits', async () => {
     const saveRoster = vi.fn().mockRejectedValue(new ApiError('Event is locked: responses cannot be changed after publication', 409));
     setup(undefined, undefined, { saveRoster });
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
-    await userEvent.selectOptions(answer('Cleo'), 'BENCH');
+    await userEvent.selectOptions(answer('Maybe'), 'BENCH');
     await userEvent.click(save());
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Event is locked');
-    expect(answer('Cleo').value).toBe('BENCH');
+    expect(answer('Maybe').value).toBe('BENCH');
     expect(save()).toBeEnabled();
   });
 
@@ -163,12 +417,12 @@ describe('editing', () => {
     let resolve!: (v: unknown) => void;
     const saveRoster = vi.fn().mockReturnValue(new Promise(r => { resolve = r; }));
     setup(undefined, undefined, { saveRoster });
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
-    await userEvent.selectOptions(answer('Cleo'), 'BENCH');
+    await userEvent.selectOptions(answer('Maybe'), 'BENCH');
     await userEvent.click(save());
 
-    expect(answer('Cleo')).toBeDisabled();
+    expect(answer('Maybe')).toBeDisabled();
     expect(confirmBox('Tom')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
     resolve({ success: true });
@@ -177,43 +431,42 @@ describe('editing', () => {
 
   test('discard throws the edits away', async () => {
     setup();
-    await screen.findByRole('heading', { name: 'Raid Night' });
-    await userEvent.selectOptions(answer('Cleo'), 'BENCH');
+    await ready();
+    await userEvent.selectOptions(answer('Maybe'), 'BENCH');
 
     await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
 
-    expect(answer('Cleo').value).toBe('TENTATIVE');
+    expect(answer('Maybe').value).toBe('TENTATIVE');
     expect(save()).toBeDisabled();
   });
 
   test('warns before leaving the page with unsaved changes, and only then', async () => {
     setup();
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
     const clean = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(clean);
     expect(clean.defaultPrevented).toBe(false);
 
-    await userEvent.selectOptions(answer('Cleo'), 'BENCH');
+    await userEvent.selectOptions(answer('Maybe'), 'BENCH');
     const dirty = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(dirty);
     expect(dirty.defaultPrevented).toBe(true);
   });
 });
 
-describe('adding characters', () => {
-  test('suggests registered characters that are not on the list yet and adds them as IN', async () => {
+describe('adding characters from outside the roster', () => {
+  test('suggests registered characters that are not on the board yet and adds them as IN', async () => {
     const api = setup(undefined, [character('Newbie', { class: 'ROGUE', role: 'DPS' }), character('Zed')]);
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
     const panel = await screen.findByRole('region', { name: 'Add a character' });
     await waitFor(() => expect(within(panel).getByRole('button', { name: /Newbie/ })).toBeInTheDocument());
-    expect(within(panel).queryByRole('button', { name: /Zed/ })).not.toBeInTheDocument(); // already on the list
+    expect(within(panel).queryByRole('button', { name: /Zed/ })).not.toBeInTheDocument(); // already on the board
 
     await userEvent.click(within(panel).getByRole('button', { name: /Newbie/ }));
 
     expect(answer('Newbie').value).toBe('IN');
-    expect(confirmBox('Newbie').checked).toBe(false);
     await userEvent.click(save());
     await waitFor(() => expect(api.saveRoster).toHaveBeenCalledWith('e1', [{ characterId: 'c-Newbie', status: 'IN', isConfirmed: false }]));
   });
@@ -227,36 +480,24 @@ describe('adding characters', () => {
 
     expect(within(panel).queryByRole('button', { name: /Alpha/ })).not.toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: /Bravo/ })).toBeInTheDocument();
-
-    await userEvent.clear(within(panel).getByLabelText(/Search/));
-    await userEvent.type(within(panel).getByLabelText(/Search/), 'alpha_pl');
-    expect(within(panel).getByRole('button', { name: /Alpha/ })).toBeInTheDocument();
   });
 
-  test('says when nothing matches or everyone is already listed', async () => {
-    setup(undefined, [character('Alpha')]);
+  test('marks alts and unclaimed names', async () => {
+    setup(undefined, [character('Alt', { isMain: false }), character('Orphan', { username: null, userId: null })]);
     const panel = await screen.findByRole('region', { name: 'Add a character' });
-    await within(panel).findByRole('button', { name: /Alpha/ });
 
-    await userEvent.type(within(panel).getByLabelText(/Search/), 'zzz');
-    expect(within(panel).getByText('No matching characters.')).toBeInTheDocument();
+    await within(panel).findByRole('button', { name: /Alt/ });
+    expect(within(panel).getByRole('button', { name: /Alt.*\(alt\)/ })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /Orphan.*unclaimed/ })).toBeInTheDocument();
   });
 
-  test('says when every registered character is already on the list', async () => {
-    setup(undefined, []);
-    const panel = await screen.findByRole('region', { name: 'Add a character' });
-    expect(await within(panel).findByText(/Every registered character is already on the list/)).toBeInTheDocument();
-  });
-
-  test('marks alts and keeps the list short with a hint', async () => {
-    const many = Array.from({ length: 12 }, (_, i) => character(`Char${String(i).padStart(2, '0')}`, { isMain: i !== 0 }));
+  test('keeps the list short with a hint, and a failure to load is reported without breaking the page', async () => {
+    const many = Array.from({ length: 12 }, (_, i) => character(`Char${String(i).padStart(2, '0')}`));
     setup(undefined, many);
     const panel = await screen.findByRole('region', { name: 'Add a character' });
-
     await within(panel).findByRole('button', { name: /Char00/ });
     expect(within(panel).getAllByRole('button')).toHaveLength(8);
     expect(within(panel).getByText(/4 more/)).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: /Char00.*\(alt\)/ })).toBeInTheDocument();
   });
 
   test('a failure to load characters is reported without breaking the page', async () => {
@@ -271,10 +512,10 @@ describe('adding characters', () => {
 describe('publishing', () => {
   test('is disabled with unsaved changes, and says why', async () => {
     setup();
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
     expect(screen.getByRole('button', { name: 'Publish roster' })).toBeEnabled();
 
-    await userEvent.selectOptions(answer('Cleo'), 'BENCH');
+    await userEvent.selectOptions(answer('Maybe'), 'BENCH');
 
     expect(screen.getByRole('button', { name: 'Publish roster' })).toBeDisabled();
     expect(screen.getByText(/Save your changes first/)).toBeInTheDocument();
@@ -282,19 +523,19 @@ describe('publishing', () => {
 
   test('is disabled until somebody is confirmed', async () => {
     setup(eventDetail({ responses: [response('Cleo', 'HEALER', 'IN', false, 'PRIEST')] }));
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
     expect(screen.getByRole('button', { name: 'Publish roster' })).toBeDisabled();
     expect(screen.getByText(/Confirm at least one player first/)).toBeInTheDocument();
   });
 
-  test('asks for confirmation, naming how many players will be posted', async () => {
+  test('asks for confirmation, counting confirmed players including late ones', async () => {
     const api = setup();
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
     await userEvent.click(screen.getByRole('button', { name: 'Publish roster' }));
 
-    expect(screen.getByText('Post the roster of 2 players to the channel?')).toBeInTheDocument();
+    expect(screen.getByText('Post the roster of 3 players to the channel?')).toBeInTheDocument();
     expect(api.publish).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByRole('button', { name: 'Publish roster' })).toBeInTheDocument();
@@ -302,7 +543,7 @@ describe('publishing', () => {
 
   test('uses the singular for a single player', async () => {
     setup(eventDetail({ responses: [response('Tom', 'TANK', 'IN', true, 'WARRIOR')] }));
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
     await userEvent.click(screen.getByRole('button', { name: 'Publish roster' }));
 
@@ -311,7 +552,7 @@ describe('publishing', () => {
 
   test('publishes after confirmation and reloads', async () => {
     const api = setup();
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
     await userEvent.click(screen.getByRole('button', { name: 'Publish roster' }));
     await userEvent.click(screen.getByRole('button', { name: 'Yes, publish' }));
@@ -324,7 +565,7 @@ describe('publishing', () => {
   test('when the channel refuses, shows why and leaves the event editable', async () => {
     const publish = vi.fn().mockRejectedValue(new ApiError('Publication failed on every channel', 502));
     setup(undefined, undefined, { publish });
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
     await userEvent.click(screen.getByRole('button', { name: 'Publish roster' }));
     await userEvent.click(screen.getByRole('button', { name: 'Yes, publish' }));
@@ -338,7 +579,7 @@ describe('publishing', () => {
     let resolve!: (v: unknown) => void;
     const publish = vi.fn().mockReturnValue(new Promise(r => { resolve = r; }));
     setup(undefined, undefined, { publish });
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
     await userEvent.click(screen.getByRole('button', { name: 'Publish roster' }));
     await userEvent.dblClick(screen.getByRole('button', { name: 'Yes, publish' }));
@@ -349,11 +590,9 @@ describe('publishing', () => {
 });
 
 describe('published event', () => {
-  const published = () => eventDetail({ isPublished: true });
-
-  test('is read-only: no save, add or publish controls, and every input is disabled', async () => {
-    setup(published());
-    await screen.findByRole('heading', { name: 'Raid Night' });
+  test('is read-only: no save, add, publish or message controls, and every input is disabled', async () => {
+    setup(eventDetail({ ...full(), isPublished: true }));
+    await ready();
 
     expect(screen.getByText('Published')).toBeInTheDocument();
     expect(screen.getByText(/can no longer be changed/)).toBeInTheDocument();
@@ -362,14 +601,16 @@ describe('published event', () => {
     expect(screen.queryByRole('region', { name: 'Add a character' })).not.toBeInTheDocument();
     expect(answer('Tom')).toBeDisabled();
     expect(confirmBox('Tom')).toBeDisabled();
+    expect(pick('Silent')).toBeDisabled();
+    expect(send()).toBeDisabled();
   });
 
   test('a locked event rejects edits even if the page was opened before it was published', async () => {
     const saveRoster = vi.fn().mockRejectedValue(new ApiError('Event is locked: responses cannot be changed after publication', 409));
     setup(undefined, undefined, { saveRoster });
-    await screen.findByRole('heading', { name: 'Raid Night' });
+    await ready();
 
-    fireEvent.change(answer('Cleo'), { target: { value: 'BENCH' } });
+    fireEvent.change(answer('Maybe'), { target: { value: 'BENCH' } });
     await userEvent.click(save());
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/locked/);

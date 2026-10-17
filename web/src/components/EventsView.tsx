@@ -5,21 +5,15 @@ import { formatRange } from '../format';
 import { eventPath } from '../route';
 import { useAsync } from '../useAsync';
 import type { EventSummary } from '../types';
-import { NewEventForm, type Creator } from './NewEventForm';
-
-function creatorsFrom(characters: { userId: string; username: string }[]): Creator[] {
-  const seen = new Map<string, Creator>();
-  for (const { userId, username } of characters) if (!seen.has(userId)) seen.set(userId, { userId, username });
-  return [...seen.values()].sort((a, b) => a.username.localeCompare(b.username));
-}
+import { NewEventForm } from './NewEventForm';
 
 function Counts({ event }: { event: EventSummary }) {
   const { counts } = event;
   return (
     <span className="counts">
-      <span title="Answered IN">{counts.in} in</span>
+      <span title="Answered IN">{counts.in} in{counts.late > 0 && ` · ${counts.late} late`}</span>
       <span title="Confirmed for the raid">{counts.confirmed} confirmed</span>
-      <span className="muted">{counts.tentative} tentative · {counts.bench} bench · {counts.out} out</span>
+      <span className="muted">{counts.tentative} tentative · {counts.bench} bench · {counts.out} out · {counts.noAnswer} no answer</span>
     </span>
   );
 }
@@ -27,8 +21,6 @@ function Counts({ event }: { event: EventSummary }) {
 export function EventsView() {
   const api = useApi();
   const events = useAsync(() => api.listEvents(), [api]);
-  const characters = useAsync(() => api.listCharacters(), [api]);
-  const creators = useMemo(() => creatorsFrom(characters.data ?? []), [characters.data]);
   const ordered = useMemo(() => orderEvents(events.data ?? [], new Date()), [events.data]);
 
   return (
@@ -70,9 +62,7 @@ export function EventsView() {
         )}
       </section>
 
-      {characters.error
-        ? <p role="alert" className="error">Could not load players: {characters.error}</p>
-        : !characters.loading && <NewEventForm creators={creators} onCreated={events.reload} />}
+      <NewEventForm onCreated={events.reload} />
     </div>
   );
 }

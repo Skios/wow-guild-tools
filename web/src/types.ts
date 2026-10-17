@@ -1,11 +1,18 @@
-export type ResponseStatus = 'IN' | 'OUT' | 'TENTATIVE' | 'BENCH';
+export type ResponseStatus = 'IN' | 'OUT' | 'TENTATIVE' | 'BENCH' | 'LATE';
 export type RoleId = 'TANK' | 'HEALER' | 'DPS' | 'RANGED_DPS';
+
+export interface SpecMeta {
+  id: string;
+  label: string;
+  role: RoleId;
+}
 
 export interface ClassMeta {
   id: string;
   label: string;
   color: string;
   roles: RoleId[];
+  specs: SpecMeta[];
 }
 
 export interface Meta {
@@ -15,13 +22,32 @@ export interface Meta {
 
 export interface CharacterSummary {
   id: string;
-  userId: string;
+  userId: string | null;
   name: string;
   realm: string;
   class: string;
+  spec: string | null;
   role: RoleId;
   isMain: boolean;
-  username: string;
+  username: string | null;
+}
+
+export interface RosterCharacter {
+  id: string;
+  name: string;
+  realm: string;
+  class: string;
+  spec: string | null;
+  role: RoleId;
+  claimed: boolean;
+  username: string | null;
+}
+
+export interface RosterEntryInput {
+  name: string;
+  realm: string;
+  class: string;
+  spec: string;
 }
 
 export interface ResponseCounts {
@@ -29,7 +55,9 @@ export interface ResponseCounts {
   out: number;
   tentative: number;
   bench: number;
+  late: number;
   confirmed: number;
+  noAnswer: number;
 }
 
 export interface EventSummary {
@@ -47,19 +75,35 @@ export interface EventResponse {
   characterId: string;
   status: ResponseStatus;
   isConfirmed: boolean;
+  arrivalTime: string | null;
   character: {
     id: string;
     name: string;
     realm: string;
     class: string;
+    spec: string | null;
     role: RoleId;
     isMain: boolean;
-    user: { username: string };
+    user: { username: string } | null;
   };
+}
+
+/** A roster member who has not answered the event yet. */
+export interface NoAnswerEntry {
+  id: string;
+  name: string;
+  realm: string;
+  class: string;
+  spec: string | null;
+  role: RoleId;
+  username: string | null;
+  /** Whether the bot can write to this person privately. */
+  reachable: boolean;
 }
 
 export interface EventDetail extends Omit<EventSummary, 'counts'> {
   responses: EventResponse[];
+  noAnswer: NoAnswerEntry[];
 }
 
 export interface NewEvent {
@@ -67,11 +111,18 @@ export interface NewEvent {
   startTime: string;
   endTime: string;
   description?: string;
-  createdByUserId: string;
 }
 
 export interface RosterSelection {
   characterId: string;
   status: ResponseStatus;
   isConfirmed: boolean;
+  lateMinutes?: number;
+}
+
+export interface MessageResult {
+  characterId: string;
+  name: string | null;
+  status: 'sent' | 'failed' | 'unreachable' | 'unclaimed' | 'unknown';
+  error?: string;
 }

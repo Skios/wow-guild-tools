@@ -10,7 +10,6 @@ export interface EventFormValues {
   start: string;
   end: string;
   description: string;
-  createdByUserId: string;
 }
 
 export type EventFormField = keyof EventFormValues;
@@ -29,7 +28,6 @@ export function validateNewEvent(values: EventFormValues, now: Date = new Date()
   if (!title) errors.title = 'Title is required';
   else if (title.length > MAX_TITLE) errors.title = `Title is at most ${MAX_TITLE} characters`;
   if (description.length > MAX_DESCRIPTION) errors.description = `Description is at most ${MAX_DESCRIPTION} characters`;
-  if (!values.createdByUserId) errors.createdByUserId = 'Choose who is creating the event';
 
   const startTime = localInputToIso(values.start);
   const endTime = localInputToIso(values.end);
@@ -47,6 +45,6 @@ export function validateNewEvent(values: EventFormValues, now: Date = new Date()
   if (Object.keys(errors).length > 0 || !startTime || !endTime) return { errors, payload: null };
   return {
     errors,
-    payload: { title, startTime, endTime, createdByUserId: values.createdByUserId, ...(description && { description }) },
+    payload: { title, startTime, endTime, ...(description && { description }) },
   };
 }

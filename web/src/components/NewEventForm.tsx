@@ -4,25 +4,14 @@ import { MAX_DESCRIPTION, MAX_TITLE, validateNewEvent, type EventFormField, type
 import { toLocalInput } from '../format';
 import { errorMessage } from '../useAsync';
 
-export interface Creator {
-  userId: string;
-  username: string;
-}
-
-const CREATOR_KEY = 'guild-admin-creator';
-const readCreator = () => { try { return localStorage.getItem(CREATOR_KEY) ?? ''; } catch { return ''; } };
-const rememberCreator = (id: string) => { try { localStorage.setItem(CREATOR_KEY, id); } catch { /* optional */ } };
-
-function initialValues(creators: Creator[]): EventFormValues {
+function initialValues(): EventFormValues {
   const now = new Date();
-  const remembered = readCreator();
-  const createdByUserId = creators.some(c => c.userId === remembered) ? remembered : (creators[0]?.userId ?? '');
-  return { title: '', start: toLocalInput(now, 24), end: toLocalInput(now, 27), description: '', createdByUserId };
+  return { title: '', start: toLocalInput(now, 24), end: toLocalInput(now, 27), description: '' };
 }
 
-export function NewEventForm({ creators, onCreated }: { creators: Creator[]; onCreated: () => void }) {
+export function NewEventForm({ onCreated }: { onCreated: () => void }) {
   const api = useApi();
-  const [values, setValues] = useState(() => initialValues(creators));
+  const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState<Partial<Record<EventFormField, string>>>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -41,8 +30,7 @@ export function NewEventForm({ creators, onCreated }: { creators: Creator[]; onC
     setBusy(true);
     try {
       await api.createEvent(result.payload);
-      rememberCreator(values.createdByUserId);
-      setValues(v => ({ ...initialValues(creators), createdByUserId: v.createdByUserId }));
+      setValues(initialValues());
       onCreated();
     } catch (e) {
       setServerError(errorMessage(e));
@@ -58,18 +46,10 @@ export function NewEventForm({ creators, onCreated }: { creators: Creator[]; onC
   const fieldError = (name: EventFormField) =>
     errors[name] ? <p id={`${name}-error`} className="error field-error">{errors[name]}</p> : null;
 
-  if (creators.length === 0) {
-    return (
-      <section className="card" aria-label="New event">
-        <h2>New event</h2>
-        <p className="muted">Nobody has registered yet. Players register their character through the Telegram bot, then you can create events.</p>
-      </section>
-    );
-  }
-
   return (
     <form className="card new-event" onSubmit={submit} noValidate aria-label="New event">
       <h2>New event</h2>
+      <p className="muted">Everyone in the raid roster is invited automatically.</p>
       <div className="grid">
         <div className="span-2">
           <label htmlFor="title">Title</label>
@@ -90,13 +70,6 @@ export function NewEventForm({ creators, onCreated }: { creators: Creator[]; onC
           <label htmlFor="description">Description <span className="muted">(optional, max {MAX_DESCRIPTION})</span></label>
           <textarea id="description" rows={2} value={values.description} onChange={set('description')} {...field('description')} />
           {fieldError('description')}
-        </div>
-        <div>
-          <label htmlFor="creator">Created by</label>
-          <select id="creator" value={values.createdByUserId} onChange={set('createdByUserId')} {...field('createdByUserId')}>
-            {creators.map(c => <option key={c.userId} value={c.userId}>{c.username}</option>)}
-          </select>
-          {fieldError('createdByUserId')}
         </div>
       </div>
       {serverError && <p role="alert" className="error">{serverError}</p>}

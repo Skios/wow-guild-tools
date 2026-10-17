@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { formatDateTime, formatRange, localInputToIso, toLocalInput } from './format';
+import { arrivalTime, formatDateTime, formatRange, formatTime, localInputToIso, toLocalInput } from './format';
 
 describe('formatDateTime', () => {
   test('formats an ISO date for people', () => {
@@ -49,5 +49,22 @@ describe('toLocalInput', () => {
 
   test('adds hours', () => {
     expect(toLocalInput(new Date('2026-10-17T12:00:00Z'), 3)).toBe('2026-10-17T15:00');
+  });
+});
+
+describe('formatTime / arrivalTime', () => {
+  test('formats just the time of day', () => {
+    expect(formatTime('2026-10-18T21:15:00Z')).toBe('21:15');
+    expect(formatTime('nope')).toBe('—');
+  });
+
+  test('adds the delay to the start, across midnight too', () => {
+    expect(formatTime(arrivalTime('2026-10-18T21:00:00Z', 15))).toBe('21:15');
+    expect(formatTime(arrivalTime('2026-10-18T23:50:00Z', 20))).toBe('00:10');
+    expect(arrivalTime('2026-10-18T21:00:00Z', 0)).toBe('2026-10-18T21:00:00.000Z');
+  });
+
+  test('an invalid start gives an empty string instead of throwing', () => {
+    expect(arrivalTime('garbage', 10)).toBe('');
   });
 });

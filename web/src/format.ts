@@ -45,3 +45,15 @@ export function toLocalInput(from: Date, addHours = 0): string {
   const date = new Date(rounded.getTime() + addHours * HOUR_MS);
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+
+/** "21:15" for an ISO date, or a dash if it is not a date. */
+export function formatTime(iso: string): string {
+  const date = parse(iso);
+  return date ? timeOnly.format(date) : DASH;
+}
+
+/** When a late player arrives: the event start plus their delay. */
+export function arrivalTime(startIso: string, minutes: number): string {
+  const start = parse(startIso);
+  return start ? new Date(start.getTime() + minutes * 60_000).toISOString() : '';
+}

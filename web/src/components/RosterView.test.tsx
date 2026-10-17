@@ -1,0 +1,282 @@
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+import { ApiError } from '../api';
+import type { RosterCharacter } from '../types';
+import { fakeApi, renderWith } from '../test/render';
+import { RosterView } from './RosterView';
+
+afterEach(() => vi.restoreAllMocks());
+
+const member = (name: string, over: Partial<RosterCharacter> = {}): RosterCharacter => ({
+  id: `c-${name}`, name, realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', role: 'RANGED_DPS', claimed: false, username: null, ...over,
+});
+
+const setup = (people = [member('Jaina')], over = {}) => {
+  const api = fakeApi({ listRoster: vi.fn().mockResolvedValue(people), ...over });
+  renderWith(<RosterView />, api);
+  return api;
+};
+
+const rowOf = (name: string) => screen.getByText(name).closest('tr')!;
+const addForm = () => screen.getByRole('form', { name: 'Add to roster' });
+const fill = async (form: HTMLElement, v: { name?: string; realm?: string; cls?: string; spec?: string }) => {
+  if (v.name !== undefined) await userEvent.type(within(form).getByLabelText('Character'), v.name);
+  if (v.realm !== undefined) { await userEvent.clear(within(form).getByLabelText('Realm')); await userEvent.type(within(form).getByLabelText('Realm'), v.realm); }
+  if (v.cls) await userEvent.selectOptions(within(form).getByLabelText('Class'), v.cls);
+  if (v.spec) await userEvent.selectOptions(within(form).getByLabelText('Specialization'), v.spec);
+};
+
+describe('the roster list', () => {
+  test('shows each character with class, role and whether a player has taken the name', async () => {
+    setup([
+      member('Jaina', { claimed: true, username: 'jaina_player' }),
+      member('Brannock', { class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK' }),
+    ]);
+
+    await screen.findByText('Jaina');
+    const jaina = rowOf('Jaina');
+    expect(within(jaina).getByText('Fire Mage')).toBeInTheDocument();
+    expect(within(jaina).getByText('@jaina_player')).toBeInTheDocument();
+    expect(within(jaina).getByText('Silvermoon')).toBeInTheDocument();
+    expect(within(rowOf('Brannock')).getByText('Waiting for a player')).toBeInTheDocument();
+    expect(within(rowOf('Brannock')).getByText('Protection Warrior')).toBeInTheDocument();
+  });
+
+  test('is ordered tank, healer, melee, ranged, then by name', async () => {
+    setup([
+      member('Zed'), member('Amy', { class: 'ROGUE', spec: 'OUTLAW', role: 'DPS' }),
+      member('Cleo', { class: 'PRIEST', spec: 'HOLY', role: 'HEALER' }), member('Tom', { class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK' }),
+    ]);
+
+    await screen.findByText('Zed');
+    const names = within(screen.getByRole('region', { name: 'Roster characters' })).getAllByRole('row').slice(1).map(r => within(r).getAllByRole('cell')[0]!.textContent);
+    expect(names).toEqual(['Tom', 'Cleo', 'Amy', 'Zed']);
+  });
+
+  test('totals: characters, linked to a player, waiting, and per role', async () => {
+    setup([member('A', { claimed: true, username: 'a' }), member('B'), member('C', { class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK' })]);
+
+    await screen.findByText('A');
+    const totals = screen.getByRole('list', { name: 'Roster totals' });
+    expect(totals).toHaveTextContent('3 characters');
+    expect(totals).toHaveTextContent('1 linked to a player');
+    expect(totals).toHaveTextContent('2 waiting');
+  });
+
+  test('an empty roster says how to start', async () => {
+    setup([]);
+    expect(await screen.findByText(/The roster is empty/)).toBeInTheDocument();
+  });
+
+  test('a failure to load is shown', async () => {
+    setup([], { listRoster: vi.fn().mockRejectedValue(new ApiError('Cannot reach the server', 0)) });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Cannot reach the server');
+  });
+
+  test('shows a loading state', () => {
+    setup([], { listRoster: vi.fn().mockReturnValue(new Promise(() => {})) });
+    expect(screen.getByRole('status')).toHaveTextContent('Loading the roster');
+  });
+});
+
+describe('adding a character', () => {
+  test('sends the entry, confirms, refreshes the list and keeps the realm for the next one', async () => {
+    const api = setup([]);
+    await screen.findByText(/roster is empty/);
+
+    await fill(addForm(), { name: 'Brannock', realm: 'Silvermoon', cls: 'WARRIOR', spec: 'PROTECTION' });
+    await userEvent.click(within(addForm()).getByRole('button', { name: 'Add to roster' }));
+
+    await waitFor(() => expect(api.addToRoster).toHaveBeenCalledWith({ name: 'Brannock', realm: 'Silvermoon', class: 'WARRIOR', spec: 'PROTECTION' }));
+    expect(await screen.findByText('Brannock added to the roster.')).toBeInTheDocument();
+    await waitFor(() => expect(api.listRoster).toHaveBeenCalledTimes(2));
+    expect(within(addForm()).getByLabelText('Character')).toHaveValue('');
+    expect(within(addForm()).getByLabelText('Realm')).toHaveValue('Silvermoon');
+    expect(within(addForm()).getByLabelText('Class')).toHaveValue('');
+  });
+
+  test('the realm of the last entry is remembered after a reload', async () => {
+    const first = setup([]);
+    await screen.findByText(/roster is empty/);
+    await fill(addForm(), { name: 'Brannock', realm: "Mal'Ganis", cls: 'WARRIOR', spec: 'PROTECTION' });
+    await userEvent.click(within(addForm()).getByRole('button', { name: 'Add to roster' }));
+    await waitFor(() => expect(first.addToRoster).toHaveBeenCalled());
+    document.body.innerHTML = '';
+
+    setup([]);
+    await screen.findByText(/roster is empty/);
+    expect(within(addForm()).getByLabelText('Realm')).toHaveValue("Mal'Ganis");
+  });
+
+  test('the specialization list follows the class, and changing the class clears it', async () => {
+    setup([]);
+    await screen.findByText(/roster is empty/);
+    const form = addForm();
+    expect(within(form).getByLabelText('Specialization')).toBeDisabled();
+
+    await userEvent.selectOptions(within(form).getByLabelText('Class'), 'MAGE');
+    expect(within(within(form).getByLabelText('Specialization')).getAllByRole('option').map(o => o.textContent)).toEqual(['Choose…', 'Arcane', 'Fire', 'Frost']);
+
+    await userEvent.selectOptions(within(form).getByLabelText('Specialization'), 'FIRE');
+    await userEvent.selectOptions(within(form).getByLabelText('Class'), 'WARRIOR');
+    expect(within(form).getByLabelText('Specialization')).toHaveValue('');
+  });
+
+  test('blocks an incomplete entry and points at every field, without calling the API', async () => {
+    const api = setup([]);
+    await screen.findByText(/roster is empty/);
+
+    await userEvent.click(within(addForm()).getByRole('button', { name: 'Add to roster' }));
+
+    expect(screen.getByText('Names are 2 to 12 letters')).toBeInTheDocument();
+    expect(screen.getByText('Enter a valid realm name')).toBeInTheDocument();
+    expect(screen.getByText('Choose a class')).toBeInTheDocument();
+    expect(within(addForm()).getByLabelText('Character')).toHaveAttribute('aria-invalid', 'true');
+    expect(api.addToRoster).not.toHaveBeenCalled();
+  });
+
+  test('shows the server message when the character already exists and keeps the form filled', async () => {
+    const addToRoster = vi.fn().mockRejectedValue(new ApiError('Character is already in the roster', 409));
+    setup([], { addToRoster });
+    await screen.findByText(/roster is empty/);
+
+    await fill(addForm(), { name: 'Jaina', realm: 'Silvermoon', cls: 'MAGE', spec: 'FIRE' });
+    await userEvent.click(within(addForm()).getByRole('button', { name: 'Add to roster' }));
+
+    expect(await within(addForm()).findByRole('alert')).toHaveTextContent('Character is already in the roster');
+    expect(within(addForm()).getByLabelText('Character')).toHaveValue('Jaina');
+  });
+
+  test('double clicking adds once', async () => {
+    let resolve!: (v: unknown) => void;
+    const addToRoster = vi.fn().mockReturnValue(new Promise(r => { resolve = r; }));
+    setup([], { addToRoster });
+    await screen.findByText(/roster is empty/);
+    await fill(addForm(), { name: 'Jaina', realm: 'Silvermoon', cls: 'MAGE', spec: 'FIRE' });
+
+    await userEvent.dblClick(within(addForm()).getByRole('button', { name: 'Add to roster' }));
+
+    expect(addToRoster).toHaveBeenCalledTimes(1);
+    resolve({});
+  });
+
+  test('works when browser storage is blocked', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+    const api = setup([]);
+    await screen.findByText(/roster is empty/);
+    await fill(addForm(), { name: 'Jaina', realm: 'Silvermoon', cls: 'MAGE', spec: 'FIRE' });
+
+    await userEvent.click(within(addForm()).getByRole('button', { name: 'Add to roster' }));
+
+    await waitFor(() => expect(api.addToRoster).toHaveBeenCalled());
+  });
+});
+
+describe('editing', () => {
+  test('opens a form with the current values and saves the changes', async () => {
+    const api = setup();
+    await screen.findByText('Jaina');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Jaina' }));
+    const form = screen.getByRole('form', { name: 'Save changes' });
+    expect(within(form).getByLabelText('Character')).toHaveValue('Jaina');
+    expect(within(form).getByLabelText('Specialization')).toHaveValue('FIRE');
+
+    await userEvent.selectOptions(within(form).getByLabelText('Specialization'), 'FROST');
+    await userEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(api.updateRosterEntry).toHaveBeenCalledWith('c-Jaina', { name: 'Jaina', realm: 'Silvermoon', class: 'MAGE', spec: 'FROST' }));
+    expect(await screen.findByText('Jaina updated.')).toBeInTheDocument();
+  });
+
+  test('cancel closes the form without saving', async () => {
+    const api = setup();
+    await screen.findByText('Jaina');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Jaina' }));
+
+    await userEvent.click(within(screen.getByRole('form', { name: 'Save changes' })).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('form', { name: 'Save changes' })).not.toBeInTheDocument();
+    expect(api.updateRosterEntry).not.toHaveBeenCalled();
+  });
+
+  test('a rename onto an existing character shows the conflict', async () => {
+    const updateRosterEntry = vi.fn().mockRejectedValue(new ApiError('Already exists', 409));
+    setup([member('Jaina')], { updateRosterEntry });
+    await screen.findByText('Jaina');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Jaina' }));
+
+    await userEvent.click(within(screen.getByRole('form', { name: 'Save changes' })).getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Already exists');
+  });
+});
+
+describe('removing and releasing', () => {
+  test('asks first, and explains that a player keeps their character', async () => {
+    const api = setup([member('Jaina', { claimed: true, username: 'jp' })]);
+    await screen.findByText('Jaina');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Jaina' }));
+
+    expect(screen.getByText(/Remove Jaina from the roster\? The player keeps their character/)).toBeInTheDocument();
+    expect(api.removeFromRoster).not.toHaveBeenCalled();
+  });
+
+  test('removing an unclaimed name does not mention a player', async () => {
+    setup();
+    await screen.findByText('Jaina');
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Jaina' }));
+    expect(screen.getByText('Remove Jaina from the roster?')).toBeInTheDocument();
+  });
+
+  test('confirming removes the character and refreshes', async () => {
+    const api = setup();
+    await screen.findByText('Jaina');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Jaina' }));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Confirm for Jaina' })).getByRole('button', { name: 'Yes' }));
+
+    await waitFor(() => expect(api.removeFromRoster).toHaveBeenCalledWith('c-Jaina'));
+    expect(await screen.findByText('Jaina removed from the roster.')).toBeInTheDocument();
+    await waitFor(() => expect(api.listRoster).toHaveBeenCalledTimes(2));
+  });
+
+  test('cancelling leaves everything as it was', async () => {
+    const api = setup();
+    await screen.findByText('Jaina');
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Jaina' }));
+
+    await userEvent.click(within(screen.getByRole('group', { name: 'Confirm for Jaina' })).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.getByRole('button', { name: 'Remove Jaina' })).toBeInTheDocument();
+    expect(api.removeFromRoster).not.toHaveBeenCalled();
+  });
+
+  test('only a claimed name can be released, and it frees the name for another player', async () => {
+    const api = setup([member('Jaina', { claimed: true, username: 'jp' }), member('Brannock')]);
+    await screen.findByText('Jaina');
+    expect(screen.queryByRole('button', { name: 'Release Brannock' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Release Jaina' }));
+    expect(screen.getByText(/Free Jaina so another player can take it/)).toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole('group', { name: 'Confirm for Jaina' })).getByRole('button', { name: 'Yes' }));
+
+    await waitFor(() => expect(api.releaseRosterEntry).toHaveBeenCalledWith('c-Jaina'));
+    expect(await screen.findByText('Jaina is free to be claimed again.')).toBeInTheDocument();
+  });
+
+  test('a failed removal shows the reason and keeps the row', async () => {
+    const removeFromRoster = vi.fn().mockRejectedValue(new ApiError('Character is not in the roster', 404));
+    setup([member('Jaina')], { removeFromRoster });
+    await screen.findByText('Jaina');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Jaina' }));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Confirm for Jaina' })).getByRole('button', { name: 'Yes' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Character is not in the roster');
+    expect(screen.getByText('Jaina')).toBeInTheDocument();
+  });
+});

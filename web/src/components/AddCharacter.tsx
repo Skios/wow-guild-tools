@@ -12,7 +12,7 @@ function Option({ character, onAdd }: { character: CharacterSummary; onAdd: (c: 
     <li>
       <button type="button" onClick={() => onAdd(character)}>
         <CharacterName name={character.name} classId={character.class} realm={character.realm} />
-        <span className="muted"> · {role} · {character.username}{character.isMain ? '' : ' (alt)'}</span>
+        <span className="muted"> · {role}{character.username ? ` · ${character.username}` : ' · unclaimed'}{character.isMain ? '' : ' (alt)'}</span>
       </button>
     </li>
   );
@@ -34,7 +34,7 @@ export function AddCharacter({ rows, candidates, error, onAdd }: Props) {
     const needle = text.trim().toLocaleLowerCase();
     return (candidates ?? [])
       .filter(c => !onList.has(c.id))
-      .filter(c => !needle || c.name.toLocaleLowerCase().includes(needle) || c.username.toLocaleLowerCase().includes(needle));
+      .filter(c => !needle || c.name.toLocaleLowerCase().includes(needle) || (c.username ?? '').toLocaleLowerCase().includes(needle));
   }, [rows, candidates, text]);
 
   return (

@@ -1,4 +1,6 @@
-import type { CharacterSummary, EventDetail, EventSummary, Meta, NewEvent, RosterSelection } from './types';
+import type {
+  CharacterSummary, EventDetail, EventSummary, Meta, MessageResult, NewEvent, RosterCharacter, RosterEntryInput, RosterSelection,
+} from './types';
 
 const BASE = '/api';
 const EVENTS_PAGE = 50;
@@ -15,12 +17,6 @@ export class ApiError extends Error {
   }
 }
 
-interface ApiOptions {
-  getKey: () => string | null;
-  onUnauthorized: () => void;
-  fetchImpl?: typeof fetch;
-}
-
 async function errorFrom(response: Response): Promise<ApiError> {
   const fallback = `Server error (${response.status})`;
   let body: { error?: unknown; issues?: Issue[] } = {};
@@ -35,10 +31,9 @@ async function errorFrom(response: Response): Promise<ApiError> {
   return new ApiError(message, response.status, issues);
 }
 
-export function createApi({ getKey, onUnauthorized, fetchImpl = fetch }: ApiOptions) {
-  async function request<T>(path: string, init: RequestInit = {}, key: string | null = getKey(), session = true): Promise<T> {
+export function createApi({ fetchImpl = fetch }: { fetchImpl?: typeof fetch } = {}) {
+  async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers = new Headers(init.headers);
-    if (key) headers.set('x-api-key', key);
     if (init.body) headers.set('content-type', 'application/json');
 
     let response: Response;
@@ -48,10 +43,7 @@ export function createApi({ getKey, onUnauthorized, fetchImpl = fetch }: ApiOpti
       throw new ApiError('Cannot reach the server. Is the API running?', 0);
     }
 
-    if (response.status === 401) {
-      if (session) onUnauthorized();
-      throw new ApiError('Invalid API key', 401);
-    }
+    if (response.status === 401) throw new ApiError('The API is protected by a key, which this site does not send yet.', 401);
     if (!response.ok) throw await errorFrom(response);
 
     try {
@@ -65,18 +57,26 @@ export function createApi({ getKey, onUnauthorized, fetchImpl = fetch }: ApiOpti
     method,
     ...(body !== undefined && { body: JSON.stringify(body) }),
   });
+  const id = encodeURIComponent;
 
   return {
-    /** Validates a key without touching the current session. */
-    checkKey: (key: string) => request<{ ok: true }>('/auth/check', {}, key, false),
     getMeta: () => request<Meta>('/meta/wow'),
     listEvents: () => request<EventSummary[]>(`/events?limit=${EVENTS_PAGE}`),
-    getEvent: (id: string) => request<EventDetail>(`/events/${encodeURIComponent(id)}`),
+    getEvent: (eventId: string) => request<EventDetail>(`/events/${id(eventId)}`),
     createEvent: (event: NewEvent) => request<EventSummary>('/events', send('POST', event)),
-    saveRoster: (id: string, selections: RosterSelection[]) =>
-      request<{ success: true }>(`/events/${encodeURIComponent(id)}/roster`, send('PATCH', { selections })),
-    publish: (id: string) => request<{ success: true }>(`/events/${encodeURIComponent(id)}/publish`, send('POST')),
+    saveRoster: (eventId: string, selections: RosterSelection[]) =>
+      request<{ success: true }>(`/events/${id(eventId)}/roster`, send('PATCH', { selections })),
+    publish: (eventId: string) => request<{ success: true }>(`/events/${id(eventId)}/publish`, send('POST')),
+    message: (eventId: string, characterIds: string[], text?: string) =>
+      request<{ results: MessageResult[] }>(`/events/${id(eventId)}/message`, send('POST', { characterIds, ...(text && { text }) })),
     listCharacters: () => request<CharacterSummary[]>('/characters'),
+
+    listRoster: () => request<RosterCharacter[]>('/roster'),
+    addToRoster: (entry: RosterEntryInput) => request<RosterCharacter>('/roster', send('POST', entry)),
+    updateRosterEntry: (characterId: string, entry: RosterEntryInput) =>
+      request<RosterCharacter>(`/roster/${id(characterId)}`, send('PUT', entry)),
+    removeFromRoster: (characterId: string) => request<{ success: true }>(`/roster/${id(characterId)}`, send('DELETE')),
+    releaseRosterEntry: (characterId: string) => request<RosterCharacter>(`/roster/${id(characterId)}/release`, send('POST')),
   };
 }
 
