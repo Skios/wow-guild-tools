@@ -39,15 +39,15 @@ We'll know we're right when **the time spent by officers on roster coordination 
 ## Delivery Milestones
 | # | Milestone | Outcome | Status | Plan |
 |---|---|---|---|---|
-| 1 | Core Engine | Ability to create event and store responses | pending | — |
-| 2 | Notification Layer | Automated invites sent to the channel | pending | — |
+| 1 | Core Engine | Ability to create event and store responses | done | .claude/plans/wow-guild-tools.plan.md |
+| 2 | Notification Layer | Automated invites sent to the channel | in-progress | .claude/plans/wow-guild-tools.plan.md |
 | 3 | Roster Finalizer | Officer can select final team and publish table | in-progress | .claude/plans/wow-guild-tools.plan.md |
 | 4 | Nudge System | Automated reminders for non-responders | pending | — |
 
 ## Open Questions
-- [ ] Which API is most stable for the chosen notification platform?
+- [x] Which API is most stable for the chosen notification platform? -> Telegram Bot API via Telegraf (webhook).
 - [ ] How to handle "Late" communication if it's not in the MVP response set?
-- [ ] How to uniquely identify users across different chat platforms?
+- [x] How to uniquely identify users across different chat platforms? -> `Identity(platform, platformUserId)` per User; linking accounts via one-time code is planned, not built.
 
 ## Risks
 | Risk | Likelihood | Impact | Mitigation |
