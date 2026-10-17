@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { sendError } from '../lib/http-error.js';
 import { GroupService } from '../services/group.service.js';
 import { z } from 'zod';
 
@@ -15,8 +16,8 @@ export async function groupRoutes(fastify: FastifyInstance) {
       const body = GroupSchema.parse(request.body);
       const group = await groupService.createGroup(body.name, body.description);
       return reply.code(201).send(group);
-    } catch (error: any) {
-      return reply.code(400).send({ error: error.message });
+    } catch (error) {
+      return sendError(request, reply, error, 400);
     }
   });
 
@@ -29,8 +30,8 @@ export async function groupRoutes(fastify: FastifyInstance) {
     try {
       const group = await groupService.getGroup(id);
       return reply.send(group);
-    } catch (error: any) {
-      return reply.code(404).send({ error: error.message });
+    } catch (error) {
+      return sendError(request, reply, error, 404);
     }
   });
 
@@ -40,8 +41,8 @@ export async function groupRoutes(fastify: FastifyInstance) {
     try {
       await groupService.addMember(userId, id);
       return reply.send({ success: true });
-    } catch (error: any) {
-      return reply.code(400).send({ error: error.message });
+    } catch (error) {
+      return sendError(request, reply, error, 400);
     }
   });
 
@@ -50,8 +51,8 @@ export async function groupRoutes(fastify: FastifyInstance) {
     try {
       await groupService.removeMember(userId, id);
       return reply.send({ success: true });
-    } catch (error: any) {
-      return reply.code(400).send({ error: error.message });
+    } catch (error) {
+      return sendError(request, reply, error, 400);
     }
   });
 
@@ -60,8 +61,8 @@ export async function groupRoutes(fastify: FastifyInstance) {
     try {
       await groupService.deleteGroup(id);
       return reply.send({ success: true });
-    } catch (error: any) {
-      return reply.code(400).send({ error: error.message });
+    } catch (error) {
+      return sendError(request, reply, error, 400);
     }
   });
 }

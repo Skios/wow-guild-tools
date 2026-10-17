@@ -46,7 +46,9 @@ export async function telegramRoutes(fastify: FastifyInstance) {
       await client.answerCallback(query.id, '').catch(err => request.log.warn({ err }, 'answerCallbackQuery failed'));
     } else if (query) {
       const result = await handleCallbackQuery(query);
-      const url = result.register ? `https://t.me/${await client.getBotUsername()}?start=register` : undefined;
+      // Without the username we still answer; the user just doesn't get the auto-open link.
+      const username = result.register ? await client.getBotUsername().catch(() => undefined) : undefined;
+      const url = username ? `https://t.me/${username}?start=register` : undefined;
       await client.answerCallback(query.id, result.text, url).catch(err => request.log.warn({ err }, 'answerCallbackQuery failed'));
     }
     return response.send({ ok: true });

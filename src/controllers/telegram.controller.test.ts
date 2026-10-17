@@ -6,6 +6,7 @@ const answer = vi.hoisted(() => vi.fn());
 const send = vi.hoisted(() => vi.fn());
 const regMessage = vi.hoisted(() => vi.fn());
 const regCallback = vi.hoisted(() => vi.fn());
+const botUsername = vi.hoisted(() => vi.fn());
 vi.mock('../services/telegram-callback.service.js', async (orig) => ({
   ...(await orig<object>()),
   handleCallbackQuery: handle,
@@ -18,7 +19,7 @@ vi.mock('../integrations/telegram/telegram.client.js', () => ({
   TelegramClient: class {
     answerCallback = answer;
     sendMessage = send;
-    getBotUsername = async () => 'guild_bot';
+    getBotUsername = botUsername;
   },
 }));
 vi.mock('../config/telegram.js', () => ({
@@ -40,6 +41,7 @@ describe('POST /webhooks/telegram', () => {
     vi.clearAllMocks();
     handle.mockResolvedValue({ text: 'Saved' });
     send.mockResolvedValue({});
+    botUsername.mockResolvedValue('guild_bot');
     answer.mockResolvedValue(true);
   });
 
@@ -137,5 +139,18 @@ describe('POST /webhooks/telegram', () => {
     });
 
     expect(res.statusCode).toBe(200);
+  });
+
+  test('still answers the user when the bot username cannot be fetched', async () => {
+    handle.mockResolvedValue({ text: 'Register first', register: true });
+    botUsername.mockRejectedValue(new Error('network down'));
+
+    const res = await (await app()).inject({
+      method: 'POST', url: '/webhooks/telegram', payload: body,
+      headers: { 'x-telegram-bot-api-secret-token': 's3cret_token_value' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(answer).toHaveBeenCalledWith('q1', 'Register first', undefined);
   });
 });

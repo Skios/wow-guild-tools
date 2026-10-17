@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { sendError } from '../lib/http-error.js';
 import { ProfileService } from '../services/profile.service.js';
 import { z } from 'zod';
 import { WoWClass, WoWRole } from '@prisma/client';
@@ -19,8 +20,8 @@ export async function profileRoutes(fastify: FastifyInstance) {
       const body = CharacterSchema.parse(request.body);
       const character = await profileService.addCharacter(body);
       return reply.code(201).send(character);
-    } catch (error: any) {
-      return reply.code(400).send({ error: error.message });
+    } catch (error) {
+      return sendError(request, reply, error, 400);
     }
   });
 
@@ -30,8 +31,8 @@ export async function profileRoutes(fastify: FastifyInstance) {
     try {
       const main = await profileService.setMainCharacter(userId, id);
       return reply.send(main);
-    } catch (error: any) {
-      return reply.code(400).send({ error: error.message });
+    } catch (error) {
+      return sendError(request, reply, error, 400);
     }
   });
 
@@ -40,8 +41,8 @@ export async function profileRoutes(fastify: FastifyInstance) {
     try {
       const profile = await profileService.getMyProfile(id);
       return reply.send(profile);
-    } catch (error: any) {
-      return reply.code(404).send({ error: error.message });
+    } catch (error) {
+      return sendError(request, reply, error, 404);
     }
   });
 }
