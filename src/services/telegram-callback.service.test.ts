@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const db = vi.hoisted(() => ({
-  user: { upsert: vi.fn(), findUnique: vi.fn() },
+  identity: { upsert: vi.fn() },
   character: { findFirst: vi.fn() },
   event: { findUnique: vi.fn() },
   response: { upsert: vi.fn() },
@@ -16,44 +16,53 @@ const query = (data: string) => ({ id: 'q1', data, from: { id: 42, username: 'th
 describe('handleCallbackQuery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    db.user.upsert.mockResolvedValue({ id: 'u1' });
+    db.identity.upsert.mockResolvedValue({ user: { id: 'u1' } });
     db.character.findFirst.mockResolvedValue({ id: 'c1' });
     db.event.findUnique.mockResolvedValue({ isPublished: false });
     db.response.upsert.mockResolvedValue({});
   });
 
   test('stores the response for the main character and confirms to the user', async () => {
-    const text = await handleCallbackQuery(query(`raid_tent_${EVENT_ID}`));
+    const result = await handleCallbackQuery(query(`raid_tent_${EVENT_ID}`));
 
     expect(db.response.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ where: { eventId_characterId: { eventId: EVENT_ID, characterId: 'c1' } } }),
     );
-    expect(text).toContain('TENTATIVE');
+    expect(result.text).toContain('TENTATIVE');
+    expect(result.register).toBeUndefined();
+  });
+
+  test('looks the user up by Telegram identity', async () => {
+    await handleCallbackQuery(query(`raid_in_${EVENT_ID}`));
+
+    expect(db.identity.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { platform_platformUserId: { platform: 'telegram', platformUserId: '42' } } }),
+    );
   });
 
   test('rejects malformed callback data without touching the database', async () => {
-    const text = await handleCallbackQuery(query('raid_in_not-a-uuid'));
+    const result = await handleCallbackQuery(query('raid_in_not-a-uuid'));
 
-    expect(text).toMatch(/invalid/i);
-    expect(db.user.upsert).not.toHaveBeenCalled();
+    expect(result.text).toMatch(/invalid/i);
+    expect(db.identity.upsert).not.toHaveBeenCalled();
   });
 
-  test('registers an unknown Telegram user and asks for a main character', async () => {
+  test('sends a user without a main character to registration', async () => {
     db.character.findFirst.mockResolvedValue(null);
 
-    const text = await handleCallbackQuery(query(`raid_in_${EVENT_ID}`));
+    const result = await handleCallbackQuery(query(`raid_in_${EVENT_ID}`));
 
-    expect(db.user.upsert).toHaveBeenCalled();
-    expect(text).toMatch(/main character/i);
+    expect(result.register).toBe(true);
+    expect(result.text).toMatch(/register/i);
     expect(db.response.upsert).not.toHaveBeenCalled();
   });
 
   test('tells the user when the event is already published', async () => {
     db.event.findUnique.mockResolvedValue({ isPublished: true });
 
-    const text = await handleCallbackQuery(query(`raid_out_${EVENT_ID}`));
+    const result = await handleCallbackQuery(query(`raid_out_${EVENT_ID}`));
 
-    expect(text).toMatch(/closed/i);
+    expect(result.text).toMatch(/closed/i);
   });
 
   test('rethrows unexpected database errors', async () => {

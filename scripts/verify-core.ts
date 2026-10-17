@@ -9,14 +9,17 @@ async function runVerification() {
   try {
     // 1. Setup: Create Dummy User and Character
     console.log('Creating dummy data...');
-    const user = await prisma.user.upsert({
-      where: { platformId: '123456789' },
+    const identity = await prisma.identity.upsert({
+      where: { platform_platformUserId: { platform: 'telegram', platformUserId: '123456789' } },
       update: {},
       create: {
-        platformId: '123456789',
-        username: 'RaidLeader_Test',
+        platform: 'telegram',
+        platformUserId: '123456789',
+        user: { create: { username: 'RaidLeader_Test' } },
       },
+      include: { user: true },
     });
+    const user = identity.user;
 
     const character = await prisma.character.create({
       data: {

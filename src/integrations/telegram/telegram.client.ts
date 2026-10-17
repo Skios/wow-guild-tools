@@ -14,8 +14,15 @@ export class TelegramClient {
 
   async sendInvite(chatId: string, text: string, keyboard: any) {
     return this.bot.telegram.sendMessage(chatId, text, {
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
+  }
+
+  private username?: string;
+
+  async getBotUsername() {
+    return (this.username ??= (await this.bot.telegram.getMe()).username);
   }
 
   async setWebhook(url: string) {
@@ -24,8 +31,9 @@ export class TelegramClient {
     });
   }
 
-  async answerCallback(callbackQueryId: string, text: string) {
-    return this.bot.telegram.answerCbQuery(callbackQueryId, text, { show_alert: false });
+  /** `url` may only be a t.me/<bot>?start=... link: Telegram opens it on the user's device. */
+  async answerCallback(callbackQueryId: string, text: string, url?: string) {
+    return this.bot.telegram.answerCbQuery(callbackQueryId, text, { show_alert: false, ...(url && { url }) });
   }
 
   getBot() {

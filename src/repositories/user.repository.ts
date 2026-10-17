@@ -1,21 +1,15 @@
 import { prisma } from '../config/db.js';
 
 export class UserRepository {
-  async findByPlatformId(platformId: string) {
-    return prisma.user.findUnique({
-      where: { platformId },
+  /** Finds or creates the person behind a chat account, refreshing their display name. */
+  async upsertFromIdentity(platform: string, platformUserId: string, username: string) {
+    const identity = await prisma.identity.upsert({
+      where: { platform_platformUserId: { platform, platformUserId } },
+      update: { user: { update: { username } } },
+      create: { platform, platformUserId, user: { create: { username } } },
+      include: { user: true },
     });
-  }
-
-  async createFromPlatform(platformId: string, username: string) {
-    return prisma.user.upsert({
-      where: { platformId },
-      update: { username },
-      create: {
-        platformId,
-        username,
-      },
-    });
+    return identity.user;
   }
 
   async getGroupMembers(groupId: string) {

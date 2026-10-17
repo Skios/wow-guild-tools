@@ -21,24 +21,30 @@ const CALLBACK_DATA = /^raid_(in|out|tent)_(.+)$/;
 const userRepo = new UserRepository();
 const responseService = new ResponseService();
 
-/** Applies a button press and returns the text to show to the user. */
-export async function handleCallbackQuery(query: CallbackQuery): Promise<string> {
+export interface CallbackResult {
+  text: string;
+  /** True when the user must register before answering. */
+  register?: true;
+}
+
+/** Applies a button press and returns what to show to the user. */
+export async function handleCallbackQuery(query: CallbackQuery): Promise<CallbackResult> {
   const match = CALLBACK_DATA.exec(query.data);
   const eventId = EventIdSchema.safeParse(match?.[2]);
-  if (!match || !eventId.success) return 'Invalid action';
+  if (!match || !eventId.success) return { text: 'Invalid action' };
 
-  const platformId = String(query.from.id);
-  const user = await userRepo.createFromPlatform(platformId, query.from.username ?? query.from.first_name ?? platformId);
+  const platformUserId = String(query.from.id);
+  const user = await userRepo.upsertFromIdentity('telegram', platformUserId, query.from.username ?? query.from.first_name ?? platformUserId);
 
   const character = await prisma.character.findFirst({ where: { userId: user.id, isMain: true } });
-  if (!character) return 'No main character set: ask an officer to register one for you.';
+  if (!character) return { text: 'Register your main character with the bot first.', register: true };
 
   const status = STATUS_BY_ACTION[match[1] as keyof typeof STATUS_BY_ACTION];
   try {
     await responseService.updateResponse(eventId.data, character.id, status);
   } catch (error) {
-    if (error instanceof EventLockedError) return 'Sign-ups are closed for this event.';
+    if (error instanceof EventLockedError) return { text: 'Sign-ups are closed for this event.' };
     throw error;
   }
-  return `Response saved: ${status}`;
+  return { text: `Response saved: ${status}` };
 }

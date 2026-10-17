@@ -37,9 +37,9 @@ enum WoWRole {
 
 model User {
   id           String      @id @default(uuid())
-  platformId   String      @unique // e.g. Telegram user ID
   username     String
   preferredChannel String?    @default("telegram")
+  identities   Identity[]
   characters   Character[]
   eventsCreated Event[]
   groups       GroupMember[]
@@ -47,6 +47,20 @@ model User {
   updatedAt    DateTime    @updatedAt
 
   @@map("users")
+}
+
+// One row per linked chat account; a User can have one per platform.
+model Identity {
+  id             String   @id @default(uuid())
+  platform       String   // "telegram" | "discord"
+  platformUserId String
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+
+  @@unique([platform, platformUserId])
+  @@index([userId])
+  @@map("identities")
 }
 
 model Character {
