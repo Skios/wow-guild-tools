@@ -27,7 +27,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         orderBy: [{ isMain: 'desc' }, { name: 'asc' }],
         take: MAX_CHARACTERS,
       });
-      return characters.map(({ user, ...character }) => ({ ...character, username: user.username }));
+      return characters.map(({ user, ...character }) => ({ ...character, username: user?.username ?? null }));
     } catch (error) {
       return sendError(request, reply, error, 400);
     }

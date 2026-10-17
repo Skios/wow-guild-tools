@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { sendError } from '../lib/http-error.js';
 import { EventService } from '../services/event.service.js';
-import { CreateEventSchema, EventParamsSchema, FinalizeRosterSchema, ListEventsQuerySchema } from '../validators/event.validator.js';
+import { CreateEventSchema, EventParamsSchema, FinalizeRosterSchema, ListEventsQuerySchema, MessageSchema } from '../validators/event.validator.js';
 
 export async function eventRoutes(fastify: FastifyInstance) {
   const eventService = new EventService();
@@ -37,10 +37,20 @@ export async function eventRoutes(fastify: FastifyInstance) {
     }
   });
 
+  fastify.post('/events/:id/message', async (request, reply) => {
+    try {
+      const { id } = EventParamsSchema.parse(request.params);
+      const body = MessageSchema.parse(request.body);
+      return reply.send({ results: await eventService.messageCharacters(id, body.characterIds, body.text) });
+    } catch (error) {
+      return sendError(request, reply, error, 400);
+    }
+  });
+
   fastify.get('/events/:id', async (request, reply) => {
     try {
       const id = EventParamsSchema.parse(request.params).id;
-      const event = await eventService.getEvent(id);
+      const event = await eventService.getEventDetail(id);
       return event;
     } catch (error) {
       return sendError(request, reply, error, 404);

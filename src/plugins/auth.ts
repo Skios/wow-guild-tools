@@ -6,7 +6,7 @@ import { safeEqual } from '../lib/safe-equal.js';
 // Call directly on a scope (not via register) so the hook covers that scope's routes.
 export function requireApiKey(fastify: FastifyInstance) {
   fastify.addHook('onRequest', async (request, reply) => {
-    if (!safeEqual(request.headers['x-api-key'], getEnv().API_KEY)) {
+    if (!safeEqual(request.headers['x-api-key'], getEnv().API_KEY ?? '')) {
       return reply.code(401).send({ error: 'Unauthorized' });
     }
   });

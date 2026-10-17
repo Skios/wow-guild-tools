@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { prismaMock, resetPrismaMock } from './test/prisma-mock.js';
 
 vi.mock('./config/db.js', () => ({ prisma: prismaMock }));
+const env = vi.hoisted(() => ({
+  current: { API_KEY: 'a_long_random_api_key_1234' as string | undefined },
+}));
 vi.mock('./config/env.js', () => ({
-  getEnv: () => ({ API_KEY: 'a_long_random_api_key_1234', TELEGRAM_WEBHOOK_SECRET: 'webhook_secret_value_1234', PORT: 3000 }),
+  getEnv: () => ({ ...env.current, TELEGRAM_WEBHOOK_SECRET: 'webhook_secret_value_1234', PORT: 3000 }),
 }));
 vi.mock('./config/telegram.js', () => ({
   telegramConfig: { token: 't', channelId: 'c', webhookSecret: 'webhook_secret_value_1234' },
@@ -20,7 +23,10 @@ import { buildApp } from './app.js';
 const KEY = { 'x-api-key': 'a_long_random_api_key_1234' };
 const ID = '3f2b8c1e-8a4d-4c55-9d7e-000000000001';
 
-beforeEach(() => resetPrismaMock());
+beforeEach(() => {
+  resetPrismaMock();
+  env.current = { API_KEY: 'a_long_random_api_key_1234' };
+});
 
 describe('buildApp', () => {
   test('health check is public', async () => {
@@ -45,6 +51,12 @@ describe('buildApp', () => {
     ['PUT', `/profiles/main-character/${ID}`],
     ['GET', `/profiles/me/${ID}`],
     ['GET', '/characters'],
+    ['GET', '/roster'],
+    ['POST', '/roster'],
+    ['PUT', `/roster/${ID}`],
+    ['DELETE', `/roster/${ID}`],
+    ['POST', `/roster/${ID}/release`],
+    ['POST', `/events/${ID}/message`],
     ['GET', '/meta/wow'],
     ['GET', '/auth/check'],
   ] as const)('%s %s needs the API key', async (method, url) => {
@@ -87,5 +99,24 @@ describe('buildApp', () => {
   test('unknown routes are 404 (and unauthenticated probing learns nothing about officer routes)', async () => {
     const app = await buildApp();
     expect((await app.inject('/nope')).statusCode).toBe(404);
+  });
+});
+
+describe('buildApp without an API key', () => {
+  test('officer routes are open (the site has no login for now)', async () => {
+    env.current = { API_KEY: undefined };
+    prismaMock.event.findMany.mockResolvedValue([]);
+    prismaMock.character.count.mockResolvedValue(0);
+    const app = await buildApp();
+
+    expect((await app.inject('/events')).statusCode).toBe(200);
+    expect((await app.inject('/meta/wow')).statusCode).toBe(200);
+  });
+
+  test('the webhook still needs its own secret', async () => {
+    env.current = { API_KEY: undefined };
+    const app = await buildApp();
+
+    expect((await app.inject({ method: 'POST', url: '/webhooks/telegram', payload: {} })).statusCode).toBe(401);
   });
 });

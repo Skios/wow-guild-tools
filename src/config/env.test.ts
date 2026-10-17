@@ -18,13 +18,36 @@ describe('parseEnv', () => {
     expect(parseEnv({ ...valid, PORT: '8080' }).PORT).toBe(8080);
   });
 
-  test.each(['DATABASE_URL', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHANNEL_ID', 'TELEGRAM_WEBHOOK_SECRET', 'API_KEY'])(
+  test.each(['DATABASE_URL', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHANNEL_ID', 'TELEGRAM_WEBHOOK_SECRET'])(
     'fails fast when %s is missing',
     (key) => {
       const { [key]: _removed, ...rest } = valid as Record<string, string>;
       expect(() => parseEnv(rest)).toThrow(key);
     },
   );
+
+  test('the API key is optional: without it the admin is open and bound to localhost', () => {
+    const { API_KEY: _key, ...rest } = valid;
+    const env = parseEnv(rest);
+    expect(env.API_KEY).toBeUndefined();
+    expect(env.HOST).toBe('127.0.0.1');
+  });
+
+  test('an empty API_KEY counts as not set (common in .env files)', () => {
+    const env = parseEnv({ ...valid, API_KEY: '' });
+    expect(env.API_KEY).toBeUndefined();
+    expect(env.HOST).toBe('127.0.0.1');
+  });
+
+  test('a key that is set must be long enough to mean something', () => {
+    expect(() => parseEnv({ ...valid, API_KEY: 'short' })).toThrow('API_KEY');
+  });
+
+  test('with a key the server listens on all interfaces, unless HOST says otherwise', () => {
+    expect(parseEnv(valid).HOST).toBe('0.0.0.0');
+    expect(parseEnv({ ...valid, HOST: '10.0.0.5' }).HOST).toBe('10.0.0.5');
+    expect(parseEnv({ ...valid, API_KEY: '', HOST: '0.0.0.0' }).HOST).toBe('0.0.0.0');
+  });
 
   test('rejects a webhook secret Telegram would refuse', () => {
     expect(() => parseEnv({ ...valid, TELEGRAM_WEBHOOK_SECRET: 'short' })).toThrow('TELEGRAM_WEBHOOK_SECRET');

@@ -8,24 +8,41 @@ import type { CreateEventInput } from '../validators/event.validator.js';
 import { NotificationService } from './notification.service.js';
 import { ResponseService } from './response.service.js';
 
+export interface MessageResult {
+  characterId: string;
+  name: string | null;
+  status: 'sent' | 'failed' | 'unreachable' | 'unclaimed' | 'unknown';
+  error?: string;
+}
+
 export interface ResponseCounts {
   in: number;
   out: number;
   tentative: number;
   bench: number;
+  late: number;
   confirmed: number;
+  /** Roster members who have not answered yet. */
+  noAnswer: number;
 }
 
-function countResponses(responses: { status: ResponseStatus; isConfirmed: boolean }[]): ResponseCounts {
-  const counts: ResponseCounts = { in: 0, out: 0, tentative: 0, bench: 0, confirmed: 0 };
-  for (const { status, isConfirmed } of responses) {
-    counts[status.toLowerCase() as 'in' | 'out' | 'tentative' | 'bench'] += 1;
+type ListedResponse = { status: ResponseStatus; isConfirmed: boolean; character: { inRoster: boolean } };
+
+function countResponses(responses: ListedResponse[], rosterSize: number): ResponseCounts {
+  const counts: ResponseCounts = { in: 0, out: 0, tentative: 0, bench: 0, late: 0, confirmed: 0, noAnswer: 0 };
+  let rosterAnswers = 0;
+  for (const { status, isConfirmed, character } of responses) {
+    counts[status.toLowerCase() as 'in' | 'out' | 'tentative' | 'bench' | 'late'] += 1;
     if (isConfirmed) counts.confirmed += 1;
+    if (character.inRoster) rosterAnswers += 1;
   }
+  counts.noAnswer = Math.max(0, rosterSize - rosterAnswers);
   return counts;
 }
 
 type RosterRow = { status: ResponseStatus; isConfirmed: boolean; character: { name: string; role: keyof typeof ROLE_ORDER } };
+
+const attending = (status: ResponseStatus) => status === 'IN' || status === 'LATE';
 
 function buildRoster(rows: RosterRow[]) {
   const byRoleThenName = (a: RosterRow, b: RosterRow) =>
@@ -33,8 +50,8 @@ function buildRoster(rows: RosterRow[]) {
   const names = (list: RosterRow[]) => [...list].sort(byRoleThenName).map(r => r.character.name);
 
   return {
-    team: names(rows.filter(r => r.status === 'IN' && r.isConfirmed)),
-    bench: names(rows.filter(r => r.status === 'BENCH' || (r.status === 'IN' && !r.isConfirmed))),
+    team: names(rows.filter(r => attending(r.status) && r.isConfirmed)),
+    bench: names(rows.filter(r => r.status === 'BENCH' || (attending(r.status) && !r.isConfirmed))),
   };
 }
 
@@ -51,8 +68,10 @@ export class EventService {
     if (Date.parse(data.endTime) <= Date.parse(data.startTime)) {
       throw new Error('Event end time must be after start time');
     }
-    const creator = await prisma.user.findUnique({ where: { id: data.createdByUserId }, select: { id: true } });
-    if (!creator) throw new NotFoundError('User not found');
+    if (data.createdByUserId) {
+      const creator = await prisma.user.findUnique({ where: { id: data.createdByUserId }, select: { id: true } });
+      if (!creator) throw new NotFoundError('User not found');
+    }
 
     const event = await this.eventRepo.create(data);
 
@@ -69,7 +88,7 @@ export class EventService {
     return event;
   }
 
-  async finalizeRoster(eventId: string, selections: { characterId: string, status: ResponseStatus, isConfirmed: boolean }[]) {
+  async finalizeRoster(eventId: string, selections: { characterId: string; status: ResponseStatus; isConfirmed: boolean; lateMinutes?: number | undefined }[]) {
     return this.responseService.bulkUpdateResponses(eventId, selections);
   }
 
@@ -105,17 +124,62 @@ export class EventService {
     }
   }
 
+  /** Privately reminds people who have not answered. Each person gets their own delivery result. */
+  async messageCharacters(eventId: string, characterIds: string[], customText?: string) {
+    const event = await this.getEvent(eventId);
+    if (event.isPublished) throw new ConflictError('Event already published');
+
+    const text = customText ?? `Reminder: ${event.title} on ${event.startTime.toLocaleString()}. Are you coming?`;
+    const found = await prisma.character.findMany({
+      where: { id: { in: characterIds }, OR: [{ inRoster: true }, { responses: { some: { eventId } } }] },
+      include: { user: { select: { identities: { where: { platform: 'telegram' }, select: { platformUserId: true } } } } },
+    });
+    const byId = new Map(found.map(c => [c.id, c]));
+
+    const results: MessageResult[] = [];
+    for (const characterId of characterIds) {
+      const character = byId.get(characterId);
+      if (!character) { results.push({ characterId, name: null, status: 'unknown' }); continue; }
+      const base = { characterId, name: character.name };
+      if (!character.user) { results.push({ ...base, status: 'unclaimed' }); continue; }
+      const telegramId = character.user.identities[0]?.platformUserId;
+      if (!telegramId) { results.push({ ...base, status: 'unreachable' }); continue; }
+
+      const sent = await this.notificationService.sendDirect('telegram', telegramId, { text, eventId });
+      results.push(sent.success ? { ...base, status: 'sent' } : { ...base, status: 'failed', error: sent.error ?? 'Delivery failed' });
+    }
+    return results;
+  }
+
   async getEvent(id: string) {
     const event = await this.eventRepo.findById(id);
     if (!event) throw new NotFoundError('Event not found');
     return event;
   }
 
+  /** The event with its answers, plus the roster members who have not answered (and whether the bot can write to them). */
+  async getEventDetail(id: string) {
+    const event = await this.getEvent(id);
+    const missing = await prisma.character.findMany({
+      where: { inRoster: true, responses: { none: { eventId: id } } },
+      include: { user: { select: { username: true, identities: { where: { platform: 'telegram' }, select: { id: true } } } } },
+      orderBy: { name: 'asc' },
+    });
+    const noAnswer = missing.map(({ user, userId, inRoster, isMain, createdAt, updatedAt, ...character }) => {
+      void userId; void inRoster; void isMain; void createdAt; void updatedAt;
+      return { ...character, username: user?.username ?? null, reachable: (user?.identities.length ?? 0) > 0 };
+    });
+    return { ...event, noAnswer };
+  }
+
   async listEvents(limit: number = 20, offset: number = 0) {
-    const events = await this.eventRepo.findAll(limit, offset);
-    return events.map(({ responses, ...event }: Event & { responses: { status: ResponseStatus; isConfirmed: boolean }[] }) => ({
+    const [events, rosterSize] = await Promise.all([
+      this.eventRepo.findAll(limit, offset),
+      prisma.character.count({ where: { inRoster: true } }),
+    ]);
+    return events.map(({ responses, ...event }: Event & { responses: ListedResponse[] }) => ({
       ...event,
-      counts: countResponses(responses),
+      counts: countResponses(responses, rosterSize),
     }));
   }
 }

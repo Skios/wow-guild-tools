@@ -1,4 +1,4 @@
-import type { NotificationAdapter, NotificationPayload, PublicationPayload } from '../types/notification.types.js';
+import type { DirectMessage, NotificationAdapter, NotificationPayload, PublicationPayload } from '../types/notification.types.js';
 
 type Result = { success: boolean; error?: string };
 
@@ -15,6 +15,18 @@ export class NotificationService {
 
   async publishFinalRoster(payload: PublicationPayload) {
     return this.fanOut(adapter => adapter.publishFinalRoster(payload));
+  }
+
+  /** Privately message one person through the channel they signed up with. */
+  async sendDirect(platform: string, platformUserId: string, message: DirectMessage): Promise<Result> {
+    const adapter = this.adapters.get(platform);
+    if (!adapter) return { success: false, error: `No ${platform} channel configured` };
+    if (!adapter.sendDirect) return { success: false, error: `${platform} cannot send direct messages` };
+    try {
+      return await adapter.sendDirect(platformUserId, message);
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
   }
 
   // One broken channel must not stop the others.

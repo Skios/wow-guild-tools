@@ -7,8 +7,10 @@ const EnvSchema = z.object({
   TELEGRAM_CHANNEL_ID: z.string().min(1),
   // Telegram's secret_token only allows A-Z a-z 0-9 _ - and 1-256 chars.
   TELEGRAM_WEBHOOK_SECRET: z.string().min(16).max(256).regex(/^[A-Za-z0-9_-]+$/),
-  API_KEY: z.string().min(16),
-});
+  // Optional while the admin has no login: without it the server only listens on localhost.
+  API_KEY: z.preprocess(value => (value === '' ? undefined : value), z.string().min(16).optional()),
+  HOST: z.string().min(1).optional(),
+}).transform(env => ({ ...env, HOST: env.HOST ?? (env.API_KEY ? '0.0.0.0' : '127.0.0.1') }));
 
 export function parseEnv(source: Record<string, string | undefined>) {
   const result = EnvSchema.safeParse(source);

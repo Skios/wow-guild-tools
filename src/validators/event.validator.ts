@@ -5,6 +5,7 @@ const HOUR_MS = 3_600_000;
 export const MAX_EVENT_HOURS = 24;
 export const MAX_ADVANCE_DAYS = 365;
 export const MAX_ROSTER_SIZE = 100;
+export const MAX_LATE_MINUTES = 720;
 
 export const EventIdSchema = z.string().uuid("Invalid event ID");
 
@@ -23,7 +24,7 @@ export const CreateEventSchema = z
     startTime: DateTimeSchema,
     endTime: DateTimeSchema,
     description: z.string().max(1000).optional(),
-    createdByUserId: z.string().uuid("Invalid user ID"),
+    createdByUserId: z.string().uuid("Invalid user ID").optional(),
   })
   .superRefine((event, ctx) => {
     const start = Date.parse(event.startTime);
@@ -53,10 +54,15 @@ export const FinalizeRosterSchema = z.object({
           characterId: z.string().uuid("Invalid character ID"),
           status: z.enum(ResponseStatus),
           isConfirmed: z.boolean(),
+          lateMinutes: z.number().int().min(0).max(MAX_LATE_MINUTES).optional(),
         })
-        .refine(s => !s.isConfirmed || s.status === 'IN', {
-          message: 'Only players marked IN can be confirmed',
+        .refine(s => !s.isConfirmed || s.status === 'IN' || s.status === 'LATE', {
+          message: 'Only players marked IN or LATE can be confirmed',
           path: ['isConfirmed'],
+        })
+        .refine(s => s.lateMinutes === undefined || s.status === 'LATE', {
+          message: 'Late minutes only apply to LATE',
+          path: ['lateMinutes'],
         }),
     )
     .min(1, 'Select at least one character')
@@ -68,3 +74,20 @@ export const FinalizeRosterSchema = z.object({
 
 export type CreateEventInput = z.infer<typeof CreateEventSchema>;
 export type FinalizeRosterInput = z.infer<typeof FinalizeRosterSchema>;
+
+export const MAX_MESSAGE_LENGTH = 500;
+
+export const MessageSchema = z.object({
+  characterIds: z
+    .array(z.string().uuid('Invalid character ID'))
+    .min(1, 'Choose at least one person')
+    .max(MAX_ROSTER_SIZE)
+    .refine(list => new Set(list).size === list.length, { message: 'Each person can be chosen once' }),
+  // Blank means "use the default reminder".
+  text: z
+    .string()
+    .trim()
+    .max(MAX_MESSAGE_LENGTH)
+    .optional()
+    .transform(text => text || undefined),
+});

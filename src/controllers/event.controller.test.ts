@@ -3,12 +3,13 @@ import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
 import { buildRouteApp, prismaError, uuid } from '../test/helpers.js';
 
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
-const adapter = vi.hoisted(() => ({ sendInvite: vi.fn(), publishFinalRoster: vi.fn() }));
+const adapter = vi.hoisted(() => ({ sendInvite: vi.fn(), publishFinalRoster: vi.fn(), sendDirect: vi.fn() }));
 vi.mock('../integrations/telegram/telegram.adapter.js', () => ({
   TelegramAdapter: class {
     name = 'telegram';
     sendInvite = adapter.sendInvite;
     publishFinalRoster = adapter.publishFinalRoster;
+    sendDirect = adapter.sendDirect;
   },
 }));
 
@@ -30,6 +31,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   adapter.sendInvite.mockResolvedValue({ success: true });
   adapter.publishFinalRoster.mockResolvedValue({ success: true });
+  adapter.sendDirect.mockResolvedValue({ success: true });
 });
 afterEach(() => vi.useRealTimers());
 
@@ -185,11 +187,15 @@ describe('POST /events/:id/publish', () => {
 describe('GET /events/:id', () => {
   test('returns the event with responses and usernames', async () => {
     prismaMock.event.findUnique.mockResolvedValue({ id: EID, responses: [{ character: { name: 'Thrall', user: { username: 'thrall' } } }] });
+    prismaMock.character.findMany.mockResolvedValue([
+      { id: 'c9', name: 'Silent', realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', role: 'RANGED_DPS', user: { username: 'quiet', identities: [{ id: 'i' }] } },
+    ]);
 
     const res = await (await app()).inject(`/events/${EID}`);
 
     expect(res.statusCode).toBe(200);
     expect(res.json().responses[0].character.user.username).toBe('thrall');
+    expect(res.json().noAnswer).toEqual([expect.objectContaining({ name: 'Silent', reachable: true })]);
   });
 
   test('404 when missing, 400 for a malformed id', async () => {
@@ -201,7 +207,8 @@ describe('GET /events/:id', () => {
 
 describe('GET /events', () => {
   test('lists events with response counts', async () => {
-    prismaMock.event.findMany.mockResolvedValue([{ id: EID, title: 'Raid', responses: [{ status: 'IN', isConfirmed: true }] }]);
+    prismaMock.character.count.mockResolvedValue(0);
+    prismaMock.event.findMany.mockResolvedValue([{ id: EID, title: 'Raid', responses: [{ status: 'IN', isConfirmed: true, character: { inRoster: true } }] }]);
 
     const res = await (await app()).inject('/events');
 
@@ -216,7 +223,42 @@ describe('GET /events', () => {
 
   test('passes valid pagination to the database', async () => {
     prismaMock.event.findMany.mockResolvedValue([]);
+    prismaMock.character.count.mockResolvedValue(0);
     await (await app()).inject('/events?limit=5&offset=10');
     expect(prismaMock.event.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 5, skip: 10 }));
+  });
+});
+
+describe('POST /events/:id/message', () => {
+  const CID = uuid(30);
+
+  beforeEach(() => {
+    prismaMock.event.findUnique.mockResolvedValue({ id: EID, title: 'Raid', startTime: new Date(), isPublished: false, responses: [] });
+    prismaMock.character.findMany.mockResolvedValue([{ id: CID, name: 'Silent', user: { identities: [{ platformUserId: '42' }] } }]);
+  });
+
+  test('sends the message and returns one result per person', async () => {
+    const res = await post(`/events/${EID}/message`, { characterIds: [CID], text: 'Where are you?' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().results).toEqual([{ characterId: CID, name: 'Silent', status: 'sent' }]);
+    expect(adapter.sendDirect).toHaveBeenCalledWith('42', expect.objectContaining({ text: 'Where are you?' }));
+  });
+
+  test.each([{}, { characterIds: [] }, { characterIds: ['nope'] }, { characterIds: [CID], text: 'x'.repeat(501) }])('400 for %j', async (body) => {
+    expect((await post(`/events/${EID}/message`, body)).statusCode).toBe(400);
+    expect(adapter.sendDirect).not.toHaveBeenCalled();
+  });
+
+  test('404 for an unknown event and 409 for a published one', async () => {
+    prismaMock.event.findUnique.mockResolvedValue(null);
+    expect((await post(`/events/${EID}/message`, { characterIds: [CID] })).statusCode).toBe(404);
+
+    prismaMock.event.findUnique.mockResolvedValue({ id: EID, isPublished: true });
+    expect((await post(`/events/${EID}/message`, { characterIds: [CID] })).statusCode).toBe(409);
+  });
+
+  test('400 for a malformed event id', async () => {
+    expect((await post('/events/xyz/message', { characterIds: [CID] })).statusCode).toBe(400);
   });
 });

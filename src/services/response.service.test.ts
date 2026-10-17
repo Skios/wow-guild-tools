@@ -8,7 +8,7 @@ import { EventLockedError, ResponseService } from './response.service.js';
 
 beforeEach(() => {
   resetPrismaMock();
-  prismaMock.event.findUnique.mockResolvedValue({ isPublished: false });
+  prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, startTime: new Date('2026-10-18T19:00:00Z') });
   prismaMock.response.upsert.mockImplementation(async (args: { create: object }) => ({ ...args.create }));
 });
 
@@ -17,7 +17,7 @@ describe('ResponseService.updateResponse', () => {
     await new ResponseService().updateResponse('e1', 'c1', 'OUT');
 
     const call = prismaMock.response.upsert.mock.calls[0]![0];
-    expect(call.update).toEqual({ status: 'OUT' });
+    expect(call.update).toEqual({ status: 'OUT', arrivalTime: null });
     expect(call.create.isConfirmed).toBe(false);
   });
 
@@ -25,14 +25,14 @@ describe('ResponseService.updateResponse', () => {
     await new ResponseService().updateResponse('e1', 'c1', 'IN', true);
 
     const call = prismaMock.response.upsert.mock.calls[0]![0];
-    expect(call.update).toEqual({ status: 'IN', isConfirmed: true });
+    expect(call.update).toEqual({ status: 'IN', isConfirmed: true, arrivalTime: null });
     expect(call.create.isConfirmed).toBe(true);
   });
 
   test('an explicit false un-confirms', async () => {
     await new ResponseService().updateResponse('e1', 'c1', 'BENCH', false);
 
-    expect(prismaMock.response.upsert.mock.calls[0]![0].update).toEqual({ status: 'BENCH', isConfirmed: false });
+    expect(prismaMock.response.upsert.mock.calls[0]![0].update).toEqual({ status: 'BENCH', isConfirmed: false, arrivalTime: null });
   });
 
   test('keys the response by event and character', async () => {
@@ -61,6 +61,47 @@ describe('ResponseService.updateResponse', () => {
   });
 });
 
+describe('late arrivals', () => {
+  const start = new Date('2026-10-18T19:00:00Z');
+
+  test('LATE with minutes stores the arrival time as event start + minutes', async () => {
+    await new ResponseService().updateResponse('e1', 'c1', 'LATE', undefined, 20);
+
+    const call = prismaMock.response.upsert.mock.calls[0]![0];
+    expect(call.update.arrivalTime).toEqual(new Date(start.getTime() + 20 * 60_000));
+    expect(call.create.arrivalTime).toEqual(new Date(start.getTime() + 20 * 60_000));
+  });
+
+  test('LATE for 0 minutes is on time, not "unknown"', async () => {
+    await new ResponseService().updateResponse('e1', 'c1', 'LATE', undefined, 0);
+    expect(prismaMock.response.upsert.mock.calls[0]![0].update.arrivalTime).toEqual(start);
+  });
+
+  test('LATE without minutes keeps whatever arrival time is already stored', async () => {
+    await new ResponseService().updateResponse('e1', 'c1', 'LATE');
+
+    const call = prismaMock.response.upsert.mock.calls[0]![0];
+    expect(call.update).toEqual({ status: 'LATE' });
+    expect(call.create.arrivalTime).toBeNull();
+  });
+
+  test.each(['IN', 'OUT', 'TENTATIVE', 'BENCH'] as const)('changing to %s forgets the arrival time', async (status) => {
+    await new ResponseService().updateResponse('e1', 'c1', status, undefined, 30);
+    expect(prismaMock.response.upsert.mock.calls[0]![0].update.arrivalTime).toBeNull();
+  });
+
+  test('the officer bulk save carries late minutes too', async () => {
+    await new ResponseService().bulkUpdateResponses('e1', [
+      { characterId: 'c1', status: 'LATE', isConfirmed: true, lateMinutes: 15 },
+      { characterId: 'c2', status: 'IN', isConfirmed: false },
+    ]);
+
+    const [first, second] = prismaMock.response.upsert.mock.calls.map(c => c[0]);
+    expect(first.update.arrivalTime).toEqual(new Date(start.getTime() + 15 * 60_000));
+    expect(second.update.arrivalTime).toBeNull();
+  });
+});
+
 describe('ResponseService.bulkUpdateResponses', () => {
   const selections = [
     { characterId: 'c1', status: 'IN' as const, isConfirmed: true },
@@ -78,7 +119,7 @@ describe('ResponseService.bulkUpdateResponses', () => {
     await new ResponseService().bulkUpdateResponses('e1', selections);
 
     expect(prismaMock.response.upsert.mock.calls[1]![0].create).toEqual({
-      eventId: 'e1', characterId: 'c2', status: 'BENCH', isConfirmed: false,
+      eventId: 'e1', characterId: 'c2', status: 'BENCH', isConfirmed: false, arrivalTime: null,
     });
   });
 

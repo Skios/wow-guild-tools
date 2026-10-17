@@ -4,6 +4,7 @@ import {
   EventIdSchema,
   FinalizeRosterSchema,
   ListEventsQuerySchema,
+  MessageSchema,
 } from './event.validator.js';
 
 const uuid = (n: number) => `3f2b8c1e-8a4d-4c55-9d7e-${String(n).padStart(12, '0')}`;
@@ -95,6 +96,11 @@ describe('CreateEventSchema', () => {
     expect(CreateEventSchema.safeParse({ ...validEvent(), title }).success).toBe(false);
   });
 
+  test('the creator is optional: officers have no identity until the admin gets a login', () => {
+    const { createdByUserId: _omit, ...withoutCreator } = validEvent();
+    expect(CreateEventSchema.safeParse(withoutCreator).success).toBe(true);
+  });
+
   test('rejects a malformed creator id', () => {
     expect(CreateEventSchema.safeParse({ ...validEvent(), createdByUserId: '1; DROP TABLE users' }).success).toBe(false);
   });
@@ -116,13 +122,13 @@ describe('FinalizeRosterSchema', () => {
   const row = (n: number, status = 'IN', isConfirmed = true) => ({ characterId: uuid(n), status, isConfirmed });
 
   test('accepts every status in the database enum', () => {
-    for (const status of ['IN', 'OUT', 'TENTATIVE', 'BENCH']) {
+    for (const status of ['IN', 'OUT', 'TENTATIVE', 'BENCH', 'LATE']) {
       expect(FinalizeRosterSchema.safeParse({ selections: [row(1, status, false)] }).success).toBe(true);
     }
   });
 
   test('rejects statuses that are not in the database enum', () => {
-    for (const status of ['confirmed', 'in', 'LATE', '', null]) {
+    for (const status of ['confirmed', 'in', 'LATER', 'late', '', null]) {
       expect(FinalizeRosterSchema.safeParse({ selections: [row(1, status as string)] }).success).toBe(false);
     }
   });
@@ -142,7 +148,25 @@ describe('FinalizeRosterSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  test('only IN players can be confirmed', () => {
+  test('a late player can be confirmed: they are coming, just not on time', () => {
+    expect(FinalizeRosterSchema.safeParse({ selections: [row(1, 'LATE', true)] }).success).toBe(true);
+  });
+
+  test('late minutes: 0 to 720, whole numbers, only for LATE', () => {
+    const late = (lateMinutes: unknown, status = 'LATE') => FinalizeRosterSchema.safeParse({ selections: [{ ...row(1, status, false), lateMinutes }] }).success;
+
+    expect(late(0)).toBe(true);
+    expect(late(15)).toBe(true);
+    expect(late(720)).toBe(true);
+    expect(late(721)).toBe(false);
+    expect(late(-1)).toBe(false);
+    expect(late(1.5)).toBe(false);
+    expect(late('15')).toBe(false);
+    expect(late(null)).toBe(false);
+    expect(late(15, 'IN')).toBe(false);
+  });
+
+  test('only IN or LATE players can be confirmed', () => {
     for (const status of ['OUT', 'TENTATIVE', 'BENCH']) {
       expect(FinalizeRosterSchema.safeParse({ selections: [row(1, status, true)] }).success).toBe(false);
     }
@@ -189,5 +213,36 @@ describe('ListEventsQuerySchema', () => {
   test('accepts the boundaries 1 and 100', () => {
     expect(ListEventsQuerySchema.safeParse({ limit: '1' }).success).toBe(true);
     expect(ListEventsQuerySchema.safeParse({ limit: '100' }).success).toBe(true);
+  });
+});
+
+describe('MessageSchema', () => {
+  const ids = (n: number) => Array.from({ length: n }, (_, i) => uuid(i + 1));
+
+  test('needs at least one recipient; the text is optional', () => {
+    expect(MessageSchema.safeParse({ characterIds: ids(1) }).success).toBe(true);
+    expect(MessageSchema.safeParse({ characterIds: [] }).success).toBe(false);
+    expect(MessageSchema.safeParse({}).success).toBe(false);
+  });
+
+  test('at most 100 recipients, each once', () => {
+    expect(MessageSchema.safeParse({ characterIds: ids(100) }).success).toBe(true);
+    expect(MessageSchema.safeParse({ characterIds: ids(101) }).success).toBe(false);
+    expect(MessageSchema.safeParse({ characterIds: [uuid(1), uuid(1)] }).success).toBe(false);
+  });
+
+  test('recipients must be UUIDs', () => {
+    expect(MessageSchema.safeParse({ characterIds: ['nope'] }).success).toBe(false);
+  });
+
+  test('custom text is trimmed and limited to 500 characters; blank text means "use the default"', () => {
+    expect(MessageSchema.parse({ characterIds: ids(1), text: '  hi  ' }).text).toBe('hi');
+    expect(MessageSchema.parse({ characterIds: ids(1), text: '   ' }).text).toBeUndefined();
+    expect(MessageSchema.safeParse({ characterIds: ids(1), text: 'a'.repeat(500) }).success).toBe(true);
+    expect(MessageSchema.safeParse({ characterIds: ids(1), text: 'a'.repeat(501) }).success).toBe(false);
+  });
+
+  test.each([5, null, {}, []])('rejects the non-string text %j', (text) => {
+    expect(MessageSchema.safeParse({ characterIds: ids(1), text }).success).toBe(false);
   });
 });

@@ -9,35 +9,48 @@ export class EventLockedError extends ConflictError {
 }
 
 export class ResponseService {
-  private async assertOpen(eventId: string) {
-    const event = await prisma.event.findUnique({ where: { id: eventId }, select: { isPublished: true } });
+  private async openEvent(eventId: string) {
+    const event = await prisma.event.findUnique({ where: { id: eventId }, select: { isPublished: true, startTime: true } });
     if (!event) throw new NotFoundError('Event not found');
     if (event.isPublished) throw new EventLockedError();
+    return event;
   }
 
-  async updateResponse(eventId: string, characterId: string, status: ResponseStatus, isConfirmed?: boolean) {
-    await this.assertOpen(eventId);
+  /** LATE stores event start + minutes; any other status forgets a previous arrival time. */
+  private arrival(status: ResponseStatus, startTime: Date, lateMinutes: number | undefined): { arrivalTime?: Date | null } {
+    if (status !== 'LATE') return { arrivalTime: null };
+    if (lateMinutes === undefined) return {};
+    return { arrivalTime: new Date(startTime.getTime() + lateMinutes * 60_000) };
+  }
+
+  async updateResponse(eventId: string, characterId: string, status: ResponseStatus, isConfirmed?: boolean, lateMinutes?: number) {
+    const event = await this.openEvent(eventId);
+    const arrival = this.arrival(status, event.startTime, lateMinutes);
 
     return prisma.response.upsert({
       where: {
         eventId_characterId: { eventId, characterId },
       },
       // A member changing their answer must not undo the officer's confirmation.
-      update: { status, ...(isConfirmed !== undefined && { isConfirmed }) },
-      create: { eventId, characterId, status, isConfirmed: isConfirmed ?? false },
+      update: { status, ...(isConfirmed !== undefined && { isConfirmed }), ...arrival },
+      create: { eventId, characterId, status, isConfirmed: isConfirmed ?? false, arrivalTime: arrival.arrivalTime ?? null },
     });
   }
 
-  async bulkUpdateResponses(eventId: string, selections: { characterId: string; status: ResponseStatus; isConfirmed: boolean }[]) {
-    await this.assertOpen(eventId);
+  async bulkUpdateResponses(
+    eventId: string,
+    selections: { characterId: string; status: ResponseStatus; isConfirmed: boolean; lateMinutes?: number | undefined }[],
+  ) {
+    const event = await this.openEvent(eventId);
 
-    const updates = selections.map(s =>
-      prisma.response.upsert({
+    const updates = selections.map(s => {
+      const arrival = this.arrival(s.status, event.startTime, s.lateMinutes);
+      return prisma.response.upsert({
         where: { eventId_characterId: { eventId, characterId: s.characterId } },
-        update: { status: s.status, isConfirmed: s.isConfirmed },
-        create: { eventId, characterId: s.characterId, status: s.status, isConfirmed: s.isConfirmed },
-      })
-    );
+        update: { status: s.status, isConfirmed: s.isConfirmed, ...arrival },
+        create: { eventId, characterId: s.characterId, status: s.status, isConfirmed: s.isConfirmed, arrivalTime: arrival.arrivalTime ?? null },
+      });
+    });
 
     return prisma.$transaction(updates);
   }

@@ -1,8 +1,15 @@
-import type { NotificationAdapter, NotificationPayload, PublicationPayload } from '../../types/notification.types.js';
+import type { DirectMessage, NotificationAdapter, NotificationPayload, PublicationPayload } from '../../types/notification.types.js';
 import { TelegramClient } from './telegram.client.js';
 import { telegramConfig } from '../../config/telegram.js';
 
 const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+const answerButtons = (eventId: string) => [
+  { text: '✅ IN', callback_data: `raid_in_${eventId}` },
+  { text: '⏰ LATE', callback_data: `raid_late_${eventId}` },
+  { text: '❓ TENTATIVE', callback_data: `raid_tent_${eventId}` },
+  { text: '❌ OUT', callback_data: `raid_out_${eventId}` },
+];
 
 export class TelegramAdapter implements NotificationAdapter {
   name = 'telegram';
@@ -19,11 +26,7 @@ export class TelegramAdapter implements NotificationAdapter {
       const botUsername = await this.client.getBotUsername();
       const keyboard = {
         inline_keyboard: [
-          [
-            { text: '✅ IN', callback_data: `raid_in_${payload.eventId}` },
-            { text: '❌ OUT', callback_data: `raid_out_${payload.eventId}` },
-            { text: '❓ TENTATIVE', callback_data: `raid_tent_${payload.eventId}` },
-          ],
+          answerButtons(payload.eventId),
           [{ text: '📝 Register your character', url: `https://t.me/${botUsername}?start=register` }],
         ],
       };
@@ -46,6 +49,18 @@ export class TelegramAdapter implements NotificationAdapter {
                    `🚫 Sign-ups are now closed.`;
 
       await this.client.sendMessage(telegramConfig.channelId, text, { parse_mode: 'HTML' });
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async sendDirect(platformUserId: string, message: DirectMessage): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.client.sendMessage(platformUserId, escapeHtml(message.text), {
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: [answerButtons(message.eventId)] },
+      });
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };

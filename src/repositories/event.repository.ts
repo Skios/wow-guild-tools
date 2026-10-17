@@ -9,7 +9,7 @@ export class EventRepository {
         startTime: new Date(data.startTime),
         endTime: new Date(data.endTime),
         ...(data.description !== undefined && { description: data.description }),
-        createdBy: data.createdByUserId,
+        ...(data.createdByUserId !== undefined && { createdBy: data.createdByUserId }),
       },
     });
   }
@@ -30,7 +30,7 @@ export class EventRepository {
       take: limit,
       skip: offset,
       orderBy: { startTime: 'asc' },
-      include: { responses: { select: { status: true, isConfirmed: true } } },
+      include: { responses: { select: { status: true, isConfirmed: true, character: { select: { inRoster: true } } } } },
     });
   }
 }

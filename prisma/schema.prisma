@@ -12,6 +12,7 @@ enum ResponseStatus {
   OUT
   TENTATIVE
   BENCH
+  LATE // coming, but later: see Response.arrivalTime
 }
 
 enum WoWClass {
@@ -67,13 +68,15 @@ model Identity {
 
 model Character {
   id        String     @id @default(uuid())
-  userId    String
-  user      User       @relation(fields: [userId], references: [id])
+  userId    String?    // null = a roster slot nobody has claimed yet
+  user      User?      @relation(fields: [userId], references: [id])
   name      String
   realm     String
   class     WoWClass   @default(WARRIOR)
   role      WoWRole    @default(DPS)
+  spec      String?    // validated against the class in src/domain/wow.ts
   isMain    Boolean    @default(true)
+  inRoster  Boolean    @default(false) // part of the raid roster officers maintain
   responses Response[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
@@ -110,8 +113,8 @@ model Event {
   startTime   DateTime
   endTime     DateTime
   description String?
-  createdBy   String
-  creator     User       @relation(fields: [createdBy], references: [id])
+  createdBy   String?    // optional until officers have logins
+  creator     User?      @relation(fields: [createdBy], references: [id])
   isPublished  Boolean    @default(false)
   responses   Response[]
   createdAt   DateTime   @default(now())

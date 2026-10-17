@@ -24,7 +24,7 @@ describe('TelegramAdapter', () => {
     const keyboard = client.sendInvite.mock.calls[0]![2];
     const buttons = keyboard.inline_keyboard.flat();
     expect(buttons.map((b: { callback_data?: string }) => b.callback_data).filter(Boolean)).toEqual([
-      'raid_in_e1', 'raid_out_e1', 'raid_tent_e1',
+      'raid_in_e1', 'raid_late_e1', 'raid_tent_e1', 'raid_out_e1',
     ]);
     expect(buttons.find((b: { url?: string }) => b.url)?.url).toBe('https://t.me/guild_bot?start=register');
   });
@@ -79,5 +79,26 @@ describe('TelegramAdapter', () => {
     });
 
     expect(result).toEqual({ success: false, error: 'chat not found' });
+  });
+
+  test('direct message goes to the user, with the answer buttons so they can reply from the chat', async () => {
+    const result = await new TelegramAdapter().sendDirect('42', { eventId: 'e1', text: 'Are you coming <soon>?' });
+
+    expect(result).toEqual({ success: true });
+    const [chat, text, extra] = client.sendMessage.mock.calls[0]!;
+    expect(chat).toBe('42');
+    expect(text).toBe('Are you coming &lt;soon&gt;?');
+    expect(extra.parse_mode).toBe('HTML');
+    expect(extra.reply_markup.inline_keyboard.flat().map((b: { callback_data: string }) => b.callback_data)).toEqual([
+      'raid_in_e1', 'raid_late_e1', 'raid_tent_e1', 'raid_out_e1',
+    ]);
+  });
+
+  test('direct message reports a user who blocked the bot', async () => {
+    client.sendMessage.mockRejectedValue(new Error('Forbidden: bot was blocked by the user'));
+
+    const result = await new TelegramAdapter().sendDirect('42', { eventId: 'e1', text: 'hi' });
+
+    expect(result).toEqual({ success: false, error: 'Forbidden: bot was blocked by the user' });
   });
 });

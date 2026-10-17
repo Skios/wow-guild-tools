@@ -15,7 +15,7 @@ describe('GET /meta/wow', () => {
 
     expect(body.classes).toHaveLength(13);
     expect(body.classes.find((c: { id: string }) => c.id === 'DEMONHUNTER')).toMatchObject({
-      label: 'Demon Hunter', color: '#A330C9', roles: ['TANK', 'DPS'],
+      label: 'Demon Hunter', color: '#A330C9', roles: ['TANK', 'DPS', 'RANGED_DPS'],
     });
     expect(body.roles).toEqual([
       { id: 'TANK', label: 'Tank' },

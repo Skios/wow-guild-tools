@@ -1,6 +1,6 @@
 import { WoWClass, WoWRole } from '@prisma/client';
 import { describe, expect, test } from 'vitest';
-import { CLASS_INFO, ROLE_LABEL, isValidRole, parseClassRole, rolesFor } from './wow.js';
+import { CLASS_INFO, ROLE_LABEL, SPECS, isValidRole, isValidSpec, parseClassRole, parseClassSpec, rolesFor, specIcon } from './wow.js';
 
 const classes = Object.values(WoWClass);
 const roles = Object.values(WoWRole);
@@ -67,6 +67,7 @@ describe('isValidRole', () => {
     ['EVOKER', 'TANK', false],
     ['DEMONHUNTER', 'TANK', true],
     ['DEMONHUNTER', 'HEALER', false],
+    ['DEMONHUNTER', 'RANGED_DPS', true], // Devourer
     ['DRUID', 'TANK', true],
     ['DRUID', 'HEALER', true],
     ['DRUID', 'DPS', true],
@@ -112,5 +113,87 @@ describe('parseClassRole', () => {
   test('rejects unknown values', () => {
     expect(() => parseClassRole('NINJA', 'TANK')).toThrow(/class/i);
     expect(() => parseClassRole('MAGE', 'BARD')).toThrow(/role/i);
+  });
+});
+
+describe('specialization table', () => {
+  const allSpecs = classes.flatMap(c => SPECS[c].map(spec => ({ cls: c, ...spec })));
+
+  test('covers every class with 3 specs (Druid has 4): 40 in total', () => {
+    expect(Object.keys(SPECS).sort()).toEqual([...classes].sort());
+    expect(allSpecs).toHaveLength(40);
+    expect(SPECS.DRUID).toHaveLength(4);
+    for (const c of classes.filter(c => c !== 'DRUID')) expect(SPECS[c]).toHaveLength(3);
+  });
+
+  test('spec ids are unique inside a class (the same name may exist in different classes)', () => {
+    for (const c of classes) {
+      const ids = SPECS[c].map(s => s.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+    expect(SPECS.MAGE.some(s => s.id === 'FROST')).toBe(true);
+    expect(SPECS.DEATHKNIGHT.some(s => s.id === 'FROST')).toBe(true);
+  });
+
+  test('has 6 tank and 7 healer specs, as in the game', () => {
+    expect(allSpecs.filter(s => s.role === 'TANK')).toHaveLength(6);
+    expect(allSpecs.filter(s => s.role === 'HEALER')).toHaveLength(7);
+  });
+
+  test.each([
+    ['WARRIOR', 'ARMS', 'DPS'],
+    ['WARRIOR', 'PROTECTION', 'TANK'],
+    ['HUNTER', 'SURVIVAL', 'DPS'], // the only melee hunter spec
+    ['HUNTER', 'MARKSMANSHIP', 'RANGED_DPS'],
+    ['SHAMAN', 'ENHANCEMENT', 'DPS'],
+    ['SHAMAN', 'ELEMENTAL', 'RANGED_DPS'],
+    ['DRUID', 'FERAL', 'DPS'],
+    ['DRUID', 'BALANCE', 'RANGED_DPS'],
+    ['EVOKER', 'AUGMENTATION', 'RANGED_DPS'],
+    ['PRIEST', 'DISCIPLINE', 'HEALER'],
+    ['MONK', 'BREWMASTER', 'TANK'],
+  ] as const)('%s %s is %s', (cls, spec, role) => {
+    expect(parseClassSpec(cls, spec).role).toBe(role);
+  });
+
+  test('every class role is backed by at least one spec, and nothing else', () => {
+    for (const c of classes) {
+      expect([...CLASS_INFO[c].roles].sort()).toEqual([...new Set(SPECS[c].map(s => s.role))].sort());
+    }
+  });
+
+  test('class roles are listed tank, healer, melee, ranged', () => {
+    expect(CLASS_INFO.DRUID.roles).toEqual(['TANK', 'HEALER', 'DPS', 'RANGED_DPS']);
+  });
+});
+
+describe('isValidSpec / parseClassSpec', () => {
+  test('accepts a real spec and derives the role from it', () => {
+    expect(isValidSpec('MAGE', 'FIRE')).toBe(true);
+    expect(parseClassSpec('MAGE', 'FIRE')).toEqual({ class: 'MAGE', spec: 'FIRE', role: 'RANGED_DPS' });
+  });
+
+  test.each([['MAGE', 'ARMS'], ['WARRIOR', 'FIRE'], ['MAGE', 'fire'], ['MAGE', ''], ['NINJA', 'FIRE'], ['__proto__', 'FIRE'], ['MAGE', '__proto__'], ['MAGE', 'constructor']])(
+    'rejects %j / %j',
+    (cls, spec) => {
+      expect(isValidSpec(cls, spec)).toBe(false);
+      expect(() => parseClassSpec(cls, spec)).toThrow();
+    },
+  );
+
+  test.each([undefined, null, 1, {}, []])('rejects the non-string spec %j', (spec) => {
+    expect(isValidSpec('MAGE', spec)).toBe(false);
+  });
+
+  test('error messages name the class and the spec', () => {
+    expect(() => parseClassSpec('MAGE', 'ARMS')).toThrow(/Mage.*Arms|Arms.*Mage/i);
+    expect(() => parseClassSpec('NINJA', 'ARMS')).toThrow(/class/i);
+  });
+});
+
+describe('specIcon', () => {
+  test('builds a stable file slug', () => {
+    expect(specIcon('DEATHKNIGHT', 'BLOOD')).toBe('deathknight-blood');
+    expect(specIcon('HUNTER', 'BEAST_MASTERY')).toBe('hunter-beast_mastery');
   });
 });

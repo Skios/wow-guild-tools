@@ -11,6 +11,36 @@ const adapter = (name: string, overrides: Partial<NotificationAdapter> = {}): No
 const invite = { eventId: 'e1', eventTitle: 'Raid', startTime: new Date() };
 const roster = { ...invite, roster: { team: ['A'], bench: [] } };
 
+const direct = { text: 'Hello', eventId: 'e1' };
+
+describe('NotificationService.sendDirect', () => {
+  test('hands the message to the channel with that name', async () => {
+    const service = new NotificationService();
+    const telegram = adapter('telegram', { sendDirect: vi.fn().mockResolvedValue({ success: true }) });
+    service.registerAdapter(telegram);
+
+    await expect(service.sendDirect('telegram', '42', direct)).resolves.toEqual({ success: true });
+    expect(telegram.sendDirect).toHaveBeenCalledWith('42', direct);
+  });
+
+  test('reports a missing channel instead of throwing', async () => {
+    const result = await new NotificationService().sendDirect('discord', '42', direct);
+    expect(result).toEqual({ success: false, error: 'No discord channel configured' });
+  });
+
+  test('reports a channel that cannot send direct messages', async () => {
+    const service = new NotificationService();
+    service.registerAdapter(adapter('telegram'));
+    expect((await service.sendDirect('telegram', '42', direct)).success).toBe(false);
+  });
+
+  test('turns a thrown error into a failure result', async () => {
+    const service = new NotificationService();
+    service.registerAdapter(adapter('telegram', { sendDirect: vi.fn().mockRejectedValue(new Error('blocked by user')) }));
+    expect(await service.sendDirect('telegram', '42', direct)).toEqual({ success: false, error: 'blocked by user' });
+  });
+});
+
 describe('NotificationService', () => {
   test('with no channel configured, there is nothing to report', async () => {
     const service = new NotificationService();
