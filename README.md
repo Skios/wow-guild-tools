@@ -21,6 +21,11 @@ Members register their main character by pressing **Register** under an invite (
 - Prod: `npm run build && npm start`
 - Tests: `npm test`
 
+## Admin site
+`web/` is the officers' admin (React + Vite). With the API running on port 3000:
+`cd web && npm install && npm run dev`, then open http://localhost:5173 and sign in with `API_KEY`.
+`npx tsx scripts/seed-dev.ts` loads a demo raid into a local database.
+
 ## API
 Officer routes (`/events`, `/groups`, `/profiles`) need the header `x-api-key: $API_KEY`.
 Telegram webhook: `POST /webhooks/telegram`, registered with `secret_token = TELEGRAM_WEBHOOK_SECRET`.
