@@ -32,6 +32,9 @@ export const ROLE_LABEL: Record<WoWRole, string> = {
   RANGED_DPS: 'Ranged DPS',
 };
 
+/** Display order for rosters: tanks first, ranged last. */
+export const ROLE_ORDER: Record<WoWRole, number> = { TANK: 0, HEALER: 1, DPS: 2, RANGED_DPS: 3 };
+
 const isClass = (value: unknown): value is WoWClass =>
   typeof value === 'string' && Object.hasOwn(CLASS_INFO, value);
 

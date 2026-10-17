@@ -1,3 +1,4 @@
+import { NotFoundError } from '../lib/errors.js';
 import { GroupRepository } from '../repositories/group.repository.js';
 
 export class GroupService {
@@ -8,7 +9,9 @@ export class GroupService {
   }
 
   async getGroup(id: string) {
-    return this.groupRepo.findById(id);
+    const group = await this.groupRepo.findById(id);
+    if (!group) throw new NotFoundError('Group not found');
+    return group;
   }
 
   async listGroups() {

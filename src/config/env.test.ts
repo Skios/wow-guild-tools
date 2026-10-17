@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { parseEnv } from './env.js';
 
 const valid = {
@@ -29,5 +29,35 @@ describe('parseEnv', () => {
   test('rejects a webhook secret Telegram would refuse', () => {
     expect(() => parseEnv({ ...valid, TELEGRAM_WEBHOOK_SECRET: 'short' })).toThrow('TELEGRAM_WEBHOOK_SECRET');
     expect(() => parseEnv({ ...valid, TELEGRAM_WEBHOOK_SECRET: 'has spaces and symbols!!!' })).toThrow('TELEGRAM_WEBHOOK_SECRET');
+  });
+});
+
+describe('getEnv', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  test('validates process.env once and reuses the result', async () => {
+    for (const [key, value] of Object.entries(valid)) vi.stubEnv(key, value);
+    const { getEnv } = await import('./env.js');
+
+    const first = getEnv();
+    vi.stubEnv('PORT', '9999');
+
+    expect(getEnv()).toBe(first);
+    expect(first.PORT).toBe(3000);
+  });
+
+  test('throws a readable error naming the offending keys, without echoing their values', async () => {
+    vi.stubEnv('DATABASE_URL', '');
+    vi.stubEnv('TELEGRAM_WEBHOOK_SECRET', 'short secret with spaces');
+    const { getEnv } = await import('./env.js');
+
+    let message = '';
+    try { getEnv(); } catch (error) { message = (error as Error).message; }
+
+    expect(message).toContain('TELEGRAM_WEBHOOK_SECRET');
+    expect(message).not.toContain('short secret with spaces');
   });
 });

@@ -1,22 +1,22 @@
 import { prisma } from '../config/db.js';
+import { ConflictError, NotFoundError } from '../lib/errors.js';
 import { ResponseStatus } from '@prisma/client';
 
-export class EventLockedError extends Error {
+export class EventLockedError extends ConflictError {
   constructor() {
     super('Event is locked: responses cannot be changed after publication');
   }
 }
 
 export class ResponseService {
-  async updateResponse(eventId: string, characterId: string, status: ResponseStatus, isConfirmed?: boolean) {
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
-      select: { isPublished: true },
-    });
+  private async assertOpen(eventId: string) {
+    const event = await prisma.event.findUnique({ where: { id: eventId }, select: { isPublished: true } });
+    if (!event) throw new NotFoundError('Event not found');
+    if (event.isPublished) throw new EventLockedError();
+  }
 
-    if (event?.isPublished) {
-      throw new EventLockedError();
-    }
+  async updateResponse(eventId: string, characterId: string, status: ResponseStatus, isConfirmed?: boolean) {
+    await this.assertOpen(eventId);
 
     return prisma.response.upsert({
       where: {
@@ -29,14 +29,7 @@ export class ResponseService {
   }
 
   async bulkUpdateResponses(eventId: string, selections: { characterId: string; status: ResponseStatus; isConfirmed: boolean }[]) {
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
-      select: { isPublished: true },
-    });
-
-    if (event?.isPublished) {
-      throw new EventLockedError();
-    }
+    await this.assertOpen(eventId);
 
     const updates = selections.map(s =>
       prisma.response.upsert({

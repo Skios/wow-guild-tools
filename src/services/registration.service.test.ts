@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const db = vi.hoisted(() => ({
@@ -209,5 +210,32 @@ describe('registration conversation', () => {
     await say(me, 'Silvermoon');
 
     expect((await say(me, 'shaman please'))?.text).toMatch(/\/start|button/i);
+  });
+
+  test('tells the user when somebody else already registered that character, and keeps the draft usable', async () => {
+    const me = newUser();
+    db.character.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint', { code: 'P2002', clientVersion: '5' }),
+    );
+    await say(me, '/start');
+    await say(me, 'Thrall');
+    await say(me, 'Silvermoon');
+    await press(me, 'reg_class_SHAMAN');
+
+    const result = await press(me, 'reg_role_HEALER');
+
+    expect(result?.text).toMatch(/already registered/i);
+    expect((await say(me, 'Jaina'))?.text).toMatch(/\/start/);
+  });
+
+  test('other database errors are not swallowed', async () => {
+    const me = newUser();
+    db.character.create.mockRejectedValue(new Error('db down'));
+    await say(me, '/start');
+    await say(me, 'Thrall');
+    await say(me, 'Silvermoon');
+    await press(me, 'reg_class_SHAMAN');
+
+    await expect(press(me, 'reg_role_HEALER')).rejects.toThrow('db down');
   });
 });

@@ -1,16 +1,10 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { sendError } from '../lib/http-error.js';
 import { ProfileService } from '../services/profile.service.js';
-import { z } from 'zod';
-import { WoWClass, WoWRole } from '@prisma/client';
+import { CharacterSchema, SetMainSchema } from '../validators/character.validator.js';
 
-const CharacterSchema = z.object({
-  userId: z.string().uuid(),
-  name: z.string().min(1),
-  realm: z.string().min(1),
-  class: z.nativeEnum(WoWClass),
-  role: z.nativeEnum(WoWRole),
-});
+const IdParamsSchema = z.object({ id: z.string().uuid('Invalid ID') });
 
 export async function profileRoutes(fastify: FastifyInstance) {
   const profileService = new ProfileService();
@@ -18,29 +12,26 @@ export async function profileRoutes(fastify: FastifyInstance) {
   fastify.post('/profiles/characters', async (request, reply) => {
     try {
       const body = CharacterSchema.parse(request.body);
-      const character = await profileService.addCharacter(body);
-      return reply.code(201).send(character);
+      return reply.code(201).send(await profileService.addCharacter(body));
     } catch (error) {
       return sendError(request, reply, error, 400);
     }
   });
 
   fastify.put('/profiles/main-character/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { userId } = request.body as { userId: string };
     try {
-      const main = await profileService.setMainCharacter(userId, id);
-      return reply.send(main);
+      const { id } = IdParamsSchema.parse(request.params);
+      const { userId } = SetMainSchema.parse(request.body);
+      return reply.send(await profileService.setMainCharacter(userId, id));
     } catch (error) {
       return sendError(request, reply, error, 400);
     }
   });
 
   fastify.get('/profiles/me/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
     try {
-      const profile = await profileService.getMyProfile(id);
-      return reply.send(profile);
+      const { id } = IdParamsSchema.parse(request.params);
+      return reply.send(await profileService.getMyProfile(id));
     } catch (error) {
       return sendError(request, reply, error, 404);
     }

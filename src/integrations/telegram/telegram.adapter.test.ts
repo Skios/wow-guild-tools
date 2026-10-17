@@ -52,4 +52,32 @@ describe('TelegramAdapter', () => {
 
     expect(result).toEqual({ success: false, error: '429' });
   });
+
+  test('includes an escaped description when present and omits the line otherwise', async () => {
+    const adapter = new TelegramAdapter();
+
+    await adapter.sendInvite({ eventId: 'e1', eventTitle: 'Raid', startTime: new Date(), description: 'Bring <flasks> & food' });
+    await adapter.sendInvite({ eventId: 'e1', eventTitle: 'Raid', startTime: new Date(), description: null });
+
+    expect(client.sendInvite.mock.calls[0]![1]).toContain('Bring &lt;flasks&gt; &amp; food');
+    expect(client.sendInvite.mock.calls[1]![1]).not.toContain('Details');
+  });
+
+  test('final roster shows Empty for a side with nobody', async () => {
+    await new TelegramAdapter().publishFinalRoster({
+      eventId: 'e1', eventTitle: 'Raid', startTime: new Date(), roster: { team: ['A'], bench: [] },
+    });
+
+    expect(client.sendMessage.mock.calls[0]![1]).toMatch(/BENCH<\/b>:\nEmpty/);
+  });
+
+  test('final roster reports a delivery failure instead of throwing', async () => {
+    client.sendMessage.mockRejectedValue(new Error('chat not found'));
+
+    const result = await new TelegramAdapter().publishFinalRoster({
+      eventId: 'e1', eventTitle: 'Raid', startTime: new Date(), roster: { team: ['A'], bench: [] },
+    });
+
+    expect(result).toEqual({ success: false, error: 'chat not found' });
+  });
 });

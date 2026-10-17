@@ -19,7 +19,7 @@ export class EventRepository {
       where: { id },
       include: {
         responses: {
-          include: { character: true },
+          include: { character: { include: { user: { select: { username: true } } } } },
         },
       },
     });
@@ -30,6 +30,7 @@ export class EventRepository {
       take: limit,
       skip: offset,
       orderBy: { startTime: 'asc' },
+      include: { responses: { select: { status: true, isConfirmed: true } } },
     });
   }
 }

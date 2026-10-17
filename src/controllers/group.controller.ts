@@ -1,12 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { sendError } from '../lib/http-error.js';
 import { GroupService } from '../services/group.service.js';
-import { z } from 'zod';
-
-const GroupSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().optional(),
-});
+import { GroupIdParamsSchema, GroupSchema, MemberBodySchema, MemberParamsSchema } from '../validators/group.validator.js';
 
 export async function groupRoutes(fastify: FastifyInstance) {
   const groupService = new GroupService();
@@ -21,24 +16,21 @@ export async function groupRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.get('/groups', async () => {
-    return groupService.listGroups();
-  });
+  fastify.get('/groups', async () => groupService.listGroups());
 
   fastify.get('/groups/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
     try {
-      const group = await groupService.getGroup(id);
-      return reply.send(group);
+      const { id } = GroupIdParamsSchema.parse(request.params);
+      return reply.send(await groupService.getGroup(id));
     } catch (error) {
       return sendError(request, reply, error, 404);
     }
   });
 
   fastify.post('/groups/:id/members', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { userId } = request.body as { userId: string };
     try {
+      const { id } = GroupIdParamsSchema.parse(request.params);
+      const { userId } = MemberBodySchema.parse(request.body);
       await groupService.addMember(userId, id);
       return reply.send({ success: true });
     } catch (error) {
@@ -47,8 +39,8 @@ export async function groupRoutes(fastify: FastifyInstance) {
   });
 
   fastify.delete('/groups/:id/members/:userId', async (request, reply) => {
-    const { id, userId } = request.params as { id: string, userId: string };
     try {
+      const { id, userId } = MemberParamsSchema.parse(request.params);
       await groupService.removeMember(userId, id);
       return reply.send({ success: true });
     } catch (error) {
@@ -57,8 +49,8 @@ export async function groupRoutes(fastify: FastifyInstance) {
   });
 
   fastify.delete('/groups/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
     try {
+      const { id } = GroupIdParamsSchema.parse(request.params);
       await groupService.deleteGroup(id);
       return reply.send({ success: true });
     } catch (error) {

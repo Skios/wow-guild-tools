@@ -1,4 +1,4 @@
-import { WoWClass, WoWRole } from '@prisma/client';
+import { Prisma, WoWClass, WoWRole } from '@prisma/client';
 import { prisma } from '../config/db.js';
 import { CLASS_INFO, ROLE_LABEL, parseClassRole, rolesFor } from '../domain/wow.js';
 import { UserRepository } from '../repositories/user.repository.js';
@@ -98,7 +98,15 @@ export async function handleRegistrationCallback(query: { from: Sender; data: st
     } catch (error) {
       return { text: error instanceof Error && /cannot play/.test(error.message) ? `${error.message}.` : 'Invalid role.' };
     }
-    await saveCharacter(query.from, { name, realm, ...pair });
+    try {
+      await saveCharacter(query.from, { name, realm, ...pair });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        drafts.delete(id);
+        return { text: `${name}-${realm} is already registered by someone else. Send /start to try another character.` };
+      }
+      throw error;
+    }
     drafts.delete(id);
     return { text: `Registered: ${name}-${realm} (${CLASS_INFO[wowClass].label}, ${ROLE_LABEL[pair.role]}). You can now answer raid invites.` };
   }

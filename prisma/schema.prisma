@@ -78,6 +78,7 @@ model Character {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
+  @@unique([name, realm])
   @@map("characters")
 }
 

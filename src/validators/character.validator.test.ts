@@ -12,6 +12,13 @@ describe('CharacterNameSchema', () => {
     expect(CharacterNameSchema.parse('  Thrall ')).toBe('Thrall');
   });
 
+  test.each([['thrall', 'Thrall'], ['THRALL', 'Thrall'], ['tHrAlL', 'Thrall'], ['élodie', 'Élodie'], ['ÉLODIE', 'Élodie']])(
+    'normalises %j to the in-game capitalisation %j',
+    (input, expected) => {
+      expect(CharacterNameSchema.parse(input)).toBe(expected);
+    },
+  );
+
   test.each([
     '', ' ', 'A', 'Abcdefghijklm', 'Thr4ll', 'Thrall Jr', 'Thr_all', "O'Neil", '<b>Hi</b>', 'Thrall😀', '12345', 'Tha-ll',
     'a\nb', "Robert'); DROP TABLE characters;--",
