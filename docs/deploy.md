@@ -1,5 +1,7 @@
 # Deployment Strategy
 
+> **Status: provisional.** For now the app runs locally; hosting is decided later. The app only needs a PostgreSQL `DATABASE_URL`, so any provider below (or another) works unchanged.
+
 ## Architecture
 - **Database**: Supabase (PostgreSQL) - Free Tier.
 - **Hosting**: Railway.app or Render.com (Auto-deploy from GitHub).
