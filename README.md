@@ -10,10 +10,14 @@ Raid coordination for a WoW guild: a Telegram bot, a Fastify API and an admin si
 
 ## Setup
 1. `npm install`
-2. Start a local PostgreSQL, e.g. with Docker:
-   `docker run -d --name wgt-postgres -e POSTGRES_USER=wgt -e POSTGRES_PASSWORD=change_me -e POSTGRES_DB=wow_guild_tools -p 5433:5432 postgres:16-alpine`
+2. Start Supabase locally (needs Docker): `npm run supabase:keys` once, then `npx supabase start`
+   (database on :54322, auth on :54321, Studio on http://127.0.0.1:54323, test mailbox on :54324)
 3. Copy `.env.example` to `.env` and fill the values (the server refuses to start otherwise)
-4. `npx prisma migrate dev`
+4. `npx prisma migrate deploy` (use `npx prisma migrate dev` locally to create a new migration)
+
+Prisma owns the schema; Supabase's own migrations are off. Every table must have RLS enabled in a
+migration (enforced by a test), because Supabase would otherwise serve it through its Data API.
+`scripts/seed-dev.ts` only writes to a database on this machine (override with `ALLOW_SEED=1`).
 
 ## Run
 - API dev: `npm run dev` (http://127.0.0.1:3000)

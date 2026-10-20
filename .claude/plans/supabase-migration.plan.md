@@ -24,11 +24,11 @@ Free plan: exactly 2 projects; pause after 7 days idle; no backups -> own pg_dum
 - n8n: not in the core path; maybe later as an external API client for non-critical automations.
 
 ## Phases
-### 0a. Hardening (no accounts)
+### 0a. Hardening (no accounts) — done (18b2c78)
 - `@fastify/rate-limit`, explicit `bodyLimit`, `trustProxy` setting, global error handler, generic 500 message (`src/lib/http-error.ts`).
 - Webhook secret check in `onRequest`.
 - `coverage/` untracked + gitignored.
-### 0b. Supabase local
+### 0b. Supabase local — done
 - `supabase` CLI as devDependency, `supabase init`, config.toml (email auth, site_url, redirect urls, signing_keys_path).
 - RLS lock-down migration; seed guard (refuse on supabase hosts without `ALLOW_SEED=1`).
 - README/.env.example for local Supabase.

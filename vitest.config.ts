@@ -3,6 +3,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
+    // The first test of a file pays for importing Fastify/Prisma; slow disks (WSL on /mnt/c) need headroom.
+    testTimeout: 15_000,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

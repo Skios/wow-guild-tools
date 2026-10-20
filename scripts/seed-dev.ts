@@ -2,9 +2,11 @@
 // Safe to re-run: it rebuilds the roster and the demo event.
 import type { ResponseStatus, WoWClass } from '@prisma/client';
 import { prisma } from '../src/config/db.js';
+import { assertLocalDatabase } from '../src/config/local-db.js';
 import { parseClassSpec } from '../src/domain/wow.js';
 
-if (process.env.NODE_ENV === 'production') throw new Error('Refusing to seed a production database');
+// It deletes the roster first: never against a hosted database by accident.
+assertLocalDatabase(process.env.DATABASE_URL);
 
 // name, class, spec, claimed by a player?, answer (null = no answer yet), confirmed, minutes late
 type Seed = [string, WoWClass, string, boolean, ResponseStatus | null, boolean?, number?];
