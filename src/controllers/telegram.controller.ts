@@ -25,16 +25,20 @@ const UpdateSchema = z.object({
 export async function telegramRoutes(fastify: FastifyInstance) {
   const client = new TelegramClient();
 
+  // Checked before the body is parsed, so strangers can't make us read their payloads.
+  fastify.addHook('onRequest', async (request, response) => {
+    if (!safeEqual(request.headers['x-telegram-bot-api-secret-token'], telegramConfig.webhookSecret)) {
+      return response.code(401).send({ error: 'Unauthorized' });
+    }
+  });
+
   // Registration happens in the private chat with the bot, which also lets the bot DM the user later.
-  fastify.post('/webhooks/telegram', async (request, response) => {
+  // Not rate limited: Telegram calls from a handful of addresses, and the secret already gates it.
+  fastify.post('/webhooks/telegram', { config: { rateLimit: false } }, async (request, response) => {
     // Telegram retries on non-2xx, so a failed send (e.g. user blocked the bot) is logged, not thrown.
     const reply = (chatId: number, { text, keyboard }: Reply) =>
       client.sendMessage(String(chatId), text, keyboard ? { reply_markup: keyboard } : {})
         .catch(err => request.log.warn({ err }, 'sendMessage failed'));
-
-    if (!safeEqual(request.headers['x-telegram-bot-api-secret-token'], telegramConfig.webhookSecret)) {
-      return response.code(401).send({ error: 'Unauthorized' });
-    }
 
     const update = UpdateSchema.safeParse(request.body);
     if (!update.success) return response.send({ ok: true });

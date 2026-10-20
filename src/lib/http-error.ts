@@ -10,7 +10,7 @@ const PRISMA_KNOWN: Record<string, { status: number; error: string }> = {
 };
 
 /** Sends a safe error response: readable validation issues, no database internals. */
-export function sendError(request: FastifyRequest, reply: FastifyReply, error: unknown, status: number) {
+export function sendError(request: FastifyRequest, reply: FastifyReply, error: unknown) {
   if (error instanceof ZodError) {
     const issues = error.issues.map(i => ({ path: i.path.join('.'), message: i.message }));
     return reply.code(400).send({ error: 'Invalid request', issues });
@@ -30,6 +30,7 @@ export function sendError(request: FastifyRequest, reply: FastifyReply, error: u
     request.log.error({ err: error }, 'database error');
     return reply.code(400).send({ error: 'Invalid data' });
   }
-  if (error instanceof Error) return reply.code(status).send({ error: error.message });
-  return reply.code(status).send({ error: 'Request failed' });
+  // Anything else is a bug or an outage: log it, tell the caller nothing.
+  request.log.error({ err: error }, 'unexpected error');
+  return reply.code(500).send({ error: 'Internal error' });
 }

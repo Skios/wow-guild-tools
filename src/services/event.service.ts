@@ -66,7 +66,7 @@ export class EventService {
 
   async createEvent(data: CreateEventInput) {
     if (Date.parse(data.endTime) <= Date.parse(data.startTime)) {
-      throw new Error('Event end time must be after start time');
+      throw new AppError('Event end time must be after start time', 400);
     }
     if (data.createdByUserId) {
       const creator = await prisma.user.findUnique({ where: { id: data.createdByUserId }, select: { id: true } });

@@ -102,6 +102,55 @@ describe('buildApp', () => {
   });
 });
 
+describe('buildApp hardening', () => {
+  const webhook = (headers: Record<string, string>, payload: string) =>
+    ({ method: 'POST' as const, url: '/webhooks/telegram', headers: { 'content-type': 'application/json', ...headers }, payload });
+
+  test('rejects a webhook call without the secret before reading the body', async () => {
+    const res = await (await buildApp()).inject(webhook({}, '{not json'));
+    expect(res.statusCode).toBe(401);
+  });
+
+  test('malformed JSON is a 400 with a safe message', async () => {
+    const res = await (await buildApp()).inject({
+      method: 'POST', url: '/roster', headers: { ...KEY, 'content-type': 'application/json' }, payload: '{not json',
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: expect.any(String) });
+  });
+
+  test('bodies over the limit are refused with 413', async () => {
+    const res = await (await buildApp()).inject({
+      method: 'POST', url: '/roster', headers: { ...KEY, 'content-type': 'application/json' },
+      payload: JSON.stringify({ name: 'x'.repeat(200_000) }),
+    });
+    expect(res.statusCode).toBe(413);
+  });
+
+  test('an unexpected crash in a route answers 500 without its message', async () => {
+    prismaMock.event.findMany.mockImplementation(() => { throw new TypeError('secret internals at db.internal'); });
+    const res = await (await buildApp()).inject({ url: '/events', headers: KEY });
+    expect(res.statusCode).toBe(500);
+    expect(res.body).not.toMatch(/secret internals/);
+  });
+
+  test('a client flooding the API is rate limited with 429', async () => {
+    const app = await buildApp();
+    const codes = new Set<number>();
+    for (let i = 0; i < 301; i++) codes.add((await app.inject('/health')).statusCode);
+    expect(codes).toEqual(new Set([200, 429]));
+  });
+
+  test('the Telegram webhook is not rate limited (Telegram calls from few addresses)', async () => {
+    const app = await buildApp();
+    const codes = new Set<number>();
+    for (let i = 0; i < 301; i++) {
+      codes.add((await app.inject(webhook({ 'x-telegram-bot-api-secret-token': 'webhook_secret_value_1234' }, '{}'))).statusCode);
+    }
+    expect(codes).toEqual(new Set([200]));
+  });
+});
+
 describe('buildApp without an API key', () => {
   test('officer routes are open (the site has no login for now)', async () => {
     env.current = { API_KEY: undefined };

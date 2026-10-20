@@ -12,7 +12,7 @@ export async function groupRoutes(fastify: FastifyInstance) {
       const group = await groupService.createGroup(body.name, body.description);
       return reply.code(201).send(group);
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 
@@ -23,7 +23,7 @@ export async function groupRoutes(fastify: FastifyInstance) {
       const { id } = GroupIdParamsSchema.parse(request.params);
       return reply.send(await groupService.getGroup(id));
     } catch (error) {
-      return sendError(request, reply, error, 404);
+      return sendError(request, reply, error);
     }
   });
 
@@ -34,7 +34,7 @@ export async function groupRoutes(fastify: FastifyInstance) {
       await groupService.addMember(userId, id);
       return reply.send({ success: true });
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 
@@ -44,7 +44,7 @@ export async function groupRoutes(fastify: FastifyInstance) {
       await groupService.removeMember(userId, id);
       return reply.send({ success: true });
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 
@@ -54,7 +54,7 @@ export async function groupRoutes(fastify: FastifyInstance) {
       await groupService.deleteGroup(id);
       return reply.send({ success: true });
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 }

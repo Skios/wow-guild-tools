@@ -14,7 +14,7 @@ export async function profileRoutes(fastify: FastifyInstance) {
       const body = CharacterSchema.parse(request.body);
       return reply.code(201).send(await profileService.addCharacter(body));
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 
@@ -24,7 +24,7 @@ export async function profileRoutes(fastify: FastifyInstance) {
       const { userId } = SetMainSchema.parse(request.body);
       return reply.send(await profileService.setMainCharacter(userId, id));
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 
@@ -33,7 +33,7 @@ export async function profileRoutes(fastify: FastifyInstance) {
       const { id } = IdParamsSchema.parse(request.params);
       return reply.send(await profileService.getMyProfile(id));
     } catch (error) {
-      return sendError(request, reply, error, 404);
+      return sendError(request, reply, error);
     }
   });
 }

@@ -10,7 +10,7 @@ export async function rosterRoutes(fastify: FastifyInstance) {
     try {
       return await roster.list();
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 
@@ -19,7 +19,7 @@ export async function rosterRoutes(fastify: FastifyInstance) {
       const { created, character } = await roster.add(RosterEntrySchema.parse(request.body));
       return reply.code(created ? 201 : 200).send(character);
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 
@@ -28,7 +28,7 @@ export async function rosterRoutes(fastify: FastifyInstance) {
       const { id } = RosterIdParamsSchema.parse(request.params);
       return reply.send(await roster.update(id, RosterEntrySchema.parse(request.body)));
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 
@@ -38,7 +38,7 @@ export async function rosterRoutes(fastify: FastifyInstance) {
       await roster.remove(id);
       return reply.send({ success: true });
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 
@@ -47,7 +47,7 @@ export async function rosterRoutes(fastify: FastifyInstance) {
       const { id } = RosterIdParamsSchema.parse(request.params);
       return reply.send(await roster.release(id));
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 }

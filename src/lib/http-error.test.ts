@@ -11,9 +11,9 @@ function fakeReply() {
   return reply;
 }
 const request = { log: { error: vi.fn() } };
-const run = (error: unknown, status = 400) => {
+const run = (error: unknown) => {
   const reply = fakeReply();
-  sendError(request as never, reply as never, error, status);
+  sendError(request as never, reply as never, error);
   return { code: reply.code.mock.calls[0]![0], body: reply.send.mock.calls[0]![0] };
 };
 const known = (code: string) =>
@@ -23,7 +23,7 @@ describe('sendError', () => {
   test('turns a zod error into 400 with readable issues, not raw JSON', () => {
     const error = z.object({ limit: z.number().max(100) }).safeParse({ limit: 500 }).error!;
 
-    const { code, body } = run(error, 404);
+    const { code, body } = run(error);
 
     expect(code).toBe(400);
     expect(body).toEqual({ error: 'Invalid request', issues: [{ path: 'limit', message: expect.any(String) }] });
@@ -69,20 +69,23 @@ describe('sendError', () => {
     expect(request.log.error).toHaveBeenCalledTimes(1);
   });
 
-  test('uses the status carried by our own errors, whatever the route asked for', () => {
-    expect(run(new NotFoundError('Event not found'), 400)).toEqual({ code: 404, body: { error: 'Event not found' } });
-    expect(run(new ConflictError('Locked'), 400)).toEqual({ code: 409, body: { error: 'Locked' } });
-    expect(run(new AppError('Teapot', 418), 400)).toEqual({ code: 418, body: { error: 'Teapot' } });
+  test('uses the status carried by our own errors', () => {
+    expect(run(new NotFoundError('Event not found'))).toEqual({ code: 404, body: { error: 'Event not found' } });
+    expect(run(new ConflictError('Locked'))).toEqual({ code: 409, body: { error: 'Locked' } });
+    expect(run(new AppError('Teapot', 418))).toEqual({ code: 418, body: { error: 'Teapot' } });
   });
 
-  test('keeps plain business messages with the status the route chose', () => {
-    expect(run(new Error('Event not found'), 404)).toEqual({ code: 404, body: { error: 'Event not found' } });
+  test('hides unexpected errors behind a logged 500', () => {
+    request.log.error.mockClear();
+
+    expect(run(new Error('connect ECONNREFUSED 10.0.0.3:5432'))).toEqual({ code: 500, body: { error: 'Internal error' } });
+    expect(request.log.error).toHaveBeenCalledTimes(1);
   });
 
   test.each(['secret string', 42, null, undefined, { message: 'leak' }])(
     'does not leak non-Error throwable %j',
     (thrown) => {
-      expect(run(thrown)).toEqual({ code: 400, body: { error: 'Request failed' } });
+      expect(run(thrown)).toEqual({ code: 500, body: { error: 'Internal error' } });
     },
   );
 });

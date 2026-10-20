@@ -34,7 +34,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       });
       return characters.map(({ user, ...character }) => ({ ...character, username: user?.username ?? null }));
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 }

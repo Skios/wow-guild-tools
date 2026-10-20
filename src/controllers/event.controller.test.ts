@@ -217,7 +217,7 @@ describe('GET /events', () => {
     expect(res.json()[0]).not.toHaveProperty('responses');
   });
 
-  test.each(['limit=0', 'limit=101', 'limit=abc', 'offset=-1', 'limit=1e3', 'limit[]=5'])('400 for ?%s', async (query) => {
+  test.each(['limit=0', 'limit=101', 'limit=abc', 'offset=-1', 'limit=1e3', 'limit=5&limit=6'])('400 for ?%s', async (query) => {
     expect((await (await app()).inject(`/events?${query}`)).statusCode).toBe(400);
   });
 

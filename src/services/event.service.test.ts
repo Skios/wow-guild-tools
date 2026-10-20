@@ -69,7 +69,7 @@ describe('EventService.createEvent', () => {
   });
 
   test('refuses an end time that is not after the start, even if called without the validator', async () => {
-    await expect(new EventService().createEvent({ ...input, endTime: input.startTime })).rejects.toThrow(/after start/i);
+    await expect(new EventService().createEvent({ ...input, endTime: input.startTime })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/after start/i) });
     expect(prismaMock.event.create).not.toHaveBeenCalled();
   });
 

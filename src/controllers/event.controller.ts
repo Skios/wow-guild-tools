@@ -12,7 +12,7 @@ export async function eventRoutes(fastify: FastifyInstance) {
       const event = await eventService.createEvent(body);
       return reply.code(201).send(event);
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 
@@ -23,7 +23,7 @@ export async function eventRoutes(fastify: FastifyInstance) {
       await eventService.finalizeRoster(id, body.selections);
       return reply.send({ success: true });
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 
@@ -33,7 +33,7 @@ export async function eventRoutes(fastify: FastifyInstance) {
       await eventService.publishEvent(id);
       return reply.send({ success: true });
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 
@@ -43,7 +43,7 @@ export async function eventRoutes(fastify: FastifyInstance) {
       const body = MessageSchema.parse(request.body);
       return reply.send({ results: await eventService.messageCharacters(id, body.characterIds, body.text) });
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 
@@ -53,7 +53,7 @@ export async function eventRoutes(fastify: FastifyInstance) {
       const event = await eventService.getEventDetail(id);
       return event;
     } catch (error) {
-      return sendError(request, reply, error, 404);
+      return sendError(request, reply, error);
     }
   });
 
@@ -62,7 +62,7 @@ export async function eventRoutes(fastify: FastifyInstance) {
       const { limit, offset } = ListEventsQuerySchema.parse(request.query);
       return await eventService.listEvents(limit, offset);
     } catch (error) {
-      return sendError(request, reply, error, 400);
+      return sendError(request, reply, error);
     }
   });
 }

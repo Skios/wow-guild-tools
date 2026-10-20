@@ -49,6 +49,13 @@ describe('parseEnv', () => {
     expect(parseEnv({ ...valid, API_KEY: '', HOST: '0.0.0.0' }).HOST).toBe('0.0.0.0');
   });
 
+  test('trusts proxy headers only when told to, with an explicit true/false', () => {
+    expect(parseEnv(valid).TRUST_PROXY).toBeUndefined();
+    expect(parseEnv({ ...valid, TRUST_PROXY: 'true' }).TRUST_PROXY).toBe(true);
+    expect(parseEnv({ ...valid, TRUST_PROXY: 'false' }).TRUST_PROXY).toBe(false);
+    expect(() => parseEnv({ ...valid, TRUST_PROXY: 'yes' })).toThrow('TRUST_PROXY');
+  });
+
   test('rejects a webhook secret Telegram would refuse', () => {
     expect(() => parseEnv({ ...valid, TELEGRAM_WEBHOOK_SECRET: 'short' })).toThrow('TELEGRAM_WEBHOOK_SECRET');
     expect(() => parseEnv({ ...valid, TELEGRAM_WEBHOOK_SECRET: 'has spaces and symbols!!!' })).toThrow('TELEGRAM_WEBHOOK_SECRET');
