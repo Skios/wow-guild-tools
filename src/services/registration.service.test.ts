@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
 
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
+vi.mock('../repositories/draft.repository.js', async () => (await import('../test/memory-drafts.js')).memoryDraftStore());
 
 import { handleRegistrationCallback, handleRegistrationMessage } from './registration.service.js';
 

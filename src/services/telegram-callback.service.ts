@@ -53,7 +53,7 @@ export async function handleCallbackQuery(query: CallbackQuery): Promise<Callbac
   }
 
   if (status === 'LATE') {
-    expectLateMinutes(query.from.id, eventId.data, character.id);
+    await expectLateMinutes(query.from.id, eventId.data, character.id);
     return {
       text: 'Late noted. Tell me the minutes in our private chat.',
       dm: 'How many minutes late will you be? Send a number, for example 15. Ignore this if you are not sure yet.',

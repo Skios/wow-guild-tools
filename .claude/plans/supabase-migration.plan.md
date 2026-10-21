@@ -39,7 +39,7 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 - [ ] Bearer token on every call; 401 -> back to login; 403 -> "not an officer"
 - [ ] Tests: expired session, wrong password, network down, sign-out in another tab
 ### 0e Vercel adaptation
-- [ ] Bot drafts (registration, late minutes) from memory to a DB table with expiry + RLS
+- [x] Bot drafts (registration, late minutes) from memory to a DB table with expiry + RLS
 - [ ] API routes under /api; admin site built as static files in the same project (one origin, no CORS)
 - [ ] Prisma for serverless: transaction pooler (6543, pgbouncer=true) + directUrl, Vercel binary target
 - [ ] vercel.json: region fra1, build only main/develop; local build check with the Vercel CLI

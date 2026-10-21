@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../config/db.js';
 import { CLASS_INFO, SPECS, parseClassSpec } from '../domain/wow.js';
 import { ConflictError } from '../lib/errors.js';
+import { draftStore } from '../repositories/draft.repository.js';
 import { UserRepository } from '../repositories/user.repository.js';
 import { CharacterNameSchema, RealmSchema } from '../validators/character.validator.js';
 import { RosterService } from './roster.service.js';
@@ -23,9 +24,8 @@ type Draft =
   | { step: 'class'; name: string; realm: string }
   | { step: 'spec'; name: string; realm: string; class: WoWClass };
 
-// ponytail: drafts live in memory and are lost on restart (user just sends /start again).
-// Move to a table if the bot runs on more than one instance.
-const drafts = new Map<number, Draft>();
+// Stored in the database: on serverless the next message may reach another instance.
+const drafts = draftStore<Draft>('registration');
 const userRepo = new UserRepository();
 const roster = new RosterService();
 
@@ -70,14 +70,14 @@ async function claim(from: Sender, characterId: string): Promise<Reply> {
   const user = await userRepo.upsertFromIdentity('telegram', String(from.id), displayName(from));
   try {
     const claimed = await roster.claim(characterId, user.id);
-    drafts.delete(from.id);
+    await drafts.delete(from.id);
     const detail = claimed ? ` (${describe(claimed.class, claimed.spec)})` : '';
     return { text: `Registered: ${claimed?.name}-${claimed?.realm}${detail}. You can now answer raid invites.` };
   } catch (error) {
     if (!(error instanceof ConflictError)) throw error;
     const list = await claimList('That name was just taken by someone else. Pick another:');
     if (list) return list;
-    drafts.set(from.id, { step: 'name' });
+    await drafts.set(from.id, { step: 'name' });
     return { text: `That name was just taken by someone else. ${NAME_PROMPT}` };
   }
 }
@@ -87,24 +87,24 @@ export async function handleRegistrationMessage(msg: { from: Sender; text: strin
   const id = msg.from.id;
 
   if (text.startsWith('/start')) {
-    drafts.delete(id);
+    await drafts.delete(id);
     const list = await claimList('Welcome! Which roster character is yours?');
     if (list) return list;
-    drafts.set(id, { step: 'name' });
+    await drafts.set(id, { step: 'name' });
     return { text: `Welcome! ${NAME_PROMPT}` };
   }
 
-  const draft = drafts.get(id);
+  const draft = await drafts.get(id);
   if (draft?.step === 'name') {
     const name = CharacterNameSchema.safeParse(text);
     if (!name.success) return { text: 'Character names are 2 to 12 letters. Try again.' };
-    drafts.set(id, { step: 'realm', name: name.data });
+    await drafts.set(id, { step: 'realm', name: name.data });
     return { text: 'Which realm?' };
   }
   if (draft?.step === 'realm') {
     const realm = RealmSchema.safeParse(text);
     if (!realm.success) return { text: 'That is not a valid realm name (2 to 40 letters, digits, spaces or apostrophes). Try again.' };
-    drafts.set(id, { step: 'class', name: draft.name, realm: realm.data });
+    await drafts.set(id, { step: 'class', name: draft.name, realm: realm.data });
     const classes = (Object.keys(CLASS_INFO) as WoWClass[]).map(c => ({ id: c, label: CLASS_INFO[c].label }));
     return { text: 'Pick your class:', keyboard: keyboard('reg_class', classes, 3) };
   }
@@ -113,12 +113,12 @@ export async function handleRegistrationMessage(msg: { from: Sender; text: strin
 
 export async function handleRegistrationCallback(query: { from: Sender; data: string }): Promise<Reply> {
   const id = query.from.id;
-  const draft = drafts.get(id);
+  const draft = await drafts.get(id);
 
   if (query.data.startsWith(CLAIM_PREFIX)) {
     const target = query.data.slice(CLAIM_PREFIX.length);
     if (target === 'none') {
-      drafts.set(id, { step: 'name' });
+      await drafts.set(id, { step: 'name' });
       return { text: NAME_PROMPT };
     }
     if (!Uuid.safeParse(target).success) return { text: 'Invalid action.' };
@@ -129,7 +129,7 @@ export async function handleRegistrationCallback(query: { from: Sender; data: st
     const picked = query.data.slice('reg_class_'.length);
     if (!Object.hasOwn(WoWClass, picked)) return { text: 'Invalid class.' };
     const cls = picked as WoWClass;
-    drafts.set(id, { step: 'spec', name: draft.name, realm: draft.realm, class: cls });
+    await drafts.set(id, { step: 'spec', name: draft.name, realm: draft.realm, class: cls });
     const specs = SPECS[cls].map(s => ({ id: s.id, label: s.label }));
     return { text: `Pick your ${CLASS_INFO[cls].label} specialization:`, keyboard: keyboard('reg_spec', specs, 2) };
   }
@@ -146,12 +146,12 @@ export async function handleRegistrationCallback(query: { from: Sender; data: st
       await saveCharacter(query.from, { name: draft.name, realm: draft.realm, ...chosen });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        drafts.delete(id);
+        await drafts.delete(id);
         return { text: `${draft.name}-${draft.realm} is already registered by someone else. Send /start to try another character.` };
       }
       throw error;
     }
-    drafts.delete(id);
+    await drafts.delete(id);
     return { text: `Registered: ${draft.name}-${draft.realm} (${describe(chosen.class, chosen.spec)}). You can now answer raid invites.` };
   }
 

@@ -141,3 +141,18 @@ model Response {
   @@unique([eventId, characterId])
   @@map("responses")
 }
+
+// Half-finished bot conversations (registration steps, "how many minutes late?").
+// Serverless instances share no memory, so the next message may land elsewhere: keep them here.
+model ChatDraft {
+  id             String   @id @default(uuid())
+  kind           String   // "registration" | "late"
+  platform       String   // "telegram"
+  platformUserId String
+  data           Json
+  expiresAt      DateTime
+  updatedAt      DateTime @updatedAt
+
+  @@unique([kind, platform, platformUserId])
+  @@map("chat_drafts")
+}
