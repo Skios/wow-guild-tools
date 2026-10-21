@@ -2,13 +2,13 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
 // In dev the admin talks to the API through /api, so the browser sees a single origin (no CORS).
-const API_TARGET = process.env.API_URL ?? 'http://localhost:3000';
+const API_TARGET = process.env.API_URL ?? 'http://127.0.0.1:3000';
 
 export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    proxy: { '/api': { target: API_TARGET, rewrite: path => path.replace(/^\/api/, '') } },
+    proxy: { '/api': { target: API_TARGET } }, // the API serves its routes under /api, as on Vercel
   },
   test: {
     environment: 'jsdom',

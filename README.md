@@ -48,15 +48,22 @@ the flag is read on every request, so a revoke takes effect immediately.
 ## Telegram (local)
 Telegram needs a public HTTPS URL for the webhook. Expose the port with a tunnel
 (`cloudflared tunnel --url http://localhost:3000`), then register it once:
-`curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" -d url=<tunnel>/webhooks/telegram -d secret_token=$TELEGRAM_WEBHOOK_SECRET`
+`curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" -d url=<tunnel>/api/webhooks/telegram -d secret_token=$TELEGRAM_WEBHOOK_SECRET`
 
 The webhook is checked with `TELEGRAM_WEBHOOK_SECRET` (header `x-telegram-bot-api-secret-token`).
 Players answer with the IN / LATE / TENTATIVE / OUT buttons; LATE asks for the minutes in a private chat.
 
 ## API
-Main routes: `GET/POST /roster`, `PUT/DELETE /roster/:id`, `POST /roster/:id/release`,
+Every route is under `/api` (the same domain serves the admin site on Vercel). Main routes: `GET/POST /roster`, `PUT/DELETE /roster/:id`, `POST /roster/:id/release`,
 `GET/POST /events`, `GET /events/:id`, `PATCH /events/:id/roster`, `POST /events/:id/publish`,
 `POST /events/:id/message`, `GET /meta/wow`, `GET /auth/me`, `POST /webhooks/telegram` (own secret).
+
+## Deploy (Vercel + Supabase, free tiers)
+One Vercel project serves both: `api/index.ts` is a single function that hands every `/api/*` request to
+Fastify (rewrite in `vercel.json`), and the admin site is the static build of `web/`. Region `fra1`;
+only `main` (production) and `develop` (preview = dev environment) are deployed. Security headers (CSP,
+HSTS, nosniff) are set in `vercel.json`. Bot conversations in progress are stored in `chat_drafts`,
+because serverless instances share no memory.
 
 ## Status
 Milestones 1–3 (core, bot, admin site) are in place; reminders/nudges (M4), account linking across

@@ -2,8 +2,11 @@
 node_modules/
 .pnpm-store/
 
-# Environment
+# Environment (hosted values live in Vercel/GitHub settings, never in files)
 .env
+.env.*
+!.env.example
+!.env.development
 .env.local
 .env.development.local
 .env.test.local
@@ -34,3 +37,6 @@ Thumbs.db
 
 # Test coverage reports
 coverage/
+
+# Vercel CLI link
+.vercel/

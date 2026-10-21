@@ -36,35 +36,35 @@ beforeEach(() => {
 
 describe('buildApp', () => {
   test('health check is public', async () => {
-    const res = await (await buildApp()).inject('/health');
+    const res = await (await buildApp()).inject('/api/health');
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe('ok');
   });
 
   test.each([
-    ['GET', '/events'],
-    ['POST', '/events'],
-    ['GET', `/events/${ID}`],
-    ['PATCH', `/events/${ID}/roster`],
-    ['POST', `/events/${ID}/publish`],
-    ['GET', '/groups'],
-    ['POST', '/groups'],
-    ['GET', `/groups/${ID}`],
-    ['DELETE', `/groups/${ID}`],
-    ['POST', `/groups/${ID}/members`],
-    ['DELETE', `/groups/${ID}/members/${ID}`],
-    ['POST', '/profiles/characters'],
-    ['PUT', `/profiles/main-character/${ID}`],
-    ['GET', `/profiles/me/${ID}`],
-    ['GET', '/characters'],
-    ['GET', '/roster'],
-    ['POST', '/roster'],
-    ['PUT', `/roster/${ID}`],
-    ['DELETE', `/roster/${ID}`],
-    ['POST', `/roster/${ID}/release`],
-    ['POST', `/events/${ID}/message`],
-    ['GET', '/meta/wow'],
-    ['GET', '/auth/me'],
+    ['GET', '/api/events'],
+    ['POST', '/api/events'],
+    ['GET', `/api/events/${ID}`],
+    ['PATCH', `/api/events/${ID}/roster`],
+    ['POST', `/api/events/${ID}/publish`],
+    ['GET', '/api/groups'],
+    ['POST', '/api/groups'],
+    ['GET', `/api/groups/${ID}`],
+    ['DELETE', `/api/groups/${ID}`],
+    ['POST', `/api/groups/${ID}/members`],
+    ['DELETE', `/api/groups/${ID}/members/${ID}`],
+    ['POST', '/api/profiles/characters'],
+    ['PUT', `/api/profiles/main-character/${ID}`],
+    ['GET', `/api/profiles/me/${ID}`],
+    ['GET', '/api/characters'],
+    ['GET', '/api/roster'],
+    ['POST', '/api/roster'],
+    ['PUT', `/api/roster/${ID}`],
+    ['DELETE', `/api/roster/${ID}`],
+    ['POST', `/api/roster/${ID}/release`],
+    ['POST', `/api/events/${ID}/message`],
+    ['GET', '/api/meta/wow'],
+    ['GET', '/api/auth/me'],
   ] as const)('%s %s needs an officer login', async (method, url) => {
     const app = await buildApp();
 
@@ -78,18 +78,18 @@ describe('buildApp', () => {
 
   test('the token is not accepted from the query string', async () => {
     const token = KEY.authorization.slice('Bearer '.length);
-    expect((await (await buildApp()).inject(`/events?access_token=${token}`)).statusCode).toBe(401);
+    expect((await (await buildApp()).inject(`/api/events?access_token=${token}`)).statusCode).toBe(401);
   });
 
   test('GET /auth/me says which officer is signed in', async () => {
-    const res = await (await buildApp()).inject({ url: '/auth/me', headers: KEY });
+    const res = await (await buildApp()).inject({ url: '/api/auth/me', headers: KEY });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ userId: 'u1', username: 'Brannock' });
   });
 
   test('an officer login opens officer routes', async () => {
     prismaMock.event.findMany.mockResolvedValue([]);
-    const res = await (await buildApp()).inject({ url: '/events', headers: KEY });
+    const res = await (await buildApp()).inject({ url: '/api/events', headers: KEY });
     expect(res.statusCode).toBe(200);
   });
 
@@ -97,22 +97,29 @@ describe('buildApp', () => {
     const app = await buildApp();
     const body = { update_id: 1 };
 
-    expect((await app.inject({ method: 'POST', url: '/webhooks/telegram', payload: body, headers: KEY })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'POST', url: '/api/webhooks/telegram', payload: body, headers: KEY })).statusCode).toBe(401);
     expect((await app.inject({
-      method: 'POST', url: '/webhooks/telegram', payload: body,
+      method: 'POST', url: '/api/webhooks/telegram', payload: body,
       headers: { 'x-telegram-bot-api-secret-token': 'webhook_secret_value_1234' },
     })).statusCode).toBe(200);
   });
 
   test('unknown routes are 404 (and unauthenticated probing learns nothing about officer routes)', async () => {
     const app = await buildApp();
-    expect((await app.inject('/nope')).statusCode).toBe(404);
+    expect((await app.inject('/api/nope')).statusCode).toBe(404);
+  });
+});
+
+describe('buildApp routing', () => {
+  test.each(['/health', '/events', '/webhooks/telegram'])('nothing is served outside /api (%s is 404)', async (url) => {
+    const res = await (await buildApp()).inject({ url, headers: KEY });
+    expect(res.statusCode).toBe(404);
   });
 });
 
 describe('buildApp hardening', () => {
   const webhook = (headers: Record<string, string>, payload: string) =>
-    ({ method: 'POST' as const, url: '/webhooks/telegram', headers: { 'content-type': 'application/json', ...headers }, payload });
+    ({ method: 'POST' as const, url: '/api/webhooks/telegram', headers: { 'content-type': 'application/json', ...headers }, payload });
 
   test('rejects a webhook call without the secret before reading the body', async () => {
     const res = await (await buildApp()).inject(webhook({}, '{not json'));
@@ -121,7 +128,7 @@ describe('buildApp hardening', () => {
 
   test('malformed JSON is a 400 with a safe message', async () => {
     const res = await (await buildApp()).inject({
-      method: 'POST', url: '/roster', headers: { ...KEY, 'content-type': 'application/json' }, payload: '{not json',
+      method: 'POST', url: '/api/roster', headers: { ...KEY, 'content-type': 'application/json' }, payload: '{not json',
     });
     expect(res.statusCode).toBe(400);
     expect(res.json()).toEqual({ error: expect.any(String) });
@@ -129,7 +136,7 @@ describe('buildApp hardening', () => {
 
   test('bodies over the limit are refused with 413', async () => {
     const res = await (await buildApp()).inject({
-      method: 'POST', url: '/roster', headers: { ...KEY, 'content-type': 'application/json' },
+      method: 'POST', url: '/api/roster', headers: { ...KEY, 'content-type': 'application/json' },
       payload: JSON.stringify({ name: 'x'.repeat(200_000) }),
     });
     expect(res.statusCode).toBe(413);
@@ -137,7 +144,7 @@ describe('buildApp hardening', () => {
 
   test('an unexpected crash in a route answers 500 without its message', async () => {
     prismaMock.event.findMany.mockImplementation(() => { throw new TypeError('secret internals at db.internal'); });
-    const res = await (await buildApp()).inject({ url: '/events', headers: KEY });
+    const res = await (await buildApp()).inject({ url: '/api/events', headers: KEY });
     expect(res.statusCode).toBe(500);
     expect(res.body).not.toMatch(/secret internals/);
   });
@@ -145,7 +152,7 @@ describe('buildApp hardening', () => {
   test('a client flooding the API is rate limited with 429', async () => {
     const app = await buildApp();
     const codes = new Set<number>();
-    for (let i = 0; i < 301; i++) codes.add((await app.inject('/health')).statusCode);
+    for (let i = 0; i < 301; i++) codes.add((await app.inject('/api/health')).statusCode);
     expect(codes).toEqual(new Set([200, 429]));
   });
 

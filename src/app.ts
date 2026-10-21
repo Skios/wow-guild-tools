@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyServerOptions } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import { adminRoutes } from './controllers/admin.controller.js';
 import { eventRoutes } from './controllers/event.controller.js';
@@ -13,7 +13,7 @@ import { requireOfficer, supabaseTokenVerifier, type TokenVerifier } from './plu
 const BODY_LIMIT_BYTES = 100 * 1024;
 const RATE_LIMIT_PER_MINUTE = 300;
 
-export async function buildApp(options: { logger?: boolean; verifyToken?: TokenVerifier } = {}) {
+export async function buildApp(options: { logger?: FastifyServerOptions['logger']; verifyToken?: TokenVerifier } = {}) {
   const app = Fastify({
     logger: options.logger ?? false,
     bodyLimit: BODY_LIMIT_BYTES,
@@ -31,19 +31,22 @@ export async function buildApp(options: { logger?: boolean; verifyToken?: TokenV
   // ponytail: in-memory store, fine for one instance; move to a shared store if the API ever scales out.
   await app.register(rateLimit, { max: RATE_LIMIT_PER_MINUTE, timeWindow: '1 minute' });
 
-  app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
-
-  // The webhook has its own secret. Everything else needs an officer's Supabase login.
-  await app.register(telegramRoutes);
+  // Everything lives under /api: on Vercel the same domain serves the admin site, and only /api reaches us.
   const verifyToken = options.verifyToken ?? supabaseTokenVerifier(getEnv().SUPABASE_URL);
-  await app.register(async (officer) => {
-    requireOfficer(officer, verifyToken);
-    await officer.register(adminRoutes);
-    await officer.register(eventRoutes);
-    await officer.register(profileRoutes);
-    await officer.register(groupRoutes);
-    await officer.register(rosterRoutes);
-  });
+  await app.register(async (api) => {
+    api.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+
+    // The webhook has its own secret. Everything else needs an officer's Supabase login.
+    await api.register(telegramRoutes);
+    await api.register(async (officer) => {
+      requireOfficer(officer, verifyToken);
+      await officer.register(adminRoutes);
+      await officer.register(eventRoutes);
+      await officer.register(profileRoutes);
+      await officer.register(groupRoutes);
+      await officer.register(rosterRoutes);
+    });
+  }, { prefix: '/api' });
 
   return app;
 }
