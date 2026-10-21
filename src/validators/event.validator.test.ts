@@ -101,8 +101,10 @@ describe('CreateEventSchema', () => {
     expect(CreateEventSchema.safeParse(withoutCreator).success).toBe(true);
   });
 
-  test('rejects a malformed creator id', () => {
-    expect(CreateEventSchema.safeParse({ ...validEvent(), createdByUserId: '1; DROP TABLE users' }).success).toBe(false);
+  test('drops any creator in the body: the creator is the signed-in officer', () => {
+    const parsed = CreateEventSchema.parse({ ...validEvent(), createdByUserId: '1; DROP TABLE users', createdBy: 'x' });
+    expect(parsed).not.toHaveProperty('createdByUserId');
+    expect(parsed).not.toHaveProperty('createdBy');
   });
 
   test('ignores unknown fields instead of passing them to the database', () => {

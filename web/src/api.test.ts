@@ -17,13 +17,34 @@ beforeEach(() => {
 });
 
 describe('requests', () => {
-  test('talks to /api and sends no credentials (the admin has no login for now)', async () => {
+  test('talks to /api and sends no API key', async () => {
     await api().listEvents();
 
     const { url, headers } = call();
     expect(url).toBe('/api/events?limit=50');
     expect(headers.has('x-api-key')).toBe(false);
-    expect(headers.has('authorization')).toBe(false);
+  });
+
+  test('sends the current token as a bearer, read fresh for every request', async () => {
+    const getToken = vi.fn().mockResolvedValueOnce('t1').mockResolvedValueOnce('t2');
+    const signedIn = createApi({ fetchImpl: fetchMock as unknown as typeof fetch, getToken });
+
+    await signedIn.listEvents();
+    await signedIn.me();
+
+    expect(call(0).headers.get('authorization')).toBe('Bearer t1');
+    expect([call(1).url, call(1).headers.get('authorization')]).toEqual(['/api/auth/me', 'Bearer t2']);
+  });
+
+  test('sends no authorization header without a token', async () => {
+    await createApi({ fetchImpl: fetchMock as unknown as typeof fetch, getToken: async () => null }).listEvents();
+    expect(call().headers.has('authorization')).toBe(false);
+  });
+
+  test('still sends the request, without credentials, when the token cannot be read', async () => {
+    const getToken = vi.fn().mockRejectedValue(new Error('storage blocked'));
+    await createApi({ fetchImpl: fetchMock as unknown as typeof fetch, getToken }).listEvents();
+    expect(call().headers.has('authorization')).toBe(false);
   });
 
   test('sends JSON bodies with the right content type', async () => {
@@ -88,14 +109,31 @@ describe('requests', () => {
 });
 
 describe('errors', () => {
-  test('a 401 explains that the API wants a key this site cannot send yet', async () => {
+  test('a 401 signs out and says the session ended', async () => {
     fetchMock.mockImplementation(async () => json({ error: 'Unauthorized' }, 401));
+    const onUnauthorized = vi.fn();
 
-    const error = await api().listEvents().catch(e => e);
+    const error = await createApi({ fetchImpl: fetchMock as unknown as typeof fetch, onUnauthorized }).listEvents().catch(e => e);
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(401);
-    expect(error.message).toMatch(/protected by a key/i);
+    expect(error.message).toMatch(/sign in again/i);
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+  });
+
+  test('a 401 is still an error when nobody listens', async () => {
+    fetchMock.mockImplementation(async () => json({}, 401));
+    await expect(api().listEvents()).rejects.toMatchObject({ status: 401 });
+  });
+
+  test('a 403 says the account is not an officer, whatever the server wrote', async () => {
+    fetchMock.mockImplementation(async () => json({ error: 'Forbidden' }, 403));
+    const onUnauthorized = vi.fn();
+
+    const error = await createApi({ fetchImpl: fetchMock as unknown as typeof fetch, onUnauthorized }).publish('e1').catch(e => e);
+
+    expect(error).toMatchObject({ status: 403, message: 'This account is not an officer.' });
+    expect(onUnauthorized).not.toHaveBeenCalled();
   });
 
   test('uses the server message', async () => {

@@ -9,7 +9,7 @@ export async function eventRoutes(fastify: FastifyInstance) {
   fastify.post('/events', async (request, reply) => {
     try {
       const body = CreateEventSchema.parse(request.body);
-      const event = await eventService.createEvent(body);
+      const event = await eventService.createEvent({ ...body, createdByUserId: request.officer!.userId });
       return reply.code(201).send(event);
     } catch (error) {
       return sendError(request, reply, error);

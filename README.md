@@ -35,8 +35,15 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
 - Class / spec icons live in `web/public/icons` (Blizzard assets); re-download with `scripts/fetch-icons.sh`.
 
 ## Authentication
-There is **no login** for now. Without `API_KEY` the API listens only on `127.0.0.1` and logs a warning.
-If `API_KEY` is set (min 16 chars) the officer routes require the header `x-api-key`, and `HOST` can be changed.
+Officers sign in with a **nickname and a password** (Supabase Auth). No email or personal data is stored:
+the nickname becomes `<name>@wgt.invalid`, an address that can never receive mail. Signup is closed;
+accounts are managed with a script that needs `SUPABASE_SECRET_KEY` (never give that key to the app):
+
+- `npm run officer -- create <name>` (prints the password once), `reset <name>`, `revoke <name>`, `list`
+- the last officer cannot be revoked
+
+Every officer route needs `Authorization: Bearer <Supabase access token>` of a user flagged as officer;
+the flag is read on every request, so a revoke takes effect immediately.
 
 ## Telegram (local)
 Telegram needs a public HTTPS URL for the webhook. Expose the port with a tunnel
@@ -49,7 +56,7 @@ Players answer with the IN / LATE / TENTATIVE / OUT buttons; LATE asks for the m
 ## API
 Main routes: `GET/POST /roster`, `PUT/DELETE /roster/:id`, `POST /roster/:id/release`,
 `GET/POST /events`, `GET /events/:id`, `PATCH /events/:id/roster`, `POST /events/:id/publish`,
-`POST /events/:id/message`, `GET /meta/wow`, `POST /webhooks/telegram`.
+`POST /events/:id/message`, `GET /meta/wow`, `GET /auth/me`, `POST /webhooks/telegram` (own secret).
 
 ## Status
 Milestones 1–3 (core, bot, admin site) are in place; reminders/nudges (M4), account linking across

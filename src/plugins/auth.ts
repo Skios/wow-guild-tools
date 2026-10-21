@@ -1,13 +1,65 @@
 import type { FastifyInstance } from 'fastify';
-import { getEnv } from '../config/env.js';
-import { safeEqual } from '../lib/safe-equal.js';
+import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
+import { prisma } from '../config/db.js';
 
-// ponytail: single shared key, no per-officer identity. Add real users/roles when audit trail matters.
-// Call directly on a scope (not via register) so the hook covers that scope's routes.
-export function requireApiKey(fastify: FastifyInstance) {
-  fastify.addHook('onRequest', async (request, reply) => {
-    if (!safeEqual(request.headers['x-api-key'], getEnv().API_KEY ?? '')) {
+export type Officer = { userId: string; username: string };
+export type TokenVerifier = (token: string) => Promise<{ sub: string }>;
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    officer?: Officer;
+  }
+}
+
+// Supabase signs access tokens with an asymmetric key. Pinning the algorithms keeps an
+// HS256 token (signed with a guessable shared secret) or alg "none" from ever passing.
+const ALGORITHMS = ['ES256', 'RS256'];
+const CLOCK_TOLERANCE_SECONDS = 5;
+const MAX_HEADER_LENGTH = 4096;
+const BEARER = /^Bearer ([\w-]+\.[\w-]+\.[\w-]+)$/i;
+
+/** Verifies a Supabase access token: signature from the project's JWKS, issuer, audience, expiry, real user. */
+export function supabaseTokenVerifier(supabaseUrl: string, keys?: JWTVerifyGetKey): TokenVerifier {
+  const base = supabaseUrl.replace(/\/+$/, '');
+  // jose caches the keys and refetches (with a cooldown) only when it meets an unknown key id.
+  const jwks = keys ?? createRemoteJWKSet(new URL(`${base}/auth/v1/.well-known/jwks.json`));
+  const options = { algorithms: ALGORITHMS, issuer: `${base}/auth/v1`, audience: 'authenticated', clockTolerance: CLOCK_TOLERANCE_SECONDS, requiredClaims: ['exp', 'sub'] };
+
+  return async (token) => {
+    const { payload } = await jwtVerify(token, jwks, options);
+    if (typeof payload.sub !== 'string' || payload.sub === '') throw new Error('token has no subject');
+    // The anon/service keys are valid project JWTs too; only a signed-in, non-anonymous user counts.
+    if (payload.role !== 'authenticated' || payload.is_anonymous === true) throw new Error('not a user token');
+    return { sub: payload.sub };
+  };
+}
+
+/**
+ * Officer routes: a valid Supabase login backed by a User flagged as officer in OUR database.
+ * The flag is read on every request, so revoking an officer takes effect immediately.
+ * Call directly on a scope (not via register) so the hook covers that scope's routes.
+ */
+export function requireOfficer(scope: FastifyInstance, verify: TokenVerifier) {
+  scope.addHook('onRequest', async (request, reply) => {
+    const header = request.headers.authorization;
+    const token = header && header.length <= MAX_HEADER_LENGTH ? BEARER.exec(header)?.[1] : undefined;
+    if (!token) return reply.code(401).send({ error: 'Unauthorized' });
+
+    let sub: string;
+    try {
+      ({ sub } = await verify(token));
+    } catch (err) {
+      request.log.info({ err }, 'rejected access token');
       return reply.code(401).send({ error: 'Unauthorized' });
     }
+
+    // A database error propagates to the error handler: an outage must not look like "not an officer".
+    const identity = await prisma.identity.findUnique({
+      where: { platform_platformUserId: { platform: 'supabase', platformUserId: sub } },
+      select: { user: { select: { id: true, username: true, isOfficer: true } } },
+    });
+    if (!identity?.user.isOfficer) return reply.code(403).send({ error: 'Forbidden' });
+
+    request.officer = { userId: identity.user.id, username: identity.user.username };
   });
 }

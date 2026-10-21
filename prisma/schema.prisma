@@ -42,6 +42,8 @@ model User {
   id           String      @id @default(uuid())
   username     String
   preferredChannel String?    @default("telegram")
+  // Officers manage the roster and events in the admin site. Granted only by scripts/officer.ts.
+  isOfficer    Boolean     @default(false)
   identities   Identity[]
   characters   Character[]
   eventsCreated Event[]
@@ -55,7 +57,7 @@ model User {
 // One row per linked chat account; a User can have one per platform.
 model Identity {
   id             String   @id @default(uuid())
-  platform       String   // "telegram" | "discord"
+  platform       String   // "telegram" | "discord" | "supabase" (admin-site login; platformUserId = auth user id)
   platformUserId String
   userId         String
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)

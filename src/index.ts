@@ -7,7 +7,6 @@ const server = await buildApp({ logger: true });
 
 try {
   await server.listen({ port: env.PORT, host: env.HOST });
-  if (!env.API_KEY) server.log.warn(`No API_KEY set: the admin API is open to anyone who can reach ${env.HOST}:${env.PORT}`);
 } catch (err) {
   server.log.error(err);
   process.exit(1);

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
-import { buildRouteApp, prismaError, uuid } from '../test/helpers.js';
+import { buildOfficerRouteApp, prismaError, uuid } from '../test/helpers.js';
 
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 const adapter = vi.hoisted(() => ({ sendInvite: vi.fn(), publishFinalRoster: vi.fn(), sendDirect: vi.fn() }));
@@ -17,10 +17,10 @@ import { eventRoutes } from './event.controller.js';
 
 const NOW = new Date('2026-10-17T12:00:00Z');
 const inHours = (h: number) => new Date(NOW.getTime() + h * 3_600_000).toISOString();
-const newEvent = () => ({ title: 'Raid', startTime: inHours(24), endTime: inHours(27), createdByUserId: uuid(1) });
+const newEvent = () => ({ title: 'Raid', startTime: inHours(24), endTime: inHours(27) });
 const EID = uuid(10);
 
-const app = () => buildRouteApp(eventRoutes);
+const app = () => buildOfficerRouteApp(eventRoutes);
 const post = async (url: string, payload?: unknown) => (await app()).inject({ method: 'POST', url, ...(payload !== undefined && { payload: payload as object }) });
 const patch = async (url: string, payload: unknown) => (await app()).inject({ method: 'PATCH', url, payload: payload as object });
 
@@ -71,13 +71,11 @@ describe('POST /events', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  test('404 for an unknown creator', async () => {
-    prismaMock.user.findUnique.mockResolvedValue(null);
+  test('records the signed-in officer as creator, whatever the body claims', async () => {
+    const res = await post('/events', { ...newEvent(), createdByUserId: uuid(99), createdBy: uuid(99) });
 
-    const res = await post('/events', newEvent());
-
-    expect(res.statusCode).toBe(404);
-    expect(res.json()).toEqual({ error: 'User not found' });
+    expect(res.statusCode).toBe(201);
+    expect(prismaMock.event.create.mock.calls[0]![0].data).toMatchObject({ createdBy: uuid(1) });
   });
 
   test('database failure does not leak internals', async () => {

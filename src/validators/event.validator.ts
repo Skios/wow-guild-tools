@@ -24,7 +24,6 @@ export const CreateEventSchema = z
     startTime: DateTimeSchema,
     endTime: DateTimeSchema,
     description: z.string().max(1000).optional(),
-    createdByUserId: z.string().uuid("Invalid user ID").optional(),
   })
   .superRefine((event, ctx) => {
     const start = Date.parse(event.startTime);
@@ -72,7 +71,8 @@ export const FinalizeRosterSchema = z.object({
     }),
 });
 
-export type CreateEventInput = z.infer<typeof CreateEventSchema>;
+// The creator comes from the signed-in officer, never from the request body.
+export type CreateEventInput = z.infer<typeof CreateEventSchema> & { createdByUserId?: string };
 export type FinalizeRosterInput = z.infer<typeof FinalizeRosterSchema>;
 
 export const MAX_MESSAGE_LENGTH = 500;

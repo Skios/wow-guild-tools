@@ -126,3 +126,8 @@ export interface MessageResult {
   status: 'sent' | 'failed' | 'unreachable' | 'unclaimed' | 'unknown';
   error?: string;
 }
+
+export interface Officer {
+  userId: string;
+  username: string;
+}

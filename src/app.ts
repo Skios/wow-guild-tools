@@ -8,12 +8,12 @@ import { rosterRoutes } from './controllers/roster.controller.js';
 import { telegramRoutes } from './controllers/telegram.controller.js';
 import { getEnv } from './config/env.js';
 import { sendError } from './lib/http-error.js';
-import { requireApiKey } from './plugins/auth.js';
+import { requireOfficer, supabaseTokenVerifier, type TokenVerifier } from './plugins/auth.js';
 
 const BODY_LIMIT_BYTES = 100 * 1024;
 const RATE_LIMIT_PER_MINUTE = 300;
 
-export async function buildApp(options: { logger?: boolean } = {}) {
+export async function buildApp(options: { logger?: boolean; verifyToken?: TokenVerifier } = {}) {
   const app = Fastify({
     logger: options.logger ?? false,
     bodyLimit: BODY_LIMIT_BYTES,
@@ -33,10 +33,11 @@ export async function buildApp(options: { logger?: boolean } = {}) {
 
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
-  // The webhook has its own secret. Officer routes need the API key, when one is configured.
+  // The webhook has its own secret. Everything else needs an officer's Supabase login.
   await app.register(telegramRoutes);
+  const verifyToken = options.verifyToken ?? supabaseTokenVerifier(getEnv().SUPABASE_URL);
   await app.register(async (officer) => {
-    if (getEnv().API_KEY) requireApiKey(officer);
+    requireOfficer(officer, verifyToken);
     await officer.register(adminRoutes);
     await officer.register(eventRoutes);
     await officer.register(profileRoutes);

@@ -6,7 +6,7 @@ const valid = {
   TELEGRAM_BOT_TOKEN: '123:abc',
   TELEGRAM_CHANNEL_ID: '-1001',
   TELEGRAM_WEBHOOK_SECRET: 'a_long_random_secret_1234',
-  API_KEY: 'a_long_random_api_key_1234',
+  SUPABASE_URL: 'https://abcdefgh.supabase.co',
 };
 
 describe('parseEnv', () => {
@@ -26,27 +26,33 @@ describe('parseEnv', () => {
     },
   );
 
-  test('the API key is optional: without it the admin is open and bound to localhost', () => {
-    const { API_KEY: _key, ...rest } = valid;
-    const env = parseEnv(rest);
-    expect(env.API_KEY).toBeUndefined();
-    expect(env.HOST).toBe('127.0.0.1');
-  });
-
-  test('an empty API_KEY counts as not set (common in .env files)', () => {
-    const env = parseEnv({ ...valid, API_KEY: '' });
-    expect(env.API_KEY).toBeUndefined();
-    expect(env.HOST).toBe('127.0.0.1');
-  });
-
-  test('a key that is set must be long enough to mean something', () => {
-    expect(() => parseEnv({ ...valid, API_KEY: 'short' })).toThrow('API_KEY');
-  });
-
-  test('with a key the server listens on all interfaces, unless HOST says otherwise', () => {
+  test('listens on all interfaces unless HOST says otherwise (every officer route needs a login)', () => {
     expect(parseEnv(valid).HOST).toBe('0.0.0.0');
-    expect(parseEnv({ ...valid, HOST: '10.0.0.5' }).HOST).toBe('10.0.0.5');
-    expect(parseEnv({ ...valid, API_KEY: '', HOST: '0.0.0.0' }).HOST).toBe('0.0.0.0');
+    expect(parseEnv({ ...valid, HOST: '127.0.0.1' }).HOST).toBe('127.0.0.1');
+  });
+
+  test('has no API key any more', () => {
+    expect(parseEnv({ ...valid, API_KEY: 'a_long_random_api_key_1234' })).not.toHaveProperty('API_KEY');
+  });
+
+  test.each([
+    'https://abcdefgh.supabase.co',
+    'https://abcdefgh.supabase.co/',
+    'http://127.0.0.1:54321',
+    'http://localhost:54321',
+  ])('accepts SUPABASE_URL %s', (url) => {
+    expect(parseEnv({ ...valid, SUPABASE_URL: url }).SUPABASE_URL).toBe(url);
+  });
+
+  test.each([
+    ['missing', undefined],
+    ['empty', ''],
+    ['not a URL', 'abcdefgh.supabase.co'],
+    ['plain http to a remote host', 'http://abcdefgh.supabase.co'],
+    ['another scheme', 'ftp://abcdefgh.supabase.co'],
+    ['javascript', 'javascript:alert(1)'],
+  ])('refuses a SUPABASE_URL that is %s', (_, url) => {
+    expect(() => parseEnv({ ...valid, SUPABASE_URL: url })).toThrow('SUPABASE_URL');
   });
 
   test('trusts proxy headers only when told to, with an explicit true/false', () => {

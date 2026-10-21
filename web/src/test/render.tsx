@@ -37,6 +37,7 @@ type Overrides = { [K in keyof Api]?: ReturnType<typeof vi.fn> };
 /** An Api whose every method is a vi.fn() resolving to something harmless. */
 export function fakeApi(overrides: Overrides = {}): Api {
   return {
+    me: vi.fn().mockResolvedValue({ userId: 'u1', username: 'cid' }),
     getMeta: vi.fn().mockResolvedValue(META),
     listEvents: vi.fn().mockResolvedValue([]),
     getEvent: vi.fn(),

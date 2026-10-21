@@ -8,8 +8,8 @@ const MAX_CHARACTERS = 200;
 const SearchQuerySchema = z.object({ search: z.string().trim().max(50).optional() });
 
 export async function adminRoutes(fastify: FastifyInstance) {
-  // Lets the admin site check a pasted API key before using it.
-  fastify.get('/auth/check', async () => ({ ok: true }));
+  // Who is signed in: lets the admin site greet the officer (and tells it the login is accepted).
+  fastify.get('/auth/me', async (request) => request.officer);
 
   // Single source of truth for class colours, labels and valid roles.
   fastify.get('/meta/wow', async () => ({

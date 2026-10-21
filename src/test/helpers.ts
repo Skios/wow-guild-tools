@@ -9,6 +9,16 @@ export async function buildRouteApp(...plugins: FastifyPluginAsync[]) {
   return app;
 }
 
+/** Like buildRouteApp, with the request already authenticated as an officer (what requireOfficer would set). */
+export async function buildOfficerRouteApp(...plugins: FastifyPluginAsync[]) {
+  const app = Fastify();
+  app.addHook('onRequest', async (request) => {
+    request.officer = { userId: uuid(1), username: 'Officer' };
+  });
+  for (const plugin of plugins) await app.register(plugin);
+  return app;
+}
+
 export const prismaError = (code: string) =>
   new Prisma.PrismaClientKnownRequestError(`internal detail for ${code}: table users_secret`, {
     code,

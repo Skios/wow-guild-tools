@@ -54,7 +54,7 @@ Code for M1-M3 exists but does not compile (`tsc` errors) and the publish/finali
 - **Validate**: tests for 401 without key, startup failure without env.
 
 ### Task 5: CI and PRD sync
-- **Action**: GitHub Actions workflow; update PRD milestone statuses; extend `scripts/verify-core.ts` to cover respond/finalize/publish.
+- **Action**: GitHub Actions workflow; update PRD milestone statuses; (verify-core.ts removed 2026-10-21: unit tests + local end-to-end checks cover it).
 - **Validate**: workflow green on a PR.
 
 ## Validation
@@ -62,7 +62,6 @@ Code for M1-M3 exists but does not compile (`tsc` errors) and the publish/finali
 npx tsc --noEmit
 npm run build
 npx vitest run --coverage
-npx tsx scripts/verify-core.ts
 ```
 
 ## Risks

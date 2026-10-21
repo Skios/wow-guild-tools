@@ -1,45 +1,60 @@
-# Plan: migration to Supabase (DB + Auth), 2 environments + local
+# Backlog: Vercel + Supabase, 2 environments + local
 
-Status: in progress (2026-10-21). Sources: ECC architect, database-reviewer, security-reviewer, docs research.
+Updated 2026-10-21. Rule 0: zero cost (free tiers only). Process per phase (ECC + ponytail):
+failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fix CRITICAL/HIGH -> commit.
 
 ## Target
-| | DB + Auth | API + bot | Web |
-|---|---|---|---|
-| local | Supabase CLI (`npx supabase start`, DB :54322, API :54321) | `npm run dev` | `vite` (proxy) |
-| dev | Supabase project `wgt-dev` | Fly app `wgt-dev` | served by the API (same origin) |
-| prod | Supabase project `wgt-prod` | Fly app `wgt-prod` | served by the API (same origin) |
-
-Free plan: exactly 2 projects; pause after 7 days idle; no backups -> own pg_dump cron.
+| | DB + Auth | API + bot + admin site |
+|---|---|---|
+| local | Supabase CLI (`npx supabase start`: DB :54322, Auth :54321, Studio :54323) | `npm run dev` + `vite` |
+| dev | Supabase `wgt-dev` (London) | Vercel Preview, branch `develop` |
+| prod | Supabase `wgt-prod` (Frankfurt) | Vercel Production, branch `main` |
 
 ## Decisions
-- Prisma stays the only migration tool (`migrate dev` only locally, `migrate deploy` in CI). Tables stay in `public`.
-- Connection: Supabase **session pooler** (port 5432, IPv4) as the single `DATABASE_URL` (long-running Node process). No `directUrl` needed.
-- Data API lock-down: migration enabling RLS (no policies) on every table + revoke from anon/authenticated (guarded for plain Postgres); disable Data API in dashboard.
-- Auth: Supabase Auth (Discord in hosted envs, email locally). Web uses supabase-js with `flowType: 'pkce'` (hash router). API verifies the bearer JWT with `jose` (`createRemoteJWKSet`, pinned ES256/RS256, issuer `${SUPABASE_URL}/auth/v1`, audience `authenticated`), maps `sub` -> `Identity('supabase', sub)` -> `User`, requires `User.isOfficer` from the DB on every request. 401/403 uniform.
-- Officer bootstrap: `scripts/grant-officer.ts <sub|discord id>` per environment; signing in grants nothing.
-- API_KEY and the 127.0.0.1 fallback are removed; auth is mandatory (no fail-open).
-- Web served by Fastify (`@fastify/static`), officer routes under `/api`: one origin, no CORS.
-- Local signing key: `supabase gen signing-key --algorithm ES256` -> `supabase/signing_keys.json` (gitignored) so the local JWKS behaves like prod.
-- Per environment: own Supabase project, Discord OAuth app, Telegram bot + webhook secret, Fly app + deploy token, GitHub Environment (prod needs approval, `main` only).
-- n8n: not in the core path; maybe later as an external API client for non-critical automations.
+- Prisma stays (schema, migrations, transactions). Tables in `public`, RLS on every table (test-enforced), Data API off.
+- Hosting: Vercel Hobby (Fastify zero-config, one function, region fra1). Hobby cron is daily only -> reminders via Supabase pg_cron.
+- Officer login: nickname + password on Supabase Auth, mapped to `<name>@wgt.invalid`. No real emails, no personal data.
+  Signup closed; accounts created/reset/revoked only by `npm run officer` (secret key, scripts only). Last officer can't be revoked.
+- API verifies Supabase JWTs (jose, ES256/RS256 pinned, issuer, audience, role, not anonymous) and reads `User.isOfficer` per request.
+- Players are reached only via chat platforms (Telegram now, Discord bot later).
+- Repo public; secrets only in Vercel / GitHub settings. Prod migrations need manual approval (GitHub Environments).
+- n8n, Graphify: not now.
 
-## Phases
-### 0a. Hardening (no accounts) — done (18b2c78)
-- `@fastify/rate-limit`, explicit `bodyLimit`, `trustProxy` setting, global error handler, generic 500 message (`src/lib/http-error.ts`).
-- Webhook secret check in `onRequest`.
-- `coverage/` untracked + gitignored.
-### 0b. Supabase local — done
-- `supabase` CLI as devDependency, `supabase init`, config.toml (email auth, site_url, redirect urls, signing_keys_path).
-- RLS lock-down migration; seed guard (refuse on supabase hosts without `ALLOW_SEED=1`).
-- README/.env.example for local Supabase.
-### 0c. API auth
-- `jose`; `requireOfficer` plugin + tests (wrong alg, none, wrong iss/aud, expired, anon role, missing sub, unknown user, non-officer).
-- `User.isOfficer` migration; `/auth/me`; `createdBy` from the officer; `grant-officer` script; drop API_KEY.
-### 0d. Web login
-- supabase-js (PKCE), auth gate, sign in/out, bearer token per request, 401 -> sign out, 403 -> "not an officer".
-- API serves `web/dist`, officer routes under `/api`.
-### 0e. Delivery
-- Dockerfile, fly.toml, `.github/workflows/deploy.yml` (migrate deploy -> fly deploy -> set Telegram webhook), backup cron (pg_dump), actions pinned.
-### 1. dev environment (needs accounts: Supabase, Fly, Discord app, dev bot)
-### 2. prod environment behind approval
-### 3. (optional) officer management UI
+## Done
+- 0a Hardening (18b2c78): rate limit, body limit, TRUST_PROXY, global error handler, webhook secret in onRequest.
+- 0b Local Supabase (9d8f172): CLI + config, ES256 key, RLS lock-down migration + test, seed guard.
+
+## In progress
+### 0c API login — done (review: no CRITICAL/HIGH; fixes applied)
+- [x] jose verifier + requireOfficer (tests: alg none/HS256, other project, expired, anon/service role, non-officer)
+- [x] SUPABASE_URL (https unless localhost), API_KEY removed, HOST 0.0.0.0, /auth/me, creator = signed-in officer
+- [x] User.isOfficer migration; officer service + `npm run officer` (create/reset/revoke/list)
+- [x] Signup closed, email provider on (password logins), min password length 16
+- [x] End-to-end check on local Supabase: login -> token -> /auth/me 200, non-officer 403, no token 401, anon key 401
+- [x] Docs, verify-core.ts removed, ecc:security-reviewer + ecc:code-reviewer, fixes, commit
+
+## Next
+### 0d Admin site login
+- [ ] @supabase/supabase-js, login page (name + password), sign out, officer name in the top bar
+- [ ] Bearer token on every call; 401 -> back to login; 403 -> "not an officer"
+- [ ] Tests: expired session, wrong password, network down, sign-out in another tab
+### 0e Vercel adaptation
+- [ ] Bot drafts (registration, late minutes) from memory to a DB table with expiry + RLS
+- [ ] API routes under /api; admin site built as static files in the same project (one origin, no CORS)
+- [ ] Prisma for serverless: transaction pooler (6543, pgbouncer=true) + directUrl, Vercel binary target
+- [ ] vercel.json: region fra1, build only main/develop; local build check with the Vercel CLI
+- [ ] Rate limiting on Vercel (security review HIGH): TRUST_PROXY=true behind Vercel; in-memory counters are per instance,
+      so add a free layer (Vercel Firewall rule if Hobby allows, else accept + stricter limit on 401/403)
+- [ ] Hosted Supabase settings per project: signup off, anonymous sign-ins off, min password 16, email provider ON,
+      auth rate limits; never set SUPABASE_SECRET_KEY in Vercel
+### 0f Free pipeline (GitHub Actions)
+- [ ] Push to develop: tests, then `prisma migrate deploy` on dev
+- [ ] Prod: migrations behind manual approval; actions pinned to commit SHAs
+### 0g Handover
+- [ ] Exact variable list for Vercel (Production / Preview-develop) and GitHub; import steps for the user
+- [ ] Create the first officer on dev with `npm run officer`
+
+## Later
+- M4 reminders: Supabase pg_cron -> protected endpoint
+- Discord bot for players who don't use Telegram (Identity already multi-platform)
+- Officer management page in the admin site (optional)

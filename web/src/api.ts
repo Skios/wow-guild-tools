@@ -1,5 +1,5 @@
 import type {
-  CharacterSummary, EventDetail, EventSummary, Meta, MessageResult, NewEvent, RosterCharacter, RosterEntryInput, RosterSelection,
+  CharacterSummary, EventDetail, EventSummary, Meta, MessageResult, NewEvent, Officer, RosterCharacter, RosterEntryInput, RosterSelection,
 } from './types';
 
 const BASE = '/api';
@@ -31,10 +31,20 @@ async function errorFrom(response: Response): Promise<ApiError> {
   return new ApiError(message, response.status, issues);
 }
 
-export function createApi({ fetchImpl = fetch }: { fetchImpl?: typeof fetch } = {}) {
+interface ApiOptions {
+  fetchImpl?: typeof fetch;
+  /** The current access token, asked for on every request so a refreshed one is used. */
+  getToken?: () => Promise<string | null>;
+  /** Called when the server rejects the token (expired or revoked). */
+  onUnauthorized?: () => void;
+}
+
+export function createApi({ fetchImpl = fetch, getToken = async () => null, onUnauthorized }: ApiOptions = {}) {
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers = new Headers(init.headers);
     if (init.body) headers.set('content-type', 'application/json');
+    const token = await getToken().catch(() => null);
+    if (token) headers.set('authorization', `Bearer ${token}`);
 
     let response: Response;
     try {
@@ -43,7 +53,11 @@ export function createApi({ fetchImpl = fetch }: { fetchImpl?: typeof fetch } = 
       throw new ApiError('Cannot reach the server. Is the API running?', 0);
     }
 
-    if (response.status === 401) throw new ApiError('The API is protected by a key, which this site does not send yet.', 401);
+    if (response.status === 401) {
+      onUnauthorized?.();
+      throw new ApiError('Your session has ended. Please sign in again.', 401);
+    }
+    if (response.status === 403) throw new ApiError('This account is not an officer.', 403);
     if (!response.ok) throw await errorFrom(response);
 
     try {
@@ -60,6 +74,7 @@ export function createApi({ fetchImpl = fetch }: { fetchImpl?: typeof fetch } = 
   const id = encodeURIComponent;
 
   return {
+    me: () => request<Officer>('/auth/me'),
     getMeta: () => request<Meta>('/meta/wow'),
     listEvents: () => request<EventSummary[]>(`/events?limit=${EVENTS_PAGE}`),
     getEvent: (eventId: string) => request<EventDetail>(`/events/${id(eventId)}`),
