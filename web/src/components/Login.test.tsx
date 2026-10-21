@@ -50,6 +50,7 @@ describe('Login', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent(/3 to 24 characters/);
     expect(nickname).toHaveAttribute('aria-invalid', 'true');
+    expect(nickname).toHaveAttribute('aria-describedby', screen.getByRole('alert').id);
     expect(auth.mocks.signInWithPassword).not.toHaveBeenCalled();
   });
 
@@ -65,12 +66,15 @@ describe('Login', () => {
     expect(screen.getByRole('alert').textContent).not.toMatch(/wgt|invalid login/i);
     expect(submit).toBeEnabled();
     expect(password).toHaveValue('nope');
+    expect(nickname).toHaveFocus();
   });
 
   test.each([
-    ['an auth error without a status (network down)', { status: 0, message: 'fetch failed' }],
-    ['a rate limit', { status: 429, message: 'too many' }],
-  ])('%s says to try again', async (_name, error) => {
+    ['a rate limit', { status: 429, message: 'too many' }, 'Too many attempts. Wait a minute and try again.'],
+    ['a status-less auth error (network down)', { status: 0, message: 'fetch failed' }, 'Could not reach the sign-in service. Try again in a moment.'],
+    ['an error without any status', { message: 'fetch failed' }, 'Could not reach the sign-in service. Try again in a moment.'],
+    ['a server error', { status: 500, message: 'boom' }, 'Sign-in failed. Try again.'],
+  ])('%s', async (_name, error, text) => {
     const auth = fakeAuth(null);
     auth.mocks.signInWithPassword.mockResolvedValueOnce({ data: { session: null }, error } as never);
     const { nickname, password, submit } = setup(auth);
@@ -78,7 +82,7 @@ describe('Login', () => {
     await userEvent.type(password, 'pw');
     await userEvent.click(submit);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach the sign-in service. Try again in a moment.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(text);
   });
 
   test('a thrown network failure is handled the same way', async () => {
@@ -107,7 +111,8 @@ describe('Login', () => {
 
     expect(submit).toBeDisabled();
     expect(submit).toHaveTextContent('Signing in…');
-    expect(nickname).toBeDisabled();
+    expect(nickname).toBeEnabled();
+    expect(password).toHaveFocus();
     expect(auth.mocks.signInWithPassword).toHaveBeenCalledTimes(1);
     finish({ data: {}, error: { status: 400, message: 'x' } });
     expect(await screen.findByRole('alert')).toBeInTheDocument();

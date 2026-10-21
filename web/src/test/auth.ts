@@ -2,7 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { vi } from 'vitest';
 import type { AuthClient } from '../auth';
 
-export const SESSION = { access_token: 'tok-1' } as Session;
+export const SESSION = { access_token: 'tok-1', user: { id: 'u1' } } as Session;
 
 type Listener = (event: string, session: Session | null) => void;
 
@@ -19,6 +19,8 @@ export function fakeAuth(initial: Session | null = SESSION) {
     getSession: vi.fn(async () => ({ data: { session }, error: null })),
     onAuthStateChange: vi.fn((l: Listener) => {
       listeners.add(l);
+      // Like supabase-js v2: the stored session is announced right after subscribing.
+      void Promise.resolve().then(() => { if (listeners.has(l)) l('INITIAL_SESSION', session); });
       return { data: { subscription: { unsubscribe: () => { listeners.delete(l); unsubscribe(); } } } };
     }),
     signInWithPassword: vi.fn(async () => {

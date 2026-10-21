@@ -72,7 +72,10 @@ function OfficerGate({ api, onSignOut }: { api: Api; onSignOut: () => void }) {
 
 function SignedIn({ auth, api: injected, fetchImpl }: { auth: AuthClient; api?: Api; fetchImpl?: typeof fetch }) {
   const session = useSession(auth);
-  const signOut = () => { void auth.signOut({ scope: 'local' }); };
+  // Global sign-out revokes the refresh token; if that cannot be done (offline), at least end it here.
+  const signOut = () => {
+    auth.signOut().then(({ error }) => error && auth.signOut({ scope: 'local' }), () => auth.signOut({ scope: 'local' }));
+  };
   const api = useMemo(
     () => injected ?? createApi({
       ...(fetchImpl && { fetchImpl }),
@@ -82,11 +85,11 @@ function SignedIn({ auth, api: injected, fetchImpl }: { auth: AuthClient; api?: 
     [auth, injected, fetchImpl],
   );
 
-  if (session === undefined) return <p className="muted page" role="status">Loading…</p>;
+  if (session === undefined) return <main className="page"><p className="muted" role="status">Loading…</p></main>;
   if (session === null) return <Login auth={auth} />;
   return (
     <ApiContext.Provider value={api}>
-      <OfficerGate api={api} onSignOut={signOut} />
+      <OfficerGate key={session.user.id} api={api} onSignOut={signOut} />
     </ApiContext.Provider>
   );
 }

@@ -1,13 +1,20 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { nicknameToEmail, type AuthClient } from '../auth';
 
 const WRONG_NICKNAME = 'Nicknames are 3 to 24 characters: letters, numbers, dot, dash or underscore.';
-const WRONG_CREDENTIALS = 'Wrong nickname or password.';
 const UNREACHABLE = 'Could not reach the sign-in service. Try again in a moment.';
+
+// Unknown nickname and wrong password get the same answer on purpose.
+function failureMessage(status: number | undefined): string {
+  if (status === 400) return 'Wrong nickname or password.';
+  if (status === 429) return 'Too many attempts. Wait a minute and try again.';
+  return status ? 'Sign-in failed. Try again.' : UNREACHABLE; // supabase-js reports network failures with status 0 or none
+}
 
 export function Login({ auth }: { auth: AuthClient }) {
   const [nickname, setNickname] = useState('');
   const [password, setPassword] = useState('');
+  const nicknameRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ text: string; field?: 'nickname' } | null>(null);
 
@@ -23,7 +30,7 @@ export function Login({ auth }: { auth: AuthClient }) {
     let failure: string | null = null;
     try {
       const { error: authError } = await auth.signInWithPassword({ email, password });
-      if (authError) failure = authError.status === 400 ? WRONG_CREDENTIALS : UNREACHABLE;
+      if (authError) failure = failureMessage(authError.status);
     } catch {
       failure = UNREACHABLE;
     }
@@ -31,6 +38,7 @@ export function Login({ auth }: { auth: AuthClient }) {
     if (failure) {
       setError({ text: failure });
       setBusy(false);
+      nicknameRef.current?.focus();
     }
   }
 
@@ -42,17 +50,18 @@ export function Login({ auth }: { auth: AuthClient }) {
         <div>
           <label htmlFor="nickname">Nickname</label>
           <input
-            id="nickname" value={nickname} onChange={e => setNickname(e.target.value)} disabled={busy}
+            id="nickname" value={nickname} onChange={e => setNickname(e.target.value)} ref={nicknameRef}
             autoComplete="username" autoCapitalize="none" spellCheck={false}
             aria-invalid={error?.field === 'nickname' || undefined}
+            aria-describedby={error?.field === 'nickname' ? 'login-error' : undefined}
           />
           <label htmlFor="password">Password</label>
           <input
-            id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} disabled={busy}
+            id="password" type="password" value={password} onChange={e => setPassword(e.target.value)}
             autoComplete="current-password"
           />
         </div>
-        {error && <p role="alert" className="error">{error.text}</p>}
+        {error && <p id="login-error" role="alert" className="error">{error.text}</p>}
         <button type="submit" className="primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
       </form>
     </main>

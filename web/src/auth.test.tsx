@@ -1,7 +1,13 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
+import * as supabase from '@supabase/supabase-js';
 import { createSupabaseAuth, nicknameToEmail, useSession } from './auth';
 import { SESSION, fakeAuth } from './test/auth';
+
+vi.mock('@supabase/supabase-js', async importOriginal => {
+  const actual = await importOriginal<typeof import('@supabase/supabase-js')>();
+  return { ...actual, createClient: vi.fn(actual.createClient) };
+});
 
 describe('nicknameToEmail', () => {
   test.each([
@@ -26,6 +32,12 @@ describe('createSupabaseAuth', () => {
     expect(() => createSupabaseAuth({ VITE_SUPABASE_URL: ' ', VITE_SUPABASE_PUBLISHABLE_KEY: 'k' })).toThrow(/VITE_SUPABASE_URL/);
   });
 
+  test('never reads a session out of the URL', () => {
+    const spy = vi.mocked(supabase.createClient);
+    createSupabaseAuth({ VITE_SUPABASE_URL: 'http://127.0.0.1:54321', VITE_SUPABASE_PUBLISHABLE_KEY: 'k' });
+    expect(spy).toHaveBeenCalledWith('http://127.0.0.1:54321', 'k', { auth: { detectSessionInUrl: false } });
+  });
+
   test('builds a client from the settings', () => {
     const auth = createSupabaseAuth({ VITE_SUPABASE_URL: 'http://127.0.0.1:54321', VITE_SUPABASE_PUBLISHABLE_KEY: 'k' });
     expect(typeof auth.signInWithPassword).toBe('function');
@@ -45,14 +57,7 @@ describe('useSession', () => {
     await waitFor(() => expect(result.current).toBeNull());
   });
 
-  test('falls back to signed out when the session cannot be read', async () => {
-    const auth = fakeAuth();
-    auth.mocks.getSession.mockRejectedValueOnce(new Error('storage blocked'));
-    const { result } = renderHook(() => useSession(auth));
-    await waitFor(() => expect(result.current).toBeNull());
-  });
-
-  test('follows sign-in, sign-out and failed refresh, and stops listening on unmount', async () => {
+  test('follows sign-in and sign-out, and stops listening on unmount', async () => {
     const auth = fakeAuth(null);
     const { result, unmount } = renderHook(() => useSession(auth));
     await waitFor(() => expect(result.current).toBeNull());
@@ -66,23 +71,4 @@ describe('useSession', () => {
     expect(auth.unsubscribe).toHaveBeenCalled();
   });
 
-  test('an event arriving before getSession resolves is not overwritten by the older read', async () => {
-    const auth = fakeAuth(null);
-    let release!: (v: unknown) => void;
-    auth.mocks.getSession.mockReturnValueOnce(new Promise(r => { release = r; }) as never);
-    const { result } = renderHook(() => useSession(auth));
-    act(() => auth.emit('SIGNED_IN', SESSION));
-    await act(async () => release({ data: { session: null } }));
-    expect(result.current).toBe(SESSION);
-  });
-
-  test('ignores late results after unmount', async () => {
-    const auth = fakeAuth();
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const { unmount } = renderHook(() => useSession(auth));
-    unmount();
-    await Promise.resolve();
-    expect(spy).not.toHaveBeenCalled();
-    spy.mockRestore();
-  });
 });

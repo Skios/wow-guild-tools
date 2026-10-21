@@ -118,6 +118,8 @@ p { margin: 0.4rem 0; }
 .topbar nav { display: flex; gap: 0.25rem; margin-right: auto; }
 .topbar nav a { color: var(--muted); text-decoration: none; padding: 0.35rem 0.7rem; border-radius: 8px; }
 .topbar nav a[aria-current='page'] { color: var(--text); background: var(--surface-2); }
+.login { max-width: 420px; margin-top: 12vh; }
+.login h1 { font-size: 1.4rem; font-family: var(--heading-font); }
 .page { max-width: 1180px; margin: 0 auto; padding: 1rem; }
 .stack { display: grid; gap: 1rem; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
