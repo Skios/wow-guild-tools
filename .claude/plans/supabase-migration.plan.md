@@ -34,24 +34,25 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 - [x] Docs, verify-core.ts removed, ecc:security-reviewer + ecc:code-reviewer, fixes, commit
 
 ## Next
-### 0d Admin site login
-- [ ] @supabase/supabase-js, login page (name + password), sign out, officer name in the top bar
-- [ ] Bearer token on every call; 401 -> back to login; 403 -> "not an officer"
-- [ ] Tests: expired session, wrong password, network down, sign-out in another tab
-### 0e Vercel adaptation
+### 0d Admin site login — done (1a4a4ef)
+- [x] @supabase/supabase-js, login page (name + password), sign out, officer name in the top bar
+- [x] Bearer token on every call; 401 -> back to login; 403 -> "not an officer"
+- [x] Tests: expired session, wrong password, network down, sign-out in another tab (react + security review)
+### 0e Vercel adaptation — done (code + security review applied)
 - [x] Bot drafts (registration, late minutes) from memory to a DB table with expiry + RLS
-- [ ] API routes under /api; admin site built as static files in the same project (one origin, no CORS)
-- [ ] Prisma for serverless: transaction pooler (6543, pgbouncer=true) + directUrl, Vercel binary target
-- [ ] vercel.json: region fra1, build only main/develop; local build check with the Vercel CLI
-- [ ] Rate limiting on Vercel (security review HIGH): TRUST_PROXY=true behind Vercel; in-memory counters are per instance,
+- [x] API routes under /api; api/index.ts handler + rewrite; admin site = web/dist (one origin, no CORS)
+- [x] Prisma for serverless: transaction pooler (6543, pgbouncer=true, connection_limit=3) + directUrl
+- [x] vercel.json: region fra1, deploy only main/develop, CSP/HSTS headers; handler checked with a local HTTP server
+- [ ] First real deploy: confirm req.url keeps /api/... after the rewrite, Prisma engine bundled
+- [x] TRUST_PROXY=true documented; Vercel Firewall rate rule in docs/deploy.md. Rate limiting on Vercel (security review HIGH): TRUST_PROXY=true behind Vercel; in-memory counters are per instance,
       so add a free layer (Vercel Firewall rule if Hobby allows, else accept + stricter limit on 401/403)
 - [ ] Hosted Supabase settings per project: signup off, anonymous sign-ins off, min password 16, email provider ON,
       auth rate limits; never set SUPABASE_SECRET_KEY in Vercel
-### 0f Free pipeline (GitHub Actions)
-- [ ] Push to develop: tests, then `prisma migrate deploy` on dev
-- [ ] Prod: migrations behind manual approval; actions pinned to commit SHAs
+### 0f Free pipeline (GitHub Actions) — done
+- [x] Push to develop/main: checks -> `prisma migrate deploy` -> Vercel Deploy Hook (Vercel never auto-deploys)
+- [x] Prod: GitHub Environment `prod` with required reviewer; actions pinned to commit SHAs
 ### 0g Handover
-- [ ] Exact variable list for Vercel (Production / Preview-develop) and GitHub; import steps for the user
+- [x] docs/deploy.md: Supabase, Telegram, Vercel, GitHub settings and variables (user does these)
 - [ ] Create the first officer on dev with `npm run officer`
 
 ## Later
