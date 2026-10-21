@@ -55,6 +55,14 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 - [x] docs/deploy.md: Supabase, Telegram, Vercel, GitHub settings and variables (user does these)
 - [ ] Create the first officer on dev with `npm run officer`
 
+## After the first deploy + test
+### Migrate the admin site to Next.js (user decision 2026-10-21)
+- Why: the site opens to the whole guild later and will grow with many features.
+- Keep the Fastify API as the engine (bot webhook, ~780 tests); Next.js replaces web/ (React components reused).
+- Decide: one Vercel project (Next + /api via a route handler that hands requests to Fastify) or two projects.
+- Hash routing -> App Router; supabase-js login unchanged; tests ported to the Next setup.
+- Phone app: PWA (installable, free) first; native app only if really needed (React Native/Expo, separate).
+
 ## Later
 - M4 reminders: Supabase pg_cron -> protected endpoint
 - Discord bot for players who don't use Telegram (Identity already multi-platform)
