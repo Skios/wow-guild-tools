@@ -88,3 +88,30 @@ describe('toRosterDto', () => {
     expect(toRosterDto({ ...base, userId: null, user: null } as never)).toMatchObject({ claimed: false, username: null });
   });
 });
+
+describe('RosterService.add', () => {
+  const entry = {
+    name: 'Brannock', realm: 'Silvermoon', class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK',
+    offSpecs: ['FURY', 'ARMS'], nickname: 'Matte',
+  } as const;
+
+  test('a new slot stores offspecs (in order) and the nickname', async () => {
+    prismaMock.character.findUnique.mockResolvedValue(null);
+    prismaMock.character.create.mockResolvedValue({ id: 'c1', userId: null, user: null, ...entry });
+
+    await new RosterService().add({ ...entry, offSpecs: [...entry.offSpecs] });
+
+    expect(prismaMock.character.create.mock.calls[0]![0].data).toMatchObject({ offSpecs: ['FURY', 'ARMS'], nickname: 'Matte', inRoster: true });
+  });
+
+  test('promoting a character a player registered keeps its owner but takes the officers\' specs and nickname', async () => {
+    prismaMock.character.findUnique.mockResolvedValue({ id: 'c1', inRoster: false, userId: 'u1' });
+    prismaMock.character.update.mockResolvedValue({ id: 'c1', userId: 'u1', user: { username: 'thrall' }, ...entry });
+
+    await new RosterService().add({ ...entry, offSpecs: [...entry.offSpecs] });
+
+    const { data } = prismaMock.character.update.mock.calls[0]![0];
+    expect(data).toEqual({ inRoster: true, class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK', offSpecs: ['FURY', 'ARMS'], nickname: 'Matte' });
+    expect(data).not.toHaveProperty('userId');
+  });
+});

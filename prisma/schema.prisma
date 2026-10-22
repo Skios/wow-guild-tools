@@ -87,6 +87,8 @@ model Character {
   class     WoWClass   @default(WARRIOR)
   role      WoWRole    @default(DPS)
   spec      String?    // validated against the class in src/domain/wow.ts
+  offSpecs  String[]   @default([]) // other specs it can play, in order of preference
+  nickname  String?    // what the guild calls the player; the same nickname groups someone's characters
   isMain    Boolean    @default(true)
   inRoster  Boolean    @default(false) // part of the raid roster officers maintain
   responses Response[]

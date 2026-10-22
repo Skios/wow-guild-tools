@@ -32,6 +32,11 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
 - **Appearance** menu: four themes (Midnight, Parchment, Void, Daylight) and three icon styles (game, line, none).
 - Tests: `cd web && npm test`.
 - `npx tsx scripts/seed-dev.ts` loads a demo roster and raid into a local database.
+- **Roster import (one-time)**: `npm run roster:import:dev -- roster.csv` previews, `--apply` adds. Header row with
+  `Nome;Classe;Spec;Offspec;Reame;Nickname` (or the English names, `;` or `,`); Offspec in order, e.g. `Fury/Arms`.
+  A missing realm is taken from the guild (Blaze of Glory, Nemesis) on Raider.IO; ambiguous or unknown names are
+  reported, never guessed. Characters already in the roster are skipped.
+- Characters have a main spec, ordered offspecs (2nd, 3rd...) and an optional nickname (groups a player's characters).
 - Class / spec icons live in `web/public/icons` (Blizzard assets); re-download with `scripts/fetch-icons.sh`.
 
 ## Authentication

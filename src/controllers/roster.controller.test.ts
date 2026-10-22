@@ -45,7 +45,7 @@ describe('POST /roster', () => {
 
     expect(res.statusCode).toBe(201);
     expect(prismaMock.character.create.mock.calls[0]![0].data).toEqual({
-      ...entry, role: 'TANK', userId: null, isMain: false, inRoster: true,
+      ...entry, role: 'TANK', offSpecs: [], nickname: null, userId: null, isMain: false, inRoster: true,
     });
   });
 

@@ -39,7 +39,7 @@ export class RosterService {
     if (existing) {
       const promoted = await prisma.character.update({
         where: { id: existing.id },
-        data: { inRoster: true, class: entry.class, spec: entry.spec, role: entry.role },
+        data: { inRoster: true, class: entry.class, spec: entry.spec, role: entry.role, offSpecs: entry.offSpecs, nickname: entry.nickname },
         include: withOwner,
       });
       return { created: false, character: toRosterDto(promoted) };

@@ -13,7 +13,9 @@
     "supabase:keys": "test -f supabase/signing_keys.json || (echo '[]' > supabase/signing_keys.json && supabase gen signing-key --algorithm ES256 --append)",
     "officer": "node --env-file-if-exists=.env --import tsx scripts/officer.ts",
     "vercel-build": "prisma generate && npm --prefix web run build",
-    "officer:dev": "node --env-file=.env.dev --import tsx scripts/officer.ts"
+    "officer:dev": "node --env-file=.env.dev --import tsx scripts/officer.ts",
+    "roster:import": "node --env-file-if-exists=.env --import tsx scripts/roster-import.ts",
+    "roster:import:dev": "node --env-file=.env.dev --import tsx scripts/roster-import.ts"
   },
   "keywords": [],
   "author": "",
