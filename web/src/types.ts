@@ -30,6 +30,9 @@ export interface CharacterSummary {
   role: RoleId;
   isMain: boolean;
   username: string | null;
+  /** Not sent by every endpoint. */
+  offSpecs?: string[];
+  nickname?: string | null;
 }
 
 export interface RosterCharacter {
@@ -41,6 +44,9 @@ export interface RosterCharacter {
   role: RoleId;
   claimed: boolean;
   username: string | null;
+  /** Spec ids of the same class, ordered 2nd, 3rd...; never the main spec. */
+  offSpecs: string[];
+  nickname: string | null;
 }
 
 export interface RosterEntryInput {
@@ -48,6 +54,8 @@ export interface RosterEntryInput {
   realm: string;
   class: string;
   spec: string;
+  offSpecs: string[];
+  nickname: string | null;
 }
 
 export interface ResponseCounts {
@@ -85,6 +93,8 @@ export interface EventResponse {
     role: RoleId;
     isMain: boolean;
     user: { username: string } | null;
+    offSpecs: string[];
+    nickname: string | null;
   };
 }
 
@@ -97,6 +107,8 @@ export interface NoAnswerEntry {
   spec: string | null;
   role: RoleId;
   username: string | null;
+  offSpecs: string[];
+  nickname: string | null;
   /** Whether the bot can write to this person privately. */
   reachable: boolean;
 }

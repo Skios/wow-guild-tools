@@ -78,12 +78,12 @@ export const response = (
   arrivalTime: string | null = null,
 ): EventResponse => ({
   id: `r-${name}`, characterId: `c-${name}`, status, isConfirmed, arrivalTime,
-  character: { id: `c-${name}`, name, realm: 'Silvermoon', class: cls, spec: null, role, isMain: true, user: { username: `${name.toLowerCase()}_player` } },
+  character: { id: `c-${name}`, name, realm: 'Silvermoon', class: cls, spec: null, role, isMain: true, user: { username: `${name.toLowerCase()}_player` }, offSpecs: [], nickname: null },
 });
 
 export const noAnswer = (name: string, over: Partial<NoAnswerEntry> = {}): NoAnswerEntry => ({
   id: `c-${name}`, name, realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', role: 'RANGED_DPS',
-  username: `${name.toLowerCase()}_player`, reachable: true, ...over,
+  username: `${name.toLowerCase()}_player`, offSpecs: [], nickname: null, reachable: true, ...over,
 });
 
 export const eventDetail = (over: Partial<EventDetail> = {}): EventDetail => ({

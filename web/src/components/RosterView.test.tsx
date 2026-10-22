@@ -9,7 +9,7 @@ import { RosterView } from './RosterView';
 afterEach(() => vi.restoreAllMocks());
 
 const member = (name: string, over: Partial<RosterCharacter> = {}): RosterCharacter => ({
-  id: `c-${name}`, name, realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', role: 'RANGED_DPS', claimed: false, username: null, ...over,
+  id: `c-${name}`, name, realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', role: 'RANGED_DPS', claimed: false, username: null, offSpecs: [], nickname: null, ...over,
 });
 
 const setup = (people = [member('Jaina')], over = {}) => {
@@ -88,7 +88,7 @@ describe('adding a character', () => {
     await fill(addForm(), { name: 'Brannock', realm: 'Silvermoon', cls: 'WARRIOR', spec: 'PROTECTION' });
     await userEvent.click(within(addForm()).getByRole('button', { name: 'Add to roster' }));
 
-    await waitFor(() => expect(api.addToRoster).toHaveBeenCalledWith({ name: 'Brannock', realm: 'Silvermoon', class: 'WARRIOR', spec: 'PROTECTION' }));
+    await waitFor(() => expect(api.addToRoster).toHaveBeenCalledWith({ name: 'Brannock', realm: 'Silvermoon', class: 'WARRIOR', spec: 'PROTECTION', offSpecs: [], nickname: null }));
     expect(await screen.findByText('Brannock added to the roster.')).toBeInTheDocument();
     await waitFor(() => expect(api.listRoster).toHaveBeenCalledTimes(2));
     expect(within(addForm()).getByLabelText('Character')).toHaveValue('');
@@ -187,7 +187,7 @@ describe('editing', () => {
     await userEvent.selectOptions(within(form).getByLabelText('Specialization'), 'FROST');
     await userEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
 
-    await waitFor(() => expect(api.updateRosterEntry).toHaveBeenCalledWith('c-Jaina', { name: 'Jaina', realm: 'Silvermoon', class: 'MAGE', spec: 'FROST' }));
+    await waitFor(() => expect(api.updateRosterEntry).toHaveBeenCalledWith('c-Jaina', { name: 'Jaina', realm: 'Silvermoon', class: 'MAGE', spec: 'FROST', offSpecs: [], nickname: null }));
     expect(await screen.findByText('Jaina updated.')).toBeInTheDocument();
   });
 
@@ -278,5 +278,234 @@ describe('removing and releasing', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Character is not in the roster');
     expect(screen.getByText('Jaina')).toBeInTheDocument();
+  });
+});
+
+describe('nickname and off-specs in the list', () => {
+  test('the nickname sits next to the name and the off-spec icons follow the main spec in order', async () => {
+    setup([member('Brannock', { class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK', nickname: 'Matte', offSpecs: ['FURY', 'ARMS'] })]);
+
+    await screen.findByText('Brannock');
+    const row = rowOf('Brannock');
+    expect(within(row).getByText(/Matte/)).toHaveTextContent('· Matte');
+    expect(within(row).getByRole('group', { name: 'Off-specs: Fury (Melee DPS), Arms (Melee DPS)' })).toBeInTheDocument();
+    const icons = row.querySelectorAll('.role-cell > :is(img, svg, .offspecs)');
+    expect(icons[0]).toHaveAccessibleName('Protection Warrior');
+    expect(icons[1]).toHaveClass('offspecs');
+  });
+
+  test('an unknown off-spec from a newer server does not break the row', async () => {
+    setup([member('Jaina', { offSpecs: ['NEWSPEC'] })]);
+    await screen.findByText('Jaina');
+    expect(within(rowOf('Jaina')).getByRole('group', { name: 'Off-specs: NEWSPEC' })).toHaveTextContent('?');
+  });
+});
+
+describe('the nickname and off-spec fields', () => {
+  const offSpecList = (form: HTMLElement) => within(within(form).getByRole('list', { name: 'Off-specs in order' })).queryAllByRole('listitem').map(li => li.textContent);
+  const offSpecOptions = (form: HTMLElement) =>
+    within(within(form).getByLabelText('Add an off-spec')).getAllByRole('option').map(o => o.textContent);
+  const announcement = (form: HTMLElement) => form.querySelector('[aria-live="polite"]')!.textContent;
+  const addOffSpec = (form: HTMLElement, id: string) => userEvent.selectOptions(within(form).getByLabelText('Add an off-spec'), id);
+  const fillWarrior = (form: HTMLElement) => fill(form, { name: 'Brannock', realm: 'Silvermoon', cls: 'WARRIOR', spec: 'PROTECTION' });
+
+  test('offers the other specs of the class with their role, and adds them in order', async () => {
+    setup([]);
+    await screen.findByText(/roster is empty/);
+    const form = addForm();
+    expect(within(form).getByLabelText('Add an off-spec')).toBeDisabled();
+
+    await fillWarrior(form);
+    expect(offSpecOptions(form)).toEqual(['Add an off-spec…', 'Arms (Melee DPS)', 'Fury (Melee DPS)']);
+
+    await addOffSpec(form, 'FURY');
+    await addOffSpec(form, 'ARMS');
+    expect(offSpecList(form)[0]).toContain('#2');
+    expect(offSpecList(form)[1]).toContain('#3');
+    expect(offSpecList(form)[0]).toContain('Fury (Melee DPS)');
+    expect(offSpecList(form)[1]).toContain('Arms (Melee DPS)');
+    expect(within(form).getByLabelText('Add an off-spec')).toBeDisabled();
+  });
+
+  test('moves an off-spec up and down, and removes one', async () => {
+    setup([]);
+    await screen.findByText(/roster is empty/);
+    const form = addForm();
+    await fillWarrior(form);
+    await addOffSpec(form, 'FURY');
+    await addOffSpec(form, 'ARMS');
+
+    expect(within(form).getByRole('button', { name: 'Move Fury up' })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(form).getByRole('button', { name: 'Move Arms down' })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(form).getByRole('button', { name: 'Move Fury down' })).not.toHaveAttribute('aria-disabled');
+
+    await userEvent.click(within(form).getByRole('button', { name: 'Move Arms up' }));
+    expect(offSpecList(form)[0]).toContain('Arms');
+    await userEvent.click(within(form).getByRole('button', { name: 'Move Arms down' }));
+    expect(offSpecList(form)[0]).toContain('Fury');
+
+    await userEvent.click(within(form).getByRole('button', { name: 'Remove Fury from off-specs' }));
+    expect(offSpecList(form)).toHaveLength(1);
+    expect(offSpecList(form)[0]).toContain('#2');
+    expect(offSpecOptions(form)).toContain('Fury (Melee DPS)');
+  });
+
+  test('changing the class clears the off-specs; changing the main spec drops it from them', async () => {
+    setup([]);
+    await screen.findByText(/roster is empty/);
+    const form = addForm();
+    await fillWarrior(form);
+    await addOffSpec(form, 'FURY');
+    await addOffSpec(form, 'ARMS');
+
+    await userEvent.selectOptions(within(form).getByLabelText('Specialization'), 'FURY');
+    expect(offSpecList(form)).toHaveLength(1);
+    expect(offSpecList(form)[0]).toContain('#2');
+    expect(offSpecList(form)[0]).toContain('Arms');
+
+    await userEvent.selectOptions(within(form).getByLabelText('Class'), 'MAGE');
+    expect(offSpecList(form)).toEqual([]);
+    expect(within(form).getByLabelText('Add an off-spec')).toBeEnabled();
+  });
+
+  test('sends the off-specs in order and the trimmed nickname, then clears them', async () => {
+    const api = setup([]);
+    await screen.findByText(/roster is empty/);
+    const form = addForm();
+    await fillWarrior(form);
+    await addOffSpec(form, 'ARMS');
+    await addOffSpec(form, 'FURY');
+    await userEvent.type(within(form).getByLabelText('Nickname (optional)'), '  Matte ');
+    await userEvent.click(within(form).getByRole('button', { name: 'Add to roster' }));
+
+    await waitFor(() => expect(api.addToRoster).toHaveBeenCalledWith({
+      name: 'Brannock', realm: 'Silvermoon', class: 'WARRIOR', spec: 'PROTECTION', offSpecs: ['ARMS', 'FURY'], nickname: 'Matte',
+    }));
+    await waitFor(() => expect(within(form).getByLabelText('Nickname (optional)')).toHaveValue(''));
+    expect(offSpecList(form)).toEqual([]);
+  });
+
+  test('a bad nickname is flagged and nothing is sent', async () => {
+    const api = setup([]);
+    await screen.findByText(/roster is empty/);
+    const form = addForm();
+    await fillWarrior(form);
+    await userEvent.type(within(form).getByLabelText('Nickname (optional)'), 'Matte!');
+    await userEvent.click(within(form).getByRole('button', { name: 'Add to roster' }));
+
+    expect(within(form).getByLabelText('Nickname (optional)')).toHaveAttribute('aria-invalid', 'true');
+    expect(within(form).getByText(/Up to 24/)).toBeInTheDocument();
+    expect(api.addToRoster).not.toHaveBeenCalled();
+  });
+
+  test('editing starts from the saved off-specs and nickname', async () => {
+    const api = setup([member('Brannock', { class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK', nickname: 'Matte', offSpecs: ['FURY'] })]);
+    await screen.findByText('Brannock');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Brannock' }));
+    const form = screen.getByRole('form', { name: 'Save changes' });
+
+    expect(within(form).getByLabelText('Nickname (optional)')).toHaveValue('Matte');
+    expect(offSpecList(form)[0]).toContain('Fury');
+    await userEvent.click(within(form).getByRole('button', { name: 'Remove Fury from off-specs' }));
+    await userEvent.clear(within(form).getByLabelText('Nickname (optional)'));
+    await userEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(api.updateRosterEntry).toHaveBeenCalledWith('c-Brannock', {
+      name: 'Brannock', realm: 'Silvermoon', class: 'WARRIOR', spec: 'PROTECTION', offSpecs: [], nickname: null,
+    }));
+  });
+
+  test('an unknown saved off-spec is shown, blocks saving, and can be removed', async () => {
+    const api = setup([member('Jaina', { offSpecs: ['NEWSPEC'] })]);
+    await screen.findByText('Jaina');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Jaina' }));
+    const form = screen.getByRole('form', { name: 'Save changes' });
+
+    expect(offSpecList(form)[0]).toContain('NEWSPEC');
+    await userEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
+    expect(within(form).getByText(/Off-specs must be different Mage/)).toBeInTheDocument();
+    expect(api.updateRosterEntry).not.toHaveBeenCalled();
+
+    await userEvent.click(within(form).getByRole('button', { name: 'Remove NEWSPEC from off-specs' }));
+    await userEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.updateRosterEntry).toHaveBeenCalled());
+  });
+
+  test('edge buttons stay focusable and do nothing', async () => {
+    setup([]);
+    await screen.findByText(/roster is empty/);
+    const form = addForm();
+    await fillWarrior(form);
+    await addOffSpec(form, 'FURY');
+    await addOffSpec(form, 'ARMS');
+
+    const up = within(form).getByRole('button', { name: 'Move Fury up' });
+    await userEvent.click(up);
+    expect(up).toHaveFocus();
+    expect(offSpecList(form)[0]).toContain('Fury');
+    expect(announcement(form)).toBe('Added Arms');
+  });
+
+  test('focus stays on the moved item', async () => {
+    setup([]);
+    await screen.findByText(/roster is empty/);
+    const form = addForm();
+    await fillWarrior(form);
+    await addOffSpec(form, 'FURY');
+    await addOffSpec(form, 'ARMS');
+
+    await userEvent.click(within(form).getByRole('button', { name: 'Move Arms up' }));
+    expect(within(form).getByRole('button', { name: 'Move Arms up' })).toHaveFocus();
+    await userEvent.click(within(form).getByRole('button', { name: 'Move Arms down' }));
+    expect(within(form).getByRole('button', { name: 'Move Arms down' })).toHaveFocus();
+  });
+
+  test('after removing, focus goes to the next remove button, else the previous, else the add select', async () => {
+    setup([]);
+    await screen.findByText(/roster is empty/);
+    const form = addForm();
+    await fillWarrior(form);
+    await addOffSpec(form, 'FURY');
+    await addOffSpec(form, 'ARMS');
+    const remove = (name: string) => within(form).getByRole('button', { name: `Remove ${name} from off-specs` });
+
+    await userEvent.click(remove('Fury'));
+    expect(remove('Arms')).toHaveFocus();
+    await addOffSpec(form, 'FURY');
+    await userEvent.click(remove('Fury')); // last item: previous one
+    expect(remove('Arms')).toHaveFocus();
+    await userEvent.click(remove('Arms')); // only item: back to the select
+    expect(within(form).getByLabelText('Add an off-spec')).toHaveFocus();
+  });
+
+  test('announces what happened in a polite live region', async () => {
+    setup([]);
+    await screen.findByText(/roster is empty/);
+    const form = addForm();
+    await fillWarrior(form);
+    expect(within(form).getByText('', { selector: '[aria-live="polite"]' })).toBeInTheDocument();
+
+    await addOffSpec(form, 'FURY');
+    expect(announcement(form)).toBe('Added Fury');
+    await addOffSpec(form, 'ARMS');
+    await userEvent.click(within(form).getByRole('button', { name: 'Move Arms up' }));
+    expect(announcement(form)).toBe('Moved Arms up');
+    await userEvent.click(within(form).getByRole('button', { name: 'Move Arms down' }));
+    expect(announcement(form)).toBe('Moved Arms down');
+    await userEvent.click(within(form).getByRole('button', { name: 'Remove Fury from off-specs' }));
+    expect(announcement(form)).toBe('Removed Fury');
+  });
+
+  test('an off-spec error is tied to the add select, not flagged on the fieldset', async () => {
+    setup([member('Jaina', { offSpecs: ['NEWSPEC'] })]);
+    await screen.findByText('Jaina');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Jaina' }));
+    const form = screen.getByRole('form', { name: 'Save changes' });
+    await userEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
+
+    const select = within(form).getByLabelText('Add an off-spec');
+    expect(select).toHaveAttribute('aria-invalid', 'true');
+    expect(select).toHaveAccessibleDescription(/Off-specs must be different/);
+    expect(within(form).getByRole('group', { name: /Off-specs, in order/ })).not.toHaveAttribute('aria-invalid');
   });
 });

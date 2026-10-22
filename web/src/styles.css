@@ -173,6 +173,15 @@ button.danger { background: var(--danger); border-color: var(--danger); color: #
 .role-dps { color: var(--role-dps); }
 .role-ranged_dps { color: var(--role-ranged); }
 .spec-icon { flex: none; border-radius: 6px; border: 1px solid var(--border); object-fit: cover; }
+.offspecs { display: inline-flex; align-items: center; gap: 0.2rem; }
+.offspec { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; opacity: 0.85; }
+.offspec .spec-icon { border-radius: 4px; }
+.offspec .role-icon { width: 16px; height: 16px; }
+.nickname { font-size: 0.85rem; }
+.offspec-list { list-style: none; margin: 0.4rem 0; padding: 0; display: grid; gap: 0.3rem; }
+.offspec-list li { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.offspec-list .ordinal { min-width: 2.2rem; }
+.offspec-picker { max-width: 22rem; }
 .character-name { font-weight: 700; text-shadow: 0 0 1px rgba(0, 0, 0, 0.6); }
 /* Light themes: class colours such as Priest white or Rogue yellow need a dark chip to stay readable. */
 :root[data-theme='parchment'] .character-name,

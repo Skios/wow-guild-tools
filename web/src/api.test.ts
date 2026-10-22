@@ -88,7 +88,7 @@ describe('requests', () => {
   });
 
   test('manages the raid roster', async () => {
-    const entry = { name: 'Brannock', realm: 'Silvermoon', class: 'WARRIOR', spec: 'PROTECTION' };
+    const entry = { name: 'Brannock', realm: 'Silvermoon', class: 'WARRIOR', spec: 'PROTECTION', offSpecs: ['FURY'], nickname: 'Matte' };
 
     await api().listRoster();
     await api().addToRoster(entry);

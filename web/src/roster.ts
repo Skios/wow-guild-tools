@@ -19,6 +19,8 @@ export interface RosterRow {
   spec: string | null;
   role: RoleId;
   username: string | null;
+  offSpecs: string[];
+  nickname: string | null;
   status: ResponseStatus;
   isConfirmed: boolean;
   /** Only meaningful while status is LATE; null = not said. */
@@ -49,6 +51,8 @@ export function rowsFromResponses(responses: EventResponse[], startTime: string)
       spec: r.character.spec,
       role: r.character.role,
       username: r.character.user?.username ?? null,
+      offSpecs: r.character.offSpecs,
+      nickname: r.character.nickname,
       status: r.status,
       isConfirmed: r.isConfirmed,
       lateMinutes,
@@ -97,6 +101,8 @@ export function addCharacter(
     spec: character.spec,
     role: character.role,
     username: character.username,
+    offSpecs: character.offSpecs ?? [],
+    nickname: character.nickname ?? null,
     status,
     isConfirmed: false,
     lateMinutes: null,

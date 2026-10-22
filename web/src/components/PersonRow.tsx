@@ -2,6 +2,7 @@ import { formatTime, arrivalTime } from '../format';
 import { MAX_LATE_MINUTES, STATUSES, type RosterRow } from '../roster';
 import type { ResponseStatus } from '../types';
 import { CharacterName } from './CharacterName';
+import { OffSpecs } from './OffSpecs';
 import { SpecIcon } from './SpecIcon';
 
 const STATUS_LABEL: Record<ResponseStatus, string> = { IN: 'In', LATE: 'Late', TENTATIVE: 'Tentative', BENCH: 'Bench', OUT: 'Out' };
@@ -30,8 +31,9 @@ export function PersonRow({ row, eventStart, disabled, onStatus, onConfirm, onLa
         />
       )}
       <SpecIcon classId={row.class} spec={row.spec} role={row.role} />
+      <OffSpecs classId={row.class} offSpecs={row.offSpecs} />
       <span className="person-name">
-        <CharacterName name={row.name} classId={row.class} />
+        <CharacterName name={row.name} classId={row.class} nickname={row.nickname} />
         {late && row.lateMinutes !== null && <span className="muted"> ({formatTime(arrivalTime(eventStart, row.lateMinutes))})</span>}
         {row.username && <span className="muted person-user"> @{row.username}</span>}
       </span>

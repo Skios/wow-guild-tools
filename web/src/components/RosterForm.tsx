@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react';
-import { useMeta } from '../context';
-import { validateRosterEntry, type RosterFormField, type RosterFormValues } from '../rosterForm';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useMeta, useSpecInfo } from '../context';
+import { moveItem, validateRosterEntry, type RosterFormField, type RosterFormValues } from '../rosterForm';
 import type { RosterEntryInput } from '../types';
 import { errorMessage } from '../useAsync';
 
@@ -21,9 +21,45 @@ export function RosterForm({ initial, submitLabel, onSubmit, onCancel, keepAfter
   const [serverError, setServerError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const specs = meta.classes.find(c => c.id === values.class)?.specs ?? [];
+  const specInfo = useSpecInfo(values.class);
+  const addable = specs.filter(s => s.id !== values.spec && !values.offSpecs.includes(s.id));
 
-  const set = (field: RosterFormField) => (e: { target: { value: string } }) =>
-    setValues(v => ({ ...v, [field]: e.target.value, ...(field === 'class' && { spec: '' }) }));
+  const set = (field: Exclude<RosterFormField, 'offSpecs'>) => (e: { target: { value: string } }) =>
+    setValues(v => ({
+      ...v,
+      [field]: e.target.value,
+      ...(field === 'class' && { spec: '', offSpecs: [] }),
+      ...(field === 'spec' && { offSpecs: v.offSpecs.filter(id => id !== e.target.value) }),
+    }));
+  const setOffSpecs = (change: (list: string[]) => string[]) => setValues(v => ({ ...v, offSpecs: change(v.offSpecs) }));
+
+  // Announced to screen readers, and where focus goes once the list has re-rendered.
+  const [announcement, setAnnouncement] = useState('');
+  const focusNext = useRef<(() => void) | null>(null);
+  const buttons = useRef<Record<string, HTMLElement | null>>({});
+  const addSelect = useRef<HTMLSelectElement>(null);
+  const track = (key: string) => (el: HTMLElement | null) => { buttons.current[key] = el; };
+  useEffect(() => { focusNext.current?.(); focusNext.current = null; }, [values.offSpecs]);
+
+  const addOffSpec = (id: string) => {
+    setOffSpecs(l => [...l, id]);
+    setAnnouncement(`Added ${specInfo(id).label}`);
+  };
+  const moveOffSpec = (i: number, direction: -1 | 1) => {
+    const id = values.offSpecs[i]!;
+    if (!values.offSpecs[i + direction]) return;
+    const way = direction < 0 ? 'up' : 'down';
+    setOffSpecs(l => moveItem(l, i, direction));
+    setAnnouncement(`Moved ${specInfo(id).label} ${way}`);
+    focusNext.current = () => buttons.current[`${way}-${id}`]?.focus();
+  };
+  const removeOffSpec = (i: number) => {
+    const id = values.offSpecs[i]!;
+    const neighbour = values.offSpecs[i + 1] ?? values.offSpecs[i - 1];
+    setOffSpecs(l => l.filter(x => x !== id));
+    setAnnouncement(`Removed ${specInfo(id).label}`);
+    focusNext.current = () => (neighbour ? buttons.current[`remove-${neighbour}`] : addSelect.current)?.focus();
+  };
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -82,6 +118,43 @@ export function RosterForm({ initial, submitLabel, onSubmit, onCancel, keepAfter
           </select>
           {fieldError('spec')}
         </div>
+      </div>
+      <div className="grid">
+        <div>
+          <label htmlFor="roster-nickname">Nickname (optional)</label>
+          <input id="roster-nickname" value={values.nickname} onChange={set('nickname')} autoComplete="off" {...field('nickname')} />
+          {fieldError('nickname')}
+        </div>
+        <fieldset className="offspec-picker" aria-describedby={errors.offSpecs ? 'roster-offSpecs-error' : undefined}>
+          <legend>Off-specs, in order of preference</legend>
+          <ol className="offspec-list" aria-label="Off-specs in order">
+            {values.offSpecs.map((id, i) => {
+              const { label, roleLabel } = specInfo(id);
+              return (
+                <li key={id}>
+                  <span className="ordinal">#{i + 2}</span>
+                  <span>{label}{roleLabel && ` (${roleLabel})`}</span>
+                  <button type="button" ref={track(`up-${id}`)} aria-label={`Move ${label} up`} aria-disabled={i === 0 || undefined} onClick={() => moveOffSpec(i, -1)}>↑</button>
+                  <button type="button" ref={track(`down-${id}`)} aria-label={`Move ${label} down`} aria-disabled={i === values.offSpecs.length - 1 || undefined} onClick={() => moveOffSpec(i, 1)}>↓</button>
+                  <button type="button" ref={track(`remove-${id}`)} aria-label={`Remove ${label} from off-specs`} onClick={() => removeOffSpec(i)}>Remove</button>
+                </li>
+              );
+            })}
+          </ol>
+          <select
+            ref={addSelect}
+            aria-label="Add an off-spec"
+            value=""
+            disabled={addable.length === 0}
+            onChange={e => e.target.value && addOffSpec(e.target.value)}
+            {...field('offSpecs')}
+          >
+            <option value="">Add an off-spec…</option>
+            {addable.map(s => <option key={s.id} value={s.id}>{specInfo(s.id).label} ({specInfo(s.id).roleLabel})</option>)}
+          </select>
+          {fieldError('offSpecs')}
+          <p className="sr-only" aria-live="polite">{announcement}</p>
+        </fieldset>
       </div>
       {serverError && <p role="alert" className="error">{serverError}</p>}
       <div className="actions">

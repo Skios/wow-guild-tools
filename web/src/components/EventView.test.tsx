@@ -616,3 +616,34 @@ describe('published event', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/locked/);
   });
 });
+
+describe('nickname and off-specs on the board', () => {
+  test('an accepted player shows the nickname and ordered off-spec icons after the main spec', async () => {
+    const tom = response('Tom', 'TANK', 'IN', true, 'WARRIOR');
+    tom.character.spec = 'PROTECTION';
+    tom.character.nickname = 'Matte';
+    tom.character.offSpecs = ['FURY', 'ARMS'];
+    setup(eventDetail({ responses: [tom], noAnswer: [] }));
+    await ready();
+
+    const row = within(region('Tank (1)')).getByText('Tom').closest('li')!;
+    expect(within(row).getByText(/Matte/)).toHaveTextContent('· Matte');
+    expect(within(row).getByRole('img', { name: 'Protection Warrior' })).toBeInTheDocument();
+    expect(within(row).getByRole('group', { name: 'Off-specs: Fury (Melee DPS), Arms (Melee DPS)' })).toBeInTheDocument();
+  });
+
+  test('a player without them looks as before', async () => {
+    setup(eventDetail({ responses: [response('Zed', 'RANGED_DPS', 'IN', true)], noAnswer: [] }));
+    await ready();
+    expect(within(screen.getByText('Zed').closest('li')!).queryByText(/·/)).not.toBeInTheDocument();
+  });
+
+  test('the no-answer panel shows them too, and an unknown spec does not crash', async () => {
+    setup(eventDetail({ responses: [], noAnswer: [noAnswer('Silent', { nickname: 'Shh', offSpecs: ['FROST', 'NEWSPEC'] })] }));
+    await ready();
+
+    const row = within(region('No answer (1)')).getByText('Silent').closest('li')!;
+    expect(within(row).getByText(/Shh/)).toHaveTextContent('· Shh');
+    expect(within(row).getByRole('group', { name: 'Off-specs: Frost (Ranged DPS), NEWSPEC' })).toHaveTextContent('?');
+  });
+});

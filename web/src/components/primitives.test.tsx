@@ -19,6 +19,18 @@ describe('CharacterName', () => {
     expect(screen.getByText('Newbie')).toHaveAttribute('title', 'NEWCLASS');
   });
 
+  test('shows the nickname next to the name, muted', () => {
+    renderWith(<CharacterName name="Brannock" classId="WARRIOR" nickname="Matte" />);
+    expect(screen.getByText('Brannock')).toBeInTheDocument();
+    expect(screen.getByText(/Matte/)).toHaveClass('muted');
+    expect(screen.getByText(/Matte/)).toHaveTextContent('· Matte');
+  });
+
+  test('no nickname, nothing extra', () => {
+    renderWith(<CharacterName name="Brannock" classId="WARRIOR" nickname={null} />);
+    expect(screen.queryByText(/·/)).not.toBeInTheDocument();
+  });
+
   test('realm is optional', () => {
     renderWith(<CharacterName name="Jaina" classId="MAGE" />);
     expect(screen.queryByText('Silvermoon')).not.toBeInTheDocument();

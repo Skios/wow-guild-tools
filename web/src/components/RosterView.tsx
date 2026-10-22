@@ -4,6 +4,7 @@ import { ROLES, ROLE_ORDER } from '../roster';
 import { errorMessage, useAsync } from '../useAsync';
 import type { RosterCharacter, RosterEntryInput } from '../types';
 import { CharacterName } from './CharacterName';
+import { OffSpecs } from './OffSpecs';
 import { RoleIcon } from './RoleIcon';
 import { RosterForm } from './RosterForm';
 import { SpecIcon } from './SpecIcon';
@@ -35,7 +36,7 @@ function Row({ person, editing, pending, busy, onEdit, onAsk, onConfirm, onCance
       <tr>
         <td colSpan={6}>
           <RosterForm
-            initial={{ name: person.name, realm: person.realm, class: person.class, spec: person.spec ?? '' }}
+            initial={{ name: person.name, realm: person.realm, class: person.class, spec: person.spec ?? '', offSpecs: person.offSpecs, nickname: person.nickname ?? '' }}
             submitLabel="Save changes"
             onSubmit={onSave}
             onCancel={onCancel}
@@ -46,7 +47,7 @@ function Row({ person, editing, pending, busy, onEdit, onAsk, onConfirm, onCance
   }
   return (
     <tr>
-      <td><span className="role-cell"><SpecIcon classId={person.class} spec={person.spec} role={person.role} /><CharacterName name={person.name} classId={person.class} /></span></td>
+      <td><span className="role-cell"><SpecIcon classId={person.class} spec={person.spec} role={person.role} /><OffSpecs classId={person.class} offSpecs={person.offSpecs} /><CharacterName name={person.name} classId={person.class} nickname={person.nickname} /></span></td>
       <td className="muted">{person.realm}</td>
       <td>{[spec, className].filter(Boolean).join(' ')}</td>
       <td><span className="role-cell"><RoleIcon role={person.role} /><span className="role-label">{role}</span></span></td>
@@ -174,7 +175,7 @@ export function RosterView() {
       <section className="card" aria-label="Add to the roster">
         <h3>Add a character</h3>
         <RosterForm
-          initial={{ name: '', realm: lastRealm(), class: '', spec: '' }}
+          initial={{ name: '', realm: lastRealm(), class: '', spec: '', offSpecs: [], nickname: '' }}
           submitLabel="Add to roster"
           onSubmit={add}
           keepAfterSave={['realm']}

@@ -1,22 +1,22 @@
 import { describe, expect, test } from 'vitest';
-import { validateRosterEntry, type RosterFormValues } from './rosterForm';
+import { moveItem, validateRosterEntry, type RosterFormValues } from './rosterForm';
 import { META } from './test/render';
 
 const meta = {
   ...META,
   classes: META.classes.map(c => ({
     ...c,
-    specs: c.id === 'MAGE' ? [{ id: 'FIRE', label: 'Fire', role: 'RANGED_DPS' as const }] : [{ id: 'ARMS', label: 'Arms', role: 'DPS' as const }],
+    specs: c.id === 'MAGE' ? [{ id: 'FIRE', label: 'Fire', role: 'RANGED_DPS' as const }, { id: 'FROST', label: 'Frost', role: 'RANGED_DPS' as const }] : [{ id: 'ARMS', label: 'Arms', role: 'DPS' as const }],
   })),
 };
-const valid: RosterFormValues = { name: 'Jaina', realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE' };
+const valid: RosterFormValues = { name: 'Jaina', realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', offSpecs: [], nickname: '' };
 const check = (patch: Partial<RosterFormValues> = {}) => validateRosterEntry({ ...valid, ...patch }, meta);
 
 describe('validateRosterEntry', () => {
   test('builds the payload, trimming the text', () => {
     expect(check({ name: '  Jaina ', realm: ' Silvermoon ' })).toEqual({
       errors: {},
-      payload: { name: 'Jaina', realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE' },
+      payload: { name: 'Jaina', realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', offSpecs: [], nickname: null },
     });
   });
 
@@ -55,5 +55,62 @@ describe('validateRosterEntry', () => {
 
   test('reports every problem at once', () => {
     expect(Object.keys(check({ name: '', realm: '', class: 'MAGE', spec: 'ARMS' }).errors).sort()).toEqual(['name', 'realm', 'spec']);
+  });
+
+  test('sends the off-specs in order and the trimmed nickname', () => {
+    expect(check({ offSpecs: ['FROST'], nickname: "  Matte-O'Neil_1. " }).payload).toMatchObject({ offSpecs: ['FROST'], nickname: "Matte-O'Neil_1." });
+  });
+
+  test.each(['', '   '])('a blank nickname %j means none', (nickname) => {
+    expect(check({ nickname }).payload).toMatchObject({ nickname: null });
+  });
+
+  test.each(['a'.repeat(25), 'Matte!', '<b>', 'x😀', 'a\tb', 'a\nb'])('rejects the nickname %j', (nickname) => {
+    expect(check({ nickname }).errors.nickname).toBeDefined();
+    expect(check({ nickname }).payload).toBeNull();
+  });
+
+  test.each(['a', 'a'.repeat(24), 'Élodie Jr.', 'my_nick-2'])('accepts the nickname %j', (nickname) => {
+    expect(check({ nickname }).errors.nickname).toBeUndefined();
+  });
+
+  test('the nickname limit counts after trimming', () => {
+    expect(check({ nickname: ` ${'a'.repeat(24)} ` }).errors.nickname).toBeUndefined();
+  });
+
+  test.each([
+    ['the main spec', ['FIRE']],
+    ['a duplicate', ['FROST', 'FROST']],
+    ['a spec of another class', ['ARMS']],
+    ['an unknown spec', ['NOPE']],
+    ['an empty id', ['']],
+  ])('rejects %s as an off-spec', (_, offSpecs) => {
+    expect(check({ offSpecs }).errors.offSpecs).toBeDefined();
+    expect(check({ offSpecs }).payload).toBeNull();
+  });
+
+  test('off-specs are not judged before a class is chosen', () => {
+    const result = check({ class: '', spec: '', offSpecs: ['FROST'] });
+    expect(result.errors.offSpecs).toBeUndefined();
+    expect(result.errors.class).toBeDefined();
+  });
+
+  test('does not hand the payload the form array itself', () => {
+    const offSpecs = ['FROST'];
+    expect(check({ offSpecs }).payload!.offSpecs).not.toBe(offSpecs);
+  });
+});
+
+describe('moveItem', () => {
+  test('swaps with the neighbour without mutating', () => {
+    const list = ['a', 'b', 'c'];
+    expect(moveItem(list, 1, -1)).toEqual(['b', 'a', 'c']);
+    expect(moveItem(list, 1, 1)).toEqual(['a', 'c', 'b']);
+    expect(list).toEqual(['a', 'b', 'c']);
+  });
+
+  test('stays put at the ends', () => {
+    expect(moveItem(['a', 'b'], 0, -1)).toEqual(['a', 'b']);
+    expect(moveItem(['a', 'b'], 1, 1)).toEqual(['a', 'b']);
   });
 });

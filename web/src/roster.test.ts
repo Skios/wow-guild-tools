@@ -15,7 +15,7 @@ const response = (
   status,
   isConfirmed,
   arrivalTime,
-  character: { id: `c-${name}`, name, realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', role, isMain: true, user: { username: `${name}_player` } },
+  character: { id: `c-${name}`, name, realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', role, isMain: true, user: { username: `${name}_player` }, offSpecs: [], nickname: null },
 });
 
 const candidate = (name: string, role: RosterRow['role'] = 'DPS'): CharacterSummary => ({
@@ -23,7 +23,7 @@ const candidate = (name: string, role: RosterRow['role'] = 'DPS'): CharacterSumm
 });
 
 const noAnswer = (name: string): NoAnswerEntry => ({
-  id: `c-${name}`, name, realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', role: 'RANGED_DPS', username: null, reachable: false,
+  id: `c-${name}`, name, realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', role: 'RANGED_DPS', username: null, offSpecs: [], nickname: null, reachable: false,
 });
 
 const rows = (...r: EventResponse[]) => rowsFromResponses(r, START);
@@ -53,6 +53,13 @@ describe('rowsFromResponses', () => {
     const r = response('Ghost', 'DPS', 'IN');
     r.character.user = null;
     expect(rows(r)[0]!.username).toBeNull();
+  });
+
+  test('carries the off-specs and nickname', () => {
+    const r = response('Amy', 'DPS', 'IN');
+    r.character.offSpecs = ['FROST', 'ARCANE'];
+    r.character.nickname = 'Matte';
+    expect(rows(r)[0]).toMatchObject({ offSpecs: ['FROST', 'ARCANE'], nickname: 'Matte' });
   });
 
   test('copes with an empty list', () => {
@@ -273,5 +280,16 @@ describe('groupRows', () => {
     const groups = groupRows([]);
     expect(Object.values(groups.accepted).every(g => g.length === 0)).toBe(true);
     expect(groups.late).toEqual([]);
+  });
+});
+
+describe('addCharacter off-specs and nickname', () => {
+  test('copies them from a no-answer entry', () => {
+    const entry = { ...noAnswer('Amy'), offSpecs: ['FROST'], nickname: 'Matte' };
+    expect(addCharacter([], entry)[0]).toMatchObject({ offSpecs: ['FROST'], nickname: 'Matte' });
+  });
+
+  test('a summary without them gets none', () => {
+    expect(addCharacter([], candidate('Amy'))[0]).toMatchObject({ offSpecs: [], nickname: null });
   });
 });

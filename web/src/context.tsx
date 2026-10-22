@@ -34,14 +34,26 @@ export function useClassInfo(classId: string) {
   return { color: info?.color ?? UNKNOWN_CLASS_COLOR, label: info?.label ?? classId };
 }
 
+const roleLabel = (meta: Meta, role: RoleId) => meta.roles.find(r => r.id === role)?.label ?? FALLBACK_ROLE_LABEL[role] ?? role;
+
 export function useRoleLabel(role: RoleId) {
-  return useMeta().roles.find(r => r.id === role)?.label ?? FALLBACK_ROLE_LABEL[role] ?? role;
+  return roleLabel(useMeta(), role);
 }
 
 /** Label of a specialization ("Fire"), if the server knows it. */
 export function useSpecLabel(classId: string, spec: string | null): string | undefined {
   const info = useMeta().classes.find(c => c.id === classId);
   return spec ? info?.specs.find(s => s.id === spec)?.label : undefined;
+}
+
+/** Label and role of any spec of a class; an id the server added after this build comes back as itself, with no role. */
+export function useSpecInfo(classId: string) {
+  const meta = useMeta();
+  const specs = meta.classes.find(c => c.id === classId)?.specs ?? [];
+  return (id: string): { label: string; role: RoleId | null; roleLabel: string | null } => {
+    const spec = specs.find(s => s.id === id);
+    return { label: spec?.label ?? id, role: spec?.role ?? null, roleLabel: spec ? roleLabel(meta, spec.role) : null };
+  };
 }
 
 export const useIconStyle = () => useContext(PrefsContext).icons;

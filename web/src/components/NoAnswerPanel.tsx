@@ -1,6 +1,7 @@
 import { STATUSES } from '../roster';
 import type { MessageResult, NoAnswerEntry, ResponseStatus } from '../types';
 import { CharacterName } from './CharacterName';
+import { OffSpecs } from './OffSpecs';
 import { SpecIcon } from './SpecIcon';
 
 const STATUS_LABEL: Record<ResponseStatus, string> = { IN: 'In', LATE: 'Late', TENTATIVE: 'Tentative', BENCH: 'Bench', OUT: 'Out' };
@@ -58,8 +59,9 @@ export function NoAnswerPanel(p: Props) {
                   onChange={e => p.onToggle(person.id, e.target.checked)}
                 />
                 <SpecIcon classId={person.class} spec={person.spec} role={person.role} />
+                <OffSpecs classId={person.class} offSpecs={person.offSpecs} />
                 <span className="person-name">
-                  <CharacterName name={person.name} classId={person.class} />
+                  <CharacterName name={person.name} classId={person.class} nickname={person.nickname} />
                   {!person.reachable && (
                     <span className="muted note"> {person.username ? 'not on the bot yet' : 'unclaimed name'}</span>
                   )}
