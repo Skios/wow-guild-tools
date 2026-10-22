@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { sendError } from '../lib/http-error.js';
+import { requireCapability } from '../plugins/auth.js';
 import { EventService } from '../services/event.service.js';
 import { CreateEventSchema, EventParamsSchema, FinalizeRosterSchema, ListEventsQuerySchema, MessageSchema } from '../validators/event.validator.js';
 
@@ -37,7 +38,8 @@ export async function eventRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.post('/events/:id/message', async (request, reply) => {
+  // Writing to players is a capability of its own, separate from managing events.
+  fastify.post('/events/:id/message', { onRequest: requireCapability('messages.send') }, async (request, reply) => {
     try {
       const { id } = EventParamsSchema.parse(request.params);
       const body = MessageSchema.parse(request.body);

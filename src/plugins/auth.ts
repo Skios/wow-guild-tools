@@ -1,8 +1,10 @@
-import type { FastifyInstance } from 'fastify';
+import type { SiteRole } from '@prisma/client';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import { prisma } from '../config/db.js';
+import { capabilitiesOf, type Capability } from '../domain/roles.js';
 
-export type Officer = { userId: string; username: string };
+export type Officer = { userId: string; username: string; role: SiteRole; capabilities: Capability[] };
 export type TokenVerifier = (token: string) => Promise<{ sub: string }>;
 
 declare module 'fastify' {
@@ -35,11 +37,11 @@ export function supabaseTokenVerifier(supabaseUrl: string, keys?: JWTVerifyGetKe
 }
 
 /**
- * Officer routes: a valid Supabase login backed by a User flagged as officer in OUR database.
- * The flag is read on every request, so revoking an officer takes effect immediately.
+ * Admin-site routes: a valid Supabase login backed by a User with a site role in OUR database.
+ * The role is read on every request, so a revoke or a demotion takes effect immediately.
  * Call directly on a scope (not via register) so the hook covers that scope's routes.
  */
-export function requireOfficer(scope: FastifyInstance, verify: TokenVerifier) {
+export function requireSiteUser(scope: FastifyInstance, verify: TokenVerifier) {
   scope.addHook('onRequest', async (request, reply) => {
     const header = request.headers.authorization;
     const token = header && header.length <= MAX_HEADER_LENGTH ? BEARER.exec(header)?.[1] : undefined;
@@ -56,10 +58,18 @@ export function requireOfficer(scope: FastifyInstance, verify: TokenVerifier) {
     // A database error propagates to the error handler: an outage must not look like "not an officer".
     const identity = await prisma.identity.findUnique({
       where: { platform_platformUserId: { platform: 'supabase', platformUserId: sub } },
-      select: { user: { select: { id: true, username: true, isOfficer: true } } },
+      select: { user: { select: { id: true, username: true, role: true } } },
     });
-    if (!identity?.user.isOfficer) return reply.code(403).send({ error: 'Forbidden' });
+    const user = identity?.user;
+    if (!user?.role) return reply.code(403).send({ error: 'Forbidden' });
 
-    request.officer = { userId: identity.user.id, username: identity.user.username };
+    request.officer = { userId: user.id, username: user.username, role: user.role, capabilities: capabilitiesOf(user.role) };
   });
+}
+
+/** Route hook: 403 unless the signed-in user's role grants `capability`. Runs after requireSiteUser. */
+export function requireCapability(capability: Capability) {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!request.officer?.capabilities.includes(capability)) return reply.code(403).send({ error: 'Forbidden' });
+  };
 }

@@ -10,6 +10,13 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// ponytail: fixed roles with capabilities mapped in code; move to a roles table when the Owner
+// needs to configure them (routes already ask for capabilities, not roles).
+enum SiteRole {
+  OWNER
+  OFFICER
+}
+
 enum ResponseStatus {
   IN
   OUT
@@ -45,8 +52,8 @@ model User {
   id           String      @id @default(uuid())
   username     String
   preferredChannel String?    @default("telegram")
-  // Officers manage the roster and events in the admin site. Granted only by scripts/officer.ts.
-  isOfficer    Boolean     @default(false)
+  // Admin-site role; null = no site access (players use the bot). Capabilities: src/domain/roles.ts.
+  role         SiteRole?
   identities   Identity[]
   characters   Character[]
   eventsCreated Event[]

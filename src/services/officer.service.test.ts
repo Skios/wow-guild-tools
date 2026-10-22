@@ -43,6 +43,19 @@ describe('generatePassword', () => {
 });
 
 describe('OfficerService.create', () => {
+  test('creates an Owner when asked', async () => {
+    prismaMock.user.create.mockResolvedValue({ id: 'u1' });
+
+    await service.create('guildmaster', 'owner');
+
+    expect(prismaMock.user.create.mock.calls[0]![0].data).toMatchObject({ username: 'guildmaster', role: 'OWNER' });
+  });
+
+  test('an unknown role is refused before touching Supabase', async () => {
+    await expect(service.create('raidlead', 'emperor')).rejects.toThrow(/role/i);
+    expect(admin.createUser).not.toHaveBeenCalled();
+  });
+
   test('creates the login and an officer backed by it, and returns the one-time password', async () => {
     prismaMock.user.create.mockResolvedValue({ id: 'u1' });
 
@@ -51,7 +64,7 @@ describe('OfficerService.create', () => {
     expect(result).toEqual({ name: 'raidlead', password: expect.stringMatching(/^[A-Za-z0-9_-]{24}$/) });
     expect(admin.createUser).toHaveBeenCalledWith('raidlead@wgt.invalid', result.password);
     expect(prismaMock.user.create).toHaveBeenCalledWith({
-      data: { username: 'raidlead', isOfficer: true, identities: { create: { platform: 'supabase', platformUserId: AUTH_ID } } },
+      data: { username: 'raidlead', role: 'OFFICER', identities: { create: { platform: 'supabase', platformUserId: AUTH_ID } } },
     });
   });
 
@@ -100,14 +113,14 @@ describe('OfficerService.resetPassword', () => {
 
 describe('OfficerService.revoke', () => {
   beforeEach(() => {
-    prismaMock.identity.findFirst.mockResolvedValue({ id: 'i1', platformUserId: AUTH_ID, userId: 'u1' });
+    prismaMock.identity.findFirst.mockResolvedValue({ id: 'i1', platformUserId: AUTH_ID, userId: 'u1', user: { role: 'OFFICER' } });
     prismaMock.user.count.mockResolvedValue(2);
   });
 
-  test('takes the role away, deletes the login and its link', async () => {
+  test('removes the role, deletes the login and its link', async () => {
     await service.revoke('raidlead');
 
-    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { isOfficer: false } });
+    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { role: null } });
     expect(prismaMock.identity.delete).toHaveBeenCalledWith({ where: { id: 'i1' } });
     expect(admin.deleteUser).toHaveBeenCalledWith(AUTH_ID);
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
@@ -121,12 +134,28 @@ describe('OfficerService.revoke', () => {
     expect(prismaMock.identity.delete).not.toHaveBeenCalled();
   });
 
-  test('refuses to remove the last officer (nobody could manage the site any more)', async () => {
-    prismaMock.user.count.mockResolvedValue(1);
+  test('refuses to remove the last account with a role (nobody could sign in any more)', async () => {
+    prismaMock.user.count.mockImplementation(async ({ where }: { where: object }) => ('role' in where && where.role === 'OWNER' ? 0 : 1));
 
     await expect(service.revoke('raidlead')).rejects.toBeInstanceOf(ConflictError);
-    expect(prismaMock.user.update).not.toHaveBeenCalled();
     expect(admin.deleteUser).not.toHaveBeenCalled();
+  });
+
+  test('refuses to remove the last Owner (nobody could run the site any more)', async () => {
+    prismaMock.identity.findFirst.mockResolvedValue({ id: 'i1', platformUserId: AUTH_ID, userId: 'u1', user: { role: 'OWNER' } });
+    prismaMock.user.count.mockResolvedValue(1);
+
+    await expect(service.revoke('guildmaster')).rejects.toBeInstanceOf(ConflictError);
+    expect(prismaMock.user.count).toHaveBeenCalledWith({ where: { role: 'OWNER' } });
+    expect(admin.deleteUser).not.toHaveBeenCalled();
+  });
+
+  test('an Owner can go when another Owner remains', async () => {
+    prismaMock.identity.findFirst.mockResolvedValue({ id: 'i1', platformUserId: AUTH_ID, userId: 'u1', user: { role: 'OWNER' } });
+    prismaMock.user.count.mockResolvedValue(2);
+
+    await service.revoke('guildmaster');
+    expect(admin.deleteUser).toHaveBeenCalledWith(AUTH_ID);
   });
 
   test('404 for an unknown officer', async () => {
@@ -135,13 +164,37 @@ describe('OfficerService.revoke', () => {
   });
 });
 
-describe('OfficerService.list', () => {
-  test('lists officer names only', async () => {
-    prismaMock.user.findMany.mockResolvedValue([{ username: 'gm' }, { username: 'raidlead' }]);
+describe('OfficerService.setRole', () => {
+  test('changes the role of an existing account', async () => {
+    prismaMock.identity.findFirst.mockResolvedValue({ id: 'i1', platformUserId: AUTH_ID, userId: 'u1', user: { role: 'OFFICER' } });
 
-    await expect(service.list()).resolves.toEqual(['gm', 'raidlead']);
+    await service.setRole('raidlead', 'owner');
+
+    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { role: 'OWNER' } });
+  });
+
+  test('refuses to demote the last Owner', async () => {
+    prismaMock.identity.findFirst.mockResolvedValue({ id: 'i1', platformUserId: AUTH_ID, userId: 'u1', user: { role: 'OWNER' } });
+    prismaMock.user.count.mockResolvedValue(1);
+
+    await expect(service.setRole('guildmaster', 'officer')).rejects.toBeInstanceOf(ConflictError);
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+  });
+
+  test('unknown role or account are refused', async () => {
+    await expect(service.setRole('raidlead', 'emperor')).rejects.toThrow(/role/i);
+    prismaMock.identity.findFirst.mockResolvedValue(null);
+    await expect(service.setRole('ghost', 'officer')).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe('OfficerService.list', () => {
+  test('lists every account with a site role, highest first', async () => {
+    prismaMock.user.findMany.mockResolvedValue([{ username: 'gm', role: 'OWNER' }, { username: 'raidlead', role: 'OFFICER' }]);
+
+    await expect(service.list()).resolves.toEqual([{ name: 'gm', role: 'OWNER' }, { name: 'raidlead', role: 'OFFICER' }]);
     expect(prismaMock.user.findMany).toHaveBeenCalledWith({
-      where: { isOfficer: true }, select: { username: true }, orderBy: { username: 'asc' },
+      where: { role: { not: null } }, select: { username: true, role: true }, orderBy: [{ role: 'asc' }, { username: 'asc' }],
     });
   });
 });

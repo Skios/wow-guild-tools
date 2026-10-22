@@ -31,7 +31,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   resetPrismaMock();
-  prismaMock.identity.findUnique.mockResolvedValue({ user: { id: 'u1', username: 'Brannock', isOfficer: true } });
+  prismaMock.identity.findUnique.mockResolvedValue({ user: { id: 'u1', username: 'Brannock', role: 'OFFICER' } });
 });
 
 describe('buildApp', () => {
@@ -72,7 +72,7 @@ describe('buildApp', () => {
     expect((await app.inject({ method, url, headers: { authorization: 'Bearer nope.nope.nope' } })).statusCode).toBe(401);
     expect((await app.inject({ method, url, headers: { 'x-api-key': 'a_long_random_api_key_1234' } })).statusCode).toBe(401);
 
-    prismaMock.identity.findUnique.mockResolvedValue({ user: { id: 'u2', username: 'Rando', isOfficer: false } });
+    prismaMock.identity.findUnique.mockResolvedValue({ user: { id: 'u2', username: 'Rando', role: null } });
     expect((await app.inject({ method, url, headers: KEY })).statusCode).toBe(403);
   });
 
@@ -84,7 +84,7 @@ describe('buildApp', () => {
   test('GET /auth/me says which officer is signed in', async () => {
     const res = await (await buildApp()).inject({ url: '/api/auth/me', headers: KEY });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ userId: 'u1', username: 'Brannock' });
+    expect(res.json()).toMatchObject({ userId: 'u1', username: 'Brannock', role: 'OFFICER' });
   });
 
   test('an officer login opens officer routes', async () => {

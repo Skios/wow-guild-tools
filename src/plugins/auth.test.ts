@@ -6,7 +6,7 @@ import { ISSUER, OFFICER_SUB, SUPABASE_URL, makeSigner, unsignedToken } from '..
 
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 
-import { requireOfficer, supabaseTokenVerifier, type TokenVerifier } from './auth.js';
+import { requireCapability, requireSiteUser, supabaseTokenVerifier, type TokenVerifier } from './auth.js';
 
 let signer: Awaited<ReturnType<typeof makeSigner>>;
 let verify: TokenVerifier;
@@ -73,13 +73,13 @@ describe('supabaseTokenVerifier', () => {
   });
 });
 
-describe('requireOfficer', () => {
-  const officerIdentity = { user: { id: 'u1', username: 'Brannock', isOfficer: true } };
+describe('requireSiteUser', () => {
+  const officerIdentity = { user: { id: 'u1', username: 'Brannock', role: 'OFFICER' } };
 
   async function app(verifier: TokenVerifier = verify) {
     const fastify = Fastify();
     await fastify.register(async (scope) => {
-      requireOfficer(scope, verifier);
+      requireSiteUser(scope, verifier);
       scope.get('/secure', async (request) => request.officer);
     });
     fastify.get('/open', async () => ({ ok: true }));
@@ -97,7 +97,10 @@ describe('requireOfficer', () => {
     const res = await call(`Bearer ${await signer.sign()}`);
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ userId: 'u1', username: 'Brannock' });
+    expect(res.json()).toEqual({
+      userId: 'u1', username: 'Brannock', role: 'OFFICER',
+      capabilities: ['roster.manage', 'events.manage', 'messages.send'],
+    });
     expect(prismaMock.identity.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: { platform_platformUserId: { platform: 'supabase', platformUserId: OFFICER_SUB } },
     }));
@@ -124,7 +127,7 @@ describe('requireOfficer', () => {
     expect(prismaMock.identity.findUnique).not.toHaveBeenCalled();
   });
 
-  test('403 for a valid login that no officer row backs', async () => {
+  test('403 for a valid login that no user row backs', async () => {
     prismaMock.identity.findUnique.mockResolvedValue(null);
     const res = await call(`Bearer ${await signer.sign()}`);
 
@@ -132,8 +135,8 @@ describe('requireOfficer', () => {
     expect(res.json()).toEqual({ error: 'Forbidden' });
   });
 
-  test('403 for a known user who is not an officer (signing in grants nothing)', async () => {
-    prismaMock.identity.findUnique.mockResolvedValue({ user: { id: 'u2', username: 'Rando', isOfficer: false } });
+  test('403 for a known user without a site role (signing in grants nothing)', async () => {
+    prismaMock.identity.findUnique.mockResolvedValue({ user: { id: 'u2', username: 'Rando', role: null } });
     expect((await call(`Bearer ${await signer.sign()}`)).statusCode).toBe(403);
   });
 
@@ -146,5 +149,30 @@ describe('requireOfficer', () => {
 
   test('does not protect routes outside its scope', async () => {
     expect((await (await app()).inject('/open')).statusCode).toBe(200);
+  });
+});
+
+describe('requireCapability', () => {
+  async function app(role: 'OWNER' | 'OFFICER' | undefined) {
+    const fastify = Fastify();
+    fastify.addHook('onRequest', async (request) => {
+      if (role) request.officer = { userId: 'u1', username: 'x', role, capabilities: role === 'OWNER' ? ['admin'] : ['roster.manage'] };
+    });
+    fastify.get('/admin', { onRequest: requireCapability('admin') }, async () => ({ ok: true }));
+    return fastify;
+  }
+
+  test('lets through a user who has the capability', async () => {
+    expect((await (await app('OWNER')).inject('/admin')).statusCode).toBe(200);
+  });
+
+  test('403 for a signed-in user without it', async () => {
+    const res = await (await app('OFFICER')).inject('/admin');
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toEqual({ error: 'Forbidden' });
+  });
+
+  test('403 when nobody is signed in (never trusts a missing user)', async () => {
+    expect((await (await app(undefined)).inject('/admin')).statusCode).toBe(403);
   });
 });

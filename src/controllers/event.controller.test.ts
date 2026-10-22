@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
-import { buildOfficerRouteApp, prismaError, uuid } from '../test/helpers.js';
+import { buildOfficerRouteApp, buildRouteAppAs, prismaError, uuid } from '../test/helpers.js';
 
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 const adapter = vi.hoisted(() => ({ sendInvite: vi.fn(), publishFinalRoster: vi.fn(), sendDirect: vi.fn() }));
@@ -228,6 +228,13 @@ describe('GET /events', () => {
 });
 
 describe('POST /events/:id/message', () => {
+  test('403 for a user who may manage events but not message players', async () => {
+    const app = await buildRouteAppAs(['events.manage'], eventRoutes);
+    const res = await app.inject({ method: 'POST', url: `/events/${EID}/message`, payload: { characterIds: [CID], text: 'hi' } });
+    expect(res.statusCode).toBe(403);
+    expect(prismaMock.event.findUnique).not.toHaveBeenCalled();
+  });
+
   const CID = uuid(30);
 
   beforeEach(() => {

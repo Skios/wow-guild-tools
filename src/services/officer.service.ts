@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { prisma } from '../config/db.js';
+import { parseRole } from '../domain/roles.js';
 import { AppError, ConflictError, NotFoundError } from '../lib/errors.js';
 
 // Officers sign in with a nickname and a password. Supabase Auth needs an email, so the nickname is
@@ -61,16 +62,17 @@ export function supabaseAuthAdmin(supabaseUrl: string, secretKey: string, fetchI
 export class OfficerService {
   constructor(private readonly admin: AuthAdmin) {}
 
-  /** Creates the login and its officer. Returns the password, which is shown once and never stored by us. */
-  async create(rawName: unknown) {
+  /** Creates the login and its account. Returns the password, which is shown once and never stored by us. */
+  async create(rawName: unknown, rawRole: unknown = 'OFFICER') {
     const name = parseOfficerName(rawName);
+    const role = parseRole(rawRole);
     if (await this.findLogin(name)) throw new ConflictError('That officer name is already taken');
 
     const password = generatePassword();
     const authId = await this.admin.createUser(officerEmail(name), password);
     try {
       await prisma.user.create({
-        data: { username: name, isOfficer: true, identities: { create: { platform: 'supabase', platformUserId: authId } } },
+        data: { username: name, role, identities: { create: { platform: 'supabase', platformUserId: authId } } },
       });
     } catch (error) {
       // A login without an officer row would be a dead account. If even the clean-up fails, the
@@ -95,27 +97,44 @@ export class OfficerService {
 
   async revoke(rawName: unknown) {
     const login = await this.requireLogin(parseOfficerName(rawName));
-    if ((await prisma.user.count({ where: { isOfficer: true } })) <= 1) {
-      throw new ConflictError('Refusing to remove the last officer');
+    await this.keepAnOwner(login.user.role);
+    if ((await prisma.user.count({ where: { role: { not: null } } })) <= 1) {
+      throw new ConflictError('Refusing to remove the last account that can sign in');
     }
     // Login first: if Supabase fails nothing has changed and the revoke can be retried.
-    // ponytail: count-then-write isn't atomic; fine for a script one person runs.
     await this.admin.deleteUser(login.platformUserId);
     await prisma.$transaction([
-      prisma.user.update({ where: { id: login.userId }, data: { isOfficer: false } }),
+      prisma.user.update({ where: { id: login.userId }, data: { role: null } }),
       prisma.identity.delete({ where: { id: login.id } }),
     ]);
   }
 
+  async setRole(rawName: unknown, rawRole: unknown) {
+    const role = parseRole(rawRole);
+    const login = await this.requireLogin(parseOfficerName(rawName));
+    if (role !== 'OWNER') await this.keepAnOwner(login.user.role);
+    await prisma.user.update({ where: { id: login.userId }, data: { role } });
+  }
+
   async list() {
-    const officers = await prisma.user.findMany({
-      where: { isOfficer: true }, select: { username: true }, orderBy: { username: 'asc' },
+    const users = await prisma.user.findMany({
+      where: { role: { not: null } }, select: { username: true, role: true }, orderBy: [{ role: 'asc' }, { username: 'asc' }],
     });
-    return officers.map(officer => officer.username);
+    return users.map(user => ({ name: user.username, role: user.role }));
+  }
+
+  // ponytail: count-then-write isn't atomic; fine for a script one person runs.
+  private async keepAnOwner(currentRole: string | null) {
+    if (currentRole === 'OWNER' && (await prisma.user.count({ where: { role: 'OWNER' } })) <= 1) {
+      throw new ConflictError('Refusing to remove the last Owner');
+    }
   }
 
   private findLogin(name: string) {
-    return prisma.identity.findFirst({ where: { platform: 'supabase', user: { username: name } } });
+    return prisma.identity.findFirst({
+      where: { platform: 'supabase', user: { username: name } },
+      include: { user: { select: { role: true } } },
+    });
   }
 
   private async requireLogin(name: string) {

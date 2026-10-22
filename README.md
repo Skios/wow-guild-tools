@@ -39,11 +39,13 @@ Officers sign in with a **nickname and a password** (Supabase Auth). No email or
 the nickname becomes `<name>@wgt.invalid`, an address that can never receive mail. Signup is closed;
 accounts are managed with a script that needs `SUPABASE_SECRET_KEY` (never give that key to the app):
 
-- `npm run officer -- create <name>` (prints the password once), `reset <name>`, `revoke <name>`, `list`
-- the last officer cannot be revoked
+- `npm run officer -- create <name> [--role owner|officer]` (prints the password once), `role <name> <owner|officer>`,
+  `reset <name>`, `revoke <name>`, `list`
+- roles: **Owner** (everything, admin) above **Officer** (roster, events, messages, accounts); the last Owner
+  cannot be revoked or demoted. Capabilities per role live in `src/domain/roles.ts`.
 
-Every officer route needs `Authorization: Bearer <Supabase access token>` of a user flagged as officer;
-the flag is read on every request, so a revoke takes effect immediately.
+Every route needs `Authorization: Bearer <Supabase access token>` of a user with a role, and the capability
+its route group asks for. The role is read on every request, so a revoke or demotion takes effect immediately.
 
 ## Telegram (local)
 Telegram needs a public HTTPS URL for the webhook. Expose the port with a tunnel

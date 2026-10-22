@@ -15,7 +15,7 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 - Hosting: Vercel Hobby (Fastify zero-config, one function, region fra1). Hobby cron is daily only -> reminders via Supabase pg_cron.
 - Officer login: nickname + password on Supabase Auth, mapped to `<name>@wgt.invalid`. No real emails, no personal data.
   Signup closed; accounts created/reset/revoked only by `npm run officer` (secret key, scripts only). Last officer can't be revoked.
-- API verifies Supabase JWTs (jose, ES256/RS256 pinned, issuer, audience, role, not anonymous) and reads `User.isOfficer` per request.
+- API verifies Supabase JWTs (jose, ES256/RS256 pinned, issuer, audience, role, not anonymous) and reads the user's role per request (see roles.plan.md).
 - Players are reached only via chat platforms (Telegram now, Discord bot later).
 - Repo public; secrets only in Vercel / GitHub settings. Prod migrations need manual approval (GitHub Environments).
 - n8n, Graphify: not now.

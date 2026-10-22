@@ -1,4 +1,4 @@
-import Fastify, { type FastifyServerOptions } from 'fastify';
+import Fastify, { type FastifyPluginAsync, type FastifyServerOptions } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import { adminRoutes } from './controllers/admin.controller.js';
 import { eventRoutes } from './controllers/event.controller.js';
@@ -8,7 +8,8 @@ import { rosterRoutes } from './controllers/roster.controller.js';
 import { telegramRoutes } from './controllers/telegram.controller.js';
 import { getEnv } from './config/env.js';
 import { sendError } from './lib/http-error.js';
-import { requireOfficer, supabaseTokenVerifier, type TokenVerifier } from './plugins/auth.js';
+import type { Capability } from './domain/roles.js';
+import { requireCapability, requireSiteUser, supabaseTokenVerifier, type TokenVerifier } from './plugins/auth.js';
 
 const BODY_LIMIT_BYTES = 100 * 1024;
 const RATE_LIMIT_PER_MINUTE = 300;
@@ -36,15 +37,20 @@ export async function buildApp(options: { logger?: FastifyServerOptions['logger'
   await app.register(async (api) => {
     api.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
-    // The webhook has its own secret. Everything else needs an officer's Supabase login.
+    // The webhook has its own secret. Everything else needs a Supabase login with a site role,
+    // and each group of routes the capability it needs (src/domain/roles.ts).
     await api.register(telegramRoutes);
-    await api.register(async (officer) => {
-      requireOfficer(officer, verifyToken);
-      await officer.register(adminRoutes);
-      await officer.register(eventRoutes);
-      await officer.register(profileRoutes);
-      await officer.register(groupRoutes);
-      await officer.register(rosterRoutes);
+    await api.register(async (site) => {
+      requireSiteUser(site, verifyToken);
+      const guarded = (capability: Capability, routes: FastifyPluginAsync) => site.register(async (scope) => {
+        scope.addHook('onRequest', requireCapability(capability));
+        await scope.register(routes);
+      });
+      await site.register(adminRoutes); // who am I, game data: any site user
+      await guarded('events.manage', eventRoutes);
+      await guarded('roster.manage', rosterRoutes);
+      await guarded('roster.manage', profileRoutes);
+      await guarded('roster.manage', groupRoutes);
     });
   }, { prefix: '/api' });
 
