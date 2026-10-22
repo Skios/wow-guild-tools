@@ -43,7 +43,7 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 - [x] API routes under /api; api/index.ts handler + rewrite; admin site = web/dist (one origin, no CORS)
 - [x] Prisma for serverless: transaction pooler (6543, pgbouncer=true, connection_limit=3) + directUrl
 - [x] vercel.json: region fra1, deploy only main/develop, CSP/HSTS headers; handler checked with a local HTTP server
-- [ ] First real deploy: confirm req.url keeps /api/... after the rewrite, Prisma engine bundled
+- [x] First real deploy (dev, 2026-10-22): /api routing and Prisma engine confirmed by a real Owner login
 - [x] TRUST_PROXY=true documented; Vercel Firewall rate rule in docs/deploy.md. Rate limiting on Vercel (security review HIGH): TRUST_PROXY=true behind Vercel; in-memory counters are per instance,
       so add a free layer (Vercel Firewall rule if Hobby allows, else accept + stricter limit on 401/403)
 - [ ] Hosted Supabase settings per project: signup off, anonymous sign-ins off, min password 16, email provider ON,
@@ -53,7 +53,7 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 - [x] Prod: GitHub Environment `prod` with required reviewer; actions pinned to commit SHAs
 ### 0g Handover
 - [x] docs/deploy.md: Supabase, Telegram, Vercel, GitHub settings and variables (user does these)
-- [ ] Create the first officer on dev with `npm run officer`
+- [x] First Owner on dev (`npm run officer:dev -- create <name> --role owner`)
 
 ## After the first deploy + test
 ### Migrate the admin site to Next.js (user decision 2026-10-21)

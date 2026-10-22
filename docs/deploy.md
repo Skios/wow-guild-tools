@@ -13,8 +13,10 @@ approval in the `prod` GitHub Environment.
 ## 1. Supabase (each project)
 - Project Settings → Data API: **off**.
 - Project Settings → JWT Keys: an asymmetric key (ES256 or RS256) must be the active one.
-- Authentication → Sign In / Providers: **Allow new users to sign up: off**; anonymous sign-ins off;
-  Email provider **on** (password logins); confirm email off; minimum password length 16.
+- Authentication → Sign In / Providers: **Allow new users to sign up: off**; anonymous sign-ins off.
+- Authentication → Sign In / Providers → **Email → "Enable Email provider": ON** (a different switch from
+  "Allow new users to sign up"!). Officers type a nickname, but the login runs on the email provider: with it
+  off every login fails. Confirm email off; minimum password length 16.
 - Authentication → Rate Limits: as low as you can live with.
 - Connect: copy the **Transaction pooler** string (port 6543) and the **Session pooler** string (port 5432).
 
