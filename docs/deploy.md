@@ -51,7 +51,8 @@ approval in the `prod` GitHub Environment.
 ## 5. After the first deploy of each environment
 - `GET https://<domain>/api/health` must answer `{"status":"ok"}`.
 - First officer, from your machine with that environment's values:
-  `DATABASE_URL=<session pooler> DIRECT_URL=<session pooler> SUPABASE_URL=<url> SUPABASE_SECRET_KEY=<secret> npm run officer -- create <name> --role owner` (your first account is the Owner)
+  fill `.env.dev` (session pooler, project URL, secret key; ignored by git), then
+  `npm run officer:dev -- create <name> --role owner` (your first account is the Owner)
 - Webhook (dev adds the bypass query parameter):
   `curl "https://api.telegram.org/bot<token>/setWebhook" -d url="https://<domain>/api/webhooks/telegram?x-vercel-protection-bypass=<bypass>" -d secret_token=<webhook secret>`
 - Supabase → Authentication → URL Configuration: Site URL = the environment's domain.

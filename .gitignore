@@ -5,6 +5,9 @@ node_modules/
 # Environment (hosted values live in Vercel/GitHub settings, never in files)
 .env
 .env.*
+# remote environments for scripts/officer.ts (already covered by .env.*, listed to be explicit)
+.env.dev
+.env.prod
 !.env.example
 !.env.development
 .env.local
