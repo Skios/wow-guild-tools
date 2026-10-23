@@ -15,7 +15,8 @@
     "vercel-build": "prisma generate",
     "officer:dev": "node --env-file=.env.dev --import tsx scripts/officer.ts",
     "roster:import": "node --env-file-if-exists=.env --import tsx scripts/roster-import.ts",
-    "roster:import:dev": "node --env-file=.env.dev --import tsx scripts/roster-import.ts"
+    "roster:import:dev": "node --env-file=.env.dev --import tsx scripts/roster-import.ts",
+    "telegram:webhook:dev": "node --env-file=.env.dev --import tsx scripts/telegram-webhook.ts"
   },
   "keywords": [],
   "author": "",

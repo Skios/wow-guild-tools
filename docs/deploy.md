@@ -78,6 +78,8 @@ the custom branch **`develop`** (not "All Preview branches"). Mark secrets as Se
 - First officer, from your machine with that environment's values:
   fill `.env.dev` (session pooler, project URL, secret key; ignored by git), then
   `npm run officer:dev -- create <name>` (creates the Owner)
-- Webhook, pointing at the **API** project's domain:
-  `curl "https://api.telegram.org/bot<token>/setWebhook" -d url="https://<api domain>/api/webhooks/telegram" -d secret_token=<webhook secret>`
+- Webhook, pointing at the **API** project's domain (without it the bot receives messages but never forwards them):
+  add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET` (same values as on Vercel) to `.env.dev`, then
+  `npm run telegram:webhook:dev -- https://<api domain>`. It checks `/api/health` first and drops old pending updates.
+  Run it again after changing the bot token or the secret.
 - Supabase → Authentication → URL Configuration: Site URL = the environment's **site** domain.

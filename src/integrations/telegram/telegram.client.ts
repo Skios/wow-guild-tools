@@ -25,12 +25,6 @@ export class TelegramClient {
     return (this.username ??= (await this.bot.telegram.getMe()).username);
   }
 
-  async setWebhook(url: string) {
-    return this.bot.telegram.setWebhook(`${url}/webhooks/telegram`, {
-      secret_token: telegramConfig.webhookSecret,
-    });
-  }
-
   /** `url` may only be a t.me/<bot>?start=... link: Telegram opens it on the user's device. */
   async answerCallback(callbackQueryId: string, text: string, url?: string) {
     return this.bot.telegram.answerCbQuery(callbackQueryId, text, { show_alert: false, ...(url && { url }) });

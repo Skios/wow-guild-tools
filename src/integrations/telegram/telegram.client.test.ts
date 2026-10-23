@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 const telegram = vi.hoisted(() => ({
   sendMessage: vi.fn(),
   getMe: vi.fn(),
-  setWebhook: vi.fn(),
   answerCbQuery: vi.fn(),
 }));
 const ctor = vi.hoisted(() => vi.fn());
@@ -60,13 +59,6 @@ describe('TelegramClient', () => {
 
     await expect(client.getBotUsername()).rejects.toThrow('network down');
     await expect(client.getBotUsername()).resolves.toBe('guild_bot');
-  });
-
-  test('setWebhook registers the route and the secret token', async () => {
-    await new TelegramClient().setWebhook('https://example.org');
-    expect(telegram.setWebhook).toHaveBeenCalledWith('https://example.org/webhooks/telegram', {
-      secret_token: 'secret_value_1234567',
-    });
   });
 
   test('answerCallback only sends a url when asked to', async () => {

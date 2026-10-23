@@ -85,8 +85,9 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 See .claude/plans/accounts.plan.md (steps 1-4 done: roles, sign-up, Users page + password resets, Telegram link).
 
 ## Parked
-- Telegram on dev: webhook should now reach the API (protection off); re-test /start now that it sends the
-  site link (needs SITE_URL on the API project).
+- Telegram on dev: the webhook was never set (getWebhookInfo url ""), so /start went nowhere. Fix:
+  `npm run telegram:webhook:dev -- https://<api domain>` (token + secret in .env.dev), SITE_URL on the API project.
+  The dev bot token was pasted in chat on 2026-10-23: rotate it in BotFather.
 
 ## Later
 - Prod environment: wgt-prod Supabase settings, Production env vars in both Vercel projects, prod bot, prod hooks.
