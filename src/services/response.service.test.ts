@@ -14,6 +14,41 @@ beforeEach(() => {
   prismaMock.character.count.mockImplementation(async (args: { where: { id: { in: string[] } } }) => args.where.id.in.length);
 });
 
+describe('notes', () => {
+  test('a different answer clears the note (same transaction as the write); the same answer keeps it', async () => {
+    await new ResponseService().updateResponse('e1', 'c1', 'OUT');
+
+    expect(prismaMock.response.updateMany).toHaveBeenCalledWith({ where: { eventId: 'e1', characterId: 'c1', NOT: { status: 'OUT' } }, data: { note: null } });
+    expect(prismaMock.response.upsert.mock.calls[0]![0].update).not.toHaveProperty('note');
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  test("officers changing someone's answer on the board clear the note the same way", async () => {
+    await new ResponseService().bulkUpdateResponses('e1', [{ characterId: 'c1', status: 'BENCH', isConfirmed: false }]);
+
+    expect(prismaMock.response.updateMany).toHaveBeenCalledWith({ where: { eventId: 'e1', characterId: 'c1', NOT: { status: 'BENCH' } }, data: { note: null } });
+  });
+
+  test('setNote writes the note on the existing answer', async () => {
+    prismaMock.response.updateMany.mockResolvedValue({ count: 1 });
+
+    await new ResponseService().setNote('e1', 'c1', 'leaving 30 min early');
+
+    expect(prismaMock.response.updateMany).toHaveBeenCalledWith({ where: { eventId: 'e1', characterId: 'c1' }, data: { note: 'leaving 30 min early' } });
+  });
+
+  test('setNote without an answer is a 404; on a locked event or an unapproved character it is refused', async () => {
+    prismaMock.response.updateMany.mockResolvedValue({ count: 0 });
+    await expect(new ResponseService().setNote('e1', 'c1', 'x')).rejects.toBeInstanceOf(NotFoundError);
+
+    prismaMock.character.count.mockResolvedValue(0);
+    await expect(new ResponseService().setNote('e1', 'c1', 'x')).rejects.toBeInstanceOf(NotApprovedError);
+
+    prismaMock.event.findUnique.mockResolvedValue({ isPublished: true });
+    await expect(new ResponseService().setNote('e1', 'c1', 'x')).rejects.toBeInstanceOf(EventLockedError);
+  });
+});
+
 describe('only characters on the roster (approved) answer', () => {
   test('a character waiting for approval is refused, nothing is written', async () => {
     prismaMock.character.count.mockResolvedValue(0);

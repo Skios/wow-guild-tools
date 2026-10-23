@@ -4,11 +4,13 @@ import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 vi.mock('../repositories/draft.repository.js', async () => (await import('../test/memory-drafts.js')).memoryDraftStore());
 
-import { expectLateMinutes, forgetLateMinutes, handleLateMessage } from './late.service.js';
+import { expectFollowUp, handleFollowUp, moveFollowUp } from './followup.service.js';
 
 let nextId = 5000;
 const player = () => ({ id: nextId++ });
-const say = (from: { id: number }, text: string) => handleLateMessage({ from, text });
+const say = (from: { id: number }, text: string) => handleFollowUp({ from, text });
+const expectLateMinutes = (id: number, eventId: string, characterId: string) => expectFollowUp(id, eventId, characterId, true);
+const expectNote = (id: number, eventId: string, characterId: string) => expectFollowUp(id, eventId, characterId, false);
 const start = new Date('2026-10-18T19:00:00Z');
 
 beforeEach(() => {
@@ -16,6 +18,7 @@ beforeEach(() => {
   prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, startTime: start });
   prismaMock.response.upsert.mockResolvedValue({});
   prismaMock.character.count.mockResolvedValue(1);
+  prismaMock.response.updateMany.mockResolvedValue({ count: 1 });
 });
 
 test('a character released or given to someone else meanwhile is not written to', async () => {
@@ -30,11 +33,82 @@ test('a character released or given to someone else meanwhile is not written to'
   expect(prismaMock.response.upsert).not.toHaveBeenCalled();
 });
 
-test('forgetLateMinutes closes the question', async () => {
-  const p = player();
-  await expectLateMinutes(p.id, 'e1', 'c1');
-  await forgetLateMinutes(p.id);
-  expect(await say(p, '15')).toBeNull();
+describe('notes', () => {
+  // updateMany also clears a note when the status changes ({ note: null }): only count notes written.
+  const noteWritten = () => prismaMock.response.updateMany.mock.calls.map(c => c[0]).filter(c => c.data.note !== null);
+
+  test('after IN / OUT / TENTATIVE the next message is the note', async () => {
+    const p = player();
+    await expectNote(p.id, 'e1', 'c1');
+
+    expect((await say(p, '  leaving 30 min early '))?.text).toBe('Noted: note "leaving 30 min early".');
+    expect(noteWritten()).toEqual([{ where: { eventId: 'e1', characterId: 'c1' }, data: { note: 'leaving 30 min early' } }]);
+    expect(prismaMock.response.upsert).not.toHaveBeenCalled();
+    expect(await say(p, 'more')).toBeNull(); // answered once
+  });
+
+  test('a number is just a note when the answer is not LATE', async () => {
+    const p = player();
+    await expectNote(p.id, 'e1', 'c1');
+    await say(p, '15');
+    expect(noteWritten()[0]!.data).toEqual({ note: '15' });
+  });
+
+  test('LATE: minutes and a note in one message', async () => {
+    const p = player();
+    await expectLateMinutes(p.id, 'e1', 'c1');
+
+    expect((await say(p, '15 traffic on the way'))?.text).toBe('Noted: late by 15 min, note "traffic on the way".');
+    expect(prismaMock.response.upsert.mock.calls[0]![0].update).toMatchObject({ status: 'LATE', arrivalTime: new Date(start.getTime() + 15 * 60_000) });
+    expect(noteWritten()[0]!.data).toEqual({ note: 'traffic on the way' });
+  });
+
+  test('a note longer than 200 characters is refused and the question stays open', async () => {
+    const p = player();
+    await expectNote(p.id, 'e1', 'c1');
+
+    expect((await say(p, 'x'.repeat(201)))?.text).toMatch(/at most 200/);
+    expect(noteWritten()).toEqual([]);
+    expect((await say(p, 'x'.repeat(200)))?.text).toMatch(/Noted/);
+  });
+
+  test('no answer to put the note on (removed meanwhile): told, question closed', async () => {
+    const p = player();
+    await expectNote(p.id, 'e1', 'c1');
+    prismaMock.response.updateMany.mockResolvedValue({ count: 0 });
+
+    expect((await say(p, 'hi'))?.text).toMatch(/no longer exists/);
+    expect(await say(p, 'hi')).toBeNull();
+  });
+
+  test('moveFollowUp: an open question follows the answer to the new character; none is created otherwise', async () => {
+    const p = player();
+    await moveFollowUp(p.id, 'e1', 'c1', 'c2', false);
+    expect(await say(p, 'hi')).toBeNull();
+
+    await expectLateMinutes(p.id, 'e1', 'c1');
+    await moveFollowUp(p.id, 'e1', 'c1', 'c2', false);
+    await say(p, 'hi');
+    expect(noteWritten()[0]!.where).toEqual({ eventId: 'e1', characterId: 'c2' });
+  });
+
+  test('moveFollowUp leaves alone a question about another event or character (an old button)', async () => {
+    const p = player();
+    await expectNote(p.id, 'e2', 'c1');
+    await moveFollowUp(p.id, 'e1', 'c1', 'c2', true);
+    await moveFollowUp(p.id, 'e2', 'c9', 'c2', true);
+
+    await say(p, 'hi');
+    expect(noteWritten()[0]!.where).toEqual({ eventId: 'e2', characterId: 'c1' });
+    expect(prismaMock.response.upsert).not.toHaveBeenCalled();
+  });
+
+  test('LATE with minutes only writes no note', async () => {
+    const p = player();
+    await expectLateMinutes(p.id, 'e1', 'c1');
+    expect((await say(p, '20'))?.text).toBe('Noted: late by 20 min.');
+    expect(noteWritten()).toEqual([]);
+  });
 });
 
 test('a character taken off the roster meanwhile: the player is told and the question closes', async () => {
@@ -46,7 +120,7 @@ test('a character taken off the roster meanwhile: the player is told and the que
   expect(await say(p, '15')).toBeNull();
 });
 
-describe('late follow-up', () => {
+describe('LATE: the minutes', () => {
   test('ignores people who were not asked for minutes, so other handlers can answer them', async () => {
     expect(await say(player(), '15')).toBeNull();
     expect(prismaMock.response.upsert).not.toHaveBeenCalled();
@@ -64,20 +138,20 @@ describe('late follow-up', () => {
     expect(call.update).toMatchObject({ status: 'LATE', arrivalTime: new Date(start.getTime() + 15 * 60_000) });
   });
 
-  test.each([['0', /on time/i], ['720', /720 min/], [' 45 ', /45 min/]])('accepts %j', async (text, expected) => {
+  test.each([['0', /on time/i], ['720', /720 min/], [' 45 ', /45 min/], ['15 minutes', /15 min, note "minutes"/]])('accepts %j', async (text, expected) => {
     const me = player();
     expectLateMinutes(me.id, 'e1', 'c1');
 
     expect((await say(me, text))?.text).toMatch(expected);
   });
 
-  test.each(['abc', '-5', '721', '1.5', '', '   ', '15 minutes', '1e2', '０５', '0x10', '+15', '99999999999999999999'])(
+  test.each(['abc', '-5', '721', '1.5', '', '   ', 'traffic 15', '1e2', '０５', '0x10', '+15', '99999999999999999999'])(
     'asks again for %j and keeps waiting',
     async (text) => {
       const me = player();
       expectLateMinutes(me.id, 'e1', 'c1');
 
-      expect((await say(me, text))?.text).toMatch(/number of minutes/i);
+      expect((await say(me, text))?.text).toMatch(/Send the minutes/i);
       expect(prismaMock.response.upsert).not.toHaveBeenCalled();
 
       expect((await say(me, '10'))?.text).toMatch(/10 min/); // still waiting

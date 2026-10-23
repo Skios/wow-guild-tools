@@ -167,11 +167,11 @@ model Response {
   @@map("responses")
 }
 
-// Half-finished bot conversations ("how many minutes late?").
+// Half-finished bot conversations ("a note on your answer?", "how many minutes late?").
 // Serverless instances share no memory, so the next message may land elsewhere: keep them here.
 model ChatDraft {
   id             String   @id @default(uuid())
-  kind           String   // "late"
+  kind           String   // "answer"
   platform       String   // "telegram"
   platformUserId String
   data           Json

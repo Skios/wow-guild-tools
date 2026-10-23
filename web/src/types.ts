@@ -70,6 +70,8 @@ export interface EventResponse {
   status: ResponseStatus;
   isConfirmed: boolean;
   arrivalTime: string | null;
+  /** The player's note on their answer (e.g. "leaving 30 min early"). */
+  note: string | null;
   character: {
     id: string;
     name: string;

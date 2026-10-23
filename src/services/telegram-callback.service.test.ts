@@ -3,8 +3,8 @@ import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
 
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 
-const late = vi.hoisted(() => ({ expectLateMinutes: vi.fn(), forgetLateMinutes: vi.fn() }));
-vi.mock('./late.service.js', () => late);
+const late = vi.hoisted(() => ({ expectFollowUp: vi.fn(), moveFollowUp: vi.fn() }));
+vi.mock('./followup.service.js', () => late);
 
 import { handleCallbackQuery } from './telegram-callback.service.js';
 
@@ -15,8 +15,8 @@ const ALT = { id: 'bbbbbbbb-2222-4222-8222-000000000002', name: 'Kerlink' };
 
 beforeEach(() => {
   resetPrismaMock();
-  late.expectLateMinutes.mockReset();
-  late.forgetLateMinutes.mockReset();
+  late.expectFollowUp.mockReset();
+  late.moveFollowUp.mockReset();
   prismaMock.identity.findUnique.mockResolvedValue({ userId: 'u1' });
   prismaMock.character.findMany.mockResolvedValue([MAIN]);
   prismaMock.character.count.mockImplementation(async (args: { where: { id: { in: string[] } } }) => args.where.id.in.length);
@@ -28,13 +28,14 @@ beforeEach(() => {
 const savedFor = () => prismaMock.response.upsert.mock.calls[0]![0].where.eventId_characterId.characterId;
 
 describe('handleCallbackQuery: answering', () => {
-  test('stores the answer for the main and confirms; one character means no extra message', async () => {
+  test('stores the answer for the main, confirms, and privately offers to add a note', async () => {
     const result = await handleCallbackQuery(query(`raid_tent_${EVENT_ID}`));
 
     expect(savedFor()).toBe(MAIN.id);
     expect(result.text).toContain('TENTATIVE');
     expect(result.register).toBeUndefined();
-    expect(result.dm).toBeUndefined();
+    expect(result.dm).toEqual({ text: expect.stringMatching(/TENTATIVE noted\. Reply with a note/) });
+    expect(late.expectFollowUp).toHaveBeenCalledWith(42, EVENT_ID, MAIN.id, false);
   });
 
   test('only approved characters are candidates: main first, then oldest', async () => {
@@ -122,7 +123,8 @@ describe('handleCallbackQuery: answering', () => {
       expect(prismaMock.response.upsert.mock.calls[0]![0].create.status).toBe('LATE');
       expect(result.text).toMatch(/private chat/i);
       expect(result.dm?.text).toMatch(/how many minutes/i);
-      expect(late.expectLateMinutes).toHaveBeenCalledWith(42, EVENT_ID, MAIN.id);
+      expect(result.dm?.text).toMatch(/15 traffic/);
+      expect(late.expectFollowUp).toHaveBeenCalledWith(42, EVENT_ID, MAIN.id, true);
     });
 
     test('with several characters the minutes question and the buttons come in one message', async () => {
@@ -140,13 +142,12 @@ describe('handleCallbackQuery: answering', () => {
       const result = await handleCallbackQuery(query(`raid_late_${EVENT_ID}`));
 
       expect(result.dm).toBeUndefined();
-      expect(late.expectLateMinutes).not.toHaveBeenCalled();
+      expect(late.expectFollowUp).not.toHaveBeenCalled();
     });
 
-    test('the other buttons never open the question, and drop one an earlier LATE left open', async () => {
+    test('the other buttons ask only for a note (replacing a minutes question an earlier LATE left open)', async () => {
       await handleCallbackQuery(query(`raid_in_${EVENT_ID}`));
-      expect(late.expectLateMinutes).not.toHaveBeenCalled();
-      expect(late.forgetLateMinutes).toHaveBeenCalledWith(42);
+      expect(late.expectFollowUp).toHaveBeenCalledWith(42, EVENT_ID, MAIN.id, false);
     });
   });
 });
@@ -164,7 +165,7 @@ describe('handleCallbackQuery: answering with another character (as_<index>)', (
 
     expect(prismaMock.response.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ eventId: EVENT_ID, characterId: ALT.id, status: 'IN' }) }));
     expect(result.text).toMatch(/Kerlink/);
-    expect(late.forgetLateMinutes).toHaveBeenCalledWith(42); // not waiting for minutes
+    expect(late.moveFollowUp).toHaveBeenCalledWith(42, EVENT_ID, MAIN.id, ALT.id, false); // an open note question follows
   });
 
   test('a LATE answer still waiting for minutes keeps waiting, now for the new character', async () => {
@@ -172,7 +173,7 @@ describe('handleCallbackQuery: answering with another character (as_<index>)', (
 
     await handleCallbackQuery(query(`as_bbbbbbbb_${EVENT_ID}`));
 
-    expect(late.expectLateMinutes).toHaveBeenCalledWith(42, EVENT_ID, ALT.id);
+    expect(late.moveFollowUp).toHaveBeenCalledWith(42, EVENT_ID, MAIN.id, ALT.id, true);
   });
 
   test('already answering with it: nothing changes', async () => {

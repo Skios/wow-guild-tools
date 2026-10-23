@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { telegramConfig } from '../config/telegram.js';
 import { TelegramClient } from '../integrations/telegram/telegram.client.js';
 import { safeEqual } from '../lib/safe-equal.js';
-import { handleLateMessage } from '../services/late.service.js';
+import { handleFollowUp } from '../services/followup.service.js';
 import { handleReset, handleStart, linkConfig, type Reply } from '../services/link.service.js';
 import { CallbackQuerySchema, handleCallbackQuery } from '../services/telegram-callback.service.js';
 
@@ -48,11 +48,11 @@ export async function telegramRoutes(fastify: FastifyInstance) {
     const { callback_query: query, message } = update.data;
 
     if (message?.text && message.chat.type === 'private') {
-      // A player who just pressed LATE is answering "how many minutes?"; /start links accounts.
+      // A player who just pressed a button may be sending a note (and the minutes for LATE); /start links accounts.
       const text = message.text.trim();
-      const late = await handleLateMessage({ from: message.from, text });
+      const followUp = await handleFollowUp({ from: message.from, text });
       const start = /^\/start(?:@\w+)?(?:\s+(\S+))?$/.exec(text);
-      const answer = late
+      const answer = followUp
         ?? (start ? await handleStart(message.from, start[1] ?? '', linkConfig())
           : /^\/reset(?:@\w+)?$/.test(text) ? await handleReset(message.from, linkConfig()) : { text: HELP });
       await reply(message.chat.id, answer);

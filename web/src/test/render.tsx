@@ -106,7 +106,7 @@ export const response = (
   name: string, role: RoleId, status: EventResponse['status'], isConfirmed = false, cls = 'MAGE',
   arrivalTime: string | null = null,
 ): EventResponse => ({
-  id: `r-${name}`, characterId: `c-${name}`, status, isConfirmed, arrivalTime,
+  id: `r-${name}`, characterId: `c-${name}`, status, isConfirmed, arrivalTime, note: null,
   character: { id: `c-${name}`, name, realm: 'Silvermoon', class: cls, spec: null, role, isMain: true, user: { username: `${name.toLowerCase()}_player` }, offSpecs: [], nickname: null },
 });
 

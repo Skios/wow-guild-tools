@@ -83,7 +83,7 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 
 ## In progress: accounts, characters, contact channels (2026-10-23)
 See .claude/plans/accounts.plan.md (steps 1-6 done: roles, sign-up, Users page + password resets, Telegram link,
-profile and characters, roster approval + new season; next: notes on answers, Roles page).
+profile and characters, roster approval + new season, notes on answers; next: Roles page).
 
 ## Parked
 - [x] Telegram on dev works (2026-10-23): the webhook had never been set; `npm run telegram:webhook:dev` fixed it,

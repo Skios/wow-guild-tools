@@ -1,6 +1,6 @@
 # Plan: accounts, configurable roles, characters, contact channels
 
-Status: steps 1-6 done (2026-10-23); 7 (notes) and 8 (Roles page) next.
+Status: steps 1-7 done (2026-10-23); 8 (Roles page) next.
 
 ## User decisions
 1. Configurable roles with capabilities now. Base roles: Guildmaster, Officer, Raidleader, Raider.
@@ -153,7 +153,7 @@ publishable key.
    dialog + reset link on Telegram, bot /reset, /reset page) + officer assigns characters (Roster page)
 6. [x] roster approval + answers only for approved characters + which character answers (bot) + new season + UI fixes
    (also: event page "Add a character" removed, the no-answer panel's "Mark as" covers it; spec icons load eagerly)
-7. notes on every answer
+7. [x] notes on every answer (bot follow-up after every tap, `15 traffic` for LATE, shown on the board)
 8. Roles page (Owner)
 
 ## Later (user decisions 2026-10-23)

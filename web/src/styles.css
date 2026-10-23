@@ -172,6 +172,8 @@ button.danger { background: var(--danger); border-color: var(--danger); color: #
 .inline-form { display: flex; align-items: flex-end; gap: 0.6rem; flex-wrap: wrap; }
 .inline-form > div { flex: 1 1 220px; max-width: 320px; }
 .table .badge { margin-right: 0.3rem; }
+.person-note { display: block; font-size: 0.82rem; font-style: italic; color: var(--muted); overflow-wrap: anywhere; }
+.person-note::before { content: '“'; } .person-note::after { content: '”'; }
 .cell-actions { width: 1%; white-space: nowrap; text-align: right; }
 .cell-actions .actions { justify-content: flex-end; }
 .icon-button { display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0; }

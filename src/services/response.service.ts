@@ -20,6 +20,13 @@ async function requireApproved(characterIds: string[]) {
   if ((await prisma.character.count({ where: { id: { in: ids }, inRoster: true } })) !== ids.length) throw new NotApprovedError();
 }
 
+/**
+ * A note belongs to an answer ("IN, but leaving early"): a different answer, by the player or an officer, starts
+ * without it. Run in the same transaction as the write, so the check and the write see the same row.
+ */
+const clearNoteUnless = (eventId: string, characterId: string, status: ResponseStatus) =>
+  prisma.response.updateMany({ where: { eventId, characterId, NOT: { status } }, data: { note: null } });
+
 export class ResponseService {
   private async openEvent(eventId: string) {
     const event = await prisma.event.findUnique({ where: { id: eventId }, select: { isPublished: true, startTime: true } });
@@ -39,15 +46,16 @@ export class ResponseService {
     const event = await this.openEvent(eventId);
     await requireApproved([characterId]);
     const arrival = this.arrival(status, event.startTime, lateMinutes);
-
-    return prisma.response.upsert({
-      where: {
-        eventId_characterId: { eventId, characterId },
-      },
-      // A member changing their answer must not undo the officer's confirmation.
-      update: { status, ...(isConfirmed !== undefined && { isConfirmed }), ...arrival },
-      create: { eventId, characterId, status, isConfirmed: isConfirmed ?? false, arrivalTime: arrival.arrivalTime ?? null },
-    });
+    const [, saved] = await prisma.$transaction([
+      clearNoteUnless(eventId, characterId, status),
+      prisma.response.upsert({
+        where: { eventId_characterId: { eventId, characterId } },
+        // A member changing their answer must not undo the officer's confirmation.
+        update: { status, ...(isConfirmed !== undefined && { isConfirmed }), ...arrival },
+        create: { eventId, characterId, status, isConfirmed: isConfirmed ?? false, arrivalTime: arrival.arrivalTime ?? null },
+      }),
+    ]);
+    return saved;
   }
 
   async bulkUpdateResponses(
@@ -57,16 +65,24 @@ export class ResponseService {
     const event = await this.openEvent(eventId);
     await requireApproved(selections.map(s => s.characterId));
 
-    const updates = selections.map(s => {
+    const updates = selections.flatMap(s => {
       const arrival = this.arrival(s.status, event.startTime, s.lateMinutes);
-      return prisma.response.upsert({
+      return [clearNoteUnless(eventId, s.characterId, s.status), prisma.response.upsert({
         where: { eventId_characterId: { eventId, characterId: s.characterId } },
         update: { status: s.status, isConfirmed: s.isConfirmed, ...arrival },
         create: { eventId, characterId: s.characterId, status: s.status, isConfirmed: s.isConfirmed, arrivalTime: arrival.arrivalTime ?? null },
-      });
+      })];
     });
 
     return prisma.$transaction(updates);
+  }
+
+  /** The player's note on their answer (e.g. "IN, but leaving 30 min early"). */
+  async setNote(eventId: string, characterId: string, note: string) {
+    await this.openEvent(eventId);
+    await requireApproved([characterId]);
+    const { count } = await prisma.response.updateMany({ where: { eventId, characterId }, data: { note } });
+    if (count === 0) throw new NotFoundError('Answer first, then add a note');
   }
 
   /**

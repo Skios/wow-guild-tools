@@ -11,6 +11,7 @@ const response = (
   name: string, role: RosterRow['role'], status: ResponseStatus, isConfirmed = false, arrivalTime: string | null = null,
 ): EventResponse => ({
   id: `r-${name}`,
+  note: null,
   characterId: `c-${name}`,
   status,
   isConfirmed,
@@ -276,6 +277,13 @@ describe('groupRows', () => {
     const groups = groupRows([]);
     expect(Object.values(groups.accepted).every(g => g.length === 0)).toBe(true);
     expect(groups.late).toEqual([]);
+  });
+});
+
+describe('notes', () => {
+  test("a row carries the player's note; a row added on the board has none", () => {
+    expect(rows({ ...response('Amy', 'DPS', 'IN'), note: 'early leave' })[0]!.note).toBe('early leave');
+    expect(addCharacter([], noAnswer('Amy'))[0]!.note).toBeNull();
   });
 });
 

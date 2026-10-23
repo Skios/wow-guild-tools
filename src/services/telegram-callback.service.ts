@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { prisma } from '../config/db.js';
 import { EventIdSchema } from '../validators/event.validator.js';
 import { NotFoundError } from '../lib/errors.js';
-import { expectLateMinutes, forgetLateMinutes } from './late.service.js';
+import { expectFollowUp, moveFollowUp } from './followup.service.js';
 import type { Reply } from './link.service.js';
 import { EventLockedError, ResponseService } from './response.service.js';
 
@@ -64,16 +64,14 @@ async function answer(query: CallbackQuery, eventId: string, status: (typeof STA
   } catch (error) {
     return closedOrMissing(error);
   }
+  // The next private message is the note (with the minutes first for LATE).
+  await expectFollowUp(query.from.id, eventId, character.id, status === 'LATE');
+  const question = status === 'LATE'
+    ? 'How many minutes late will you be? Send the number and a note if you want, for example: 15 traffic'
+    : `${status} noted. Reply with a note if you want (for example: leaving 30 min early).`;
   const others = otherCharacters(eventId, characters, character);
-  if (status !== 'LATE') {
-    await forgetLateMinutes(query.from.id); // a minutes question from an earlier LATE no longer applies
-    return { text: `Response saved: ${status}`, ...(others && { dm: others }) };
-  }
-
-  await expectLateMinutes(query.from.id, eventId, character.id);
-  const question = 'How many minutes late will you be? Send a number, for example 15. Ignore this if you are not sure yet.';
   return {
-    text: 'Late noted. Tell me the minutes in our private chat.',
+    text: status === 'LATE' ? 'Late noted. Tell me the minutes in our private chat.' : `Response saved: ${status}`,
     dm: others ? { text: `${question}\n\n${others.text}`, keyboard: others.keyboard! } : { text: question },
   };
 }
@@ -89,10 +87,9 @@ async function switchTo(query: CallbackQuery, eventId: string, key: string, char
   } catch (error) {
     return closedOrMissing(error);
   }
-  // A LATE answer still waiting for its minutes: the minutes now go to the new character.
+  // A question still open (note, or LATE minutes not given yet) now goes to the new character.
   const moved = await prisma.response.findUnique({ where: { eventId_characterId: { eventId, characterId: target.id } }, select: { status: true, arrivalTime: true } });
-  if (moved?.status === 'LATE' && !moved.arrivalTime) await expectLateMinutes(query.from.id, eventId, target.id);
-  else await forgetLateMinutes(query.from.id);
+  await moveFollowUp(query.from.id, eventId, current.id, target.id, moved?.status === 'LATE' && !moved.arrivalTime);
   return { text: `Now answering with ${target.name}.` };
 }
 

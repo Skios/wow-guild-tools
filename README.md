@@ -89,7 +89,9 @@ Telegram needs a public HTTPS URL for the webhook. Expose the port with a tunnel
 `curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" -d url=<tunnel>/api/webhooks/telegram -d secret_token=$TELEGRAM_WEBHOOK_SECRET`
 
 The webhook is checked with `TELEGRAM_WEBHOOK_SECRET` (header `x-telegram-bot-api-secret-token`).
-Players answer with the IN / LATE / TENTATIVE / OUT buttons; LATE asks for the minutes in a private chat. The answer
+Players answer with the IN / LATE / TENTATIVE / OUT buttons. In the private chat the bot then asks for an optional
+note (e.g. "leaving 30 min early"; LATE asks for the minutes and the note in one message: `15 traffic`); the note shows
+under the name on the event board, and a different answer clears it. The answer
 goes to the player's main (or the character already answering for that event); with more than one approved character
 the bot's private message has a button for each of the others, to answer with it instead.
 Set `SITE_URL` (the site's address) so `/start` can send the sign-up link.
@@ -114,6 +116,6 @@ The pipeline deploys only what a push changed (site, API + migrations, or both).
 
 ## Status
 Milestones 1–3 (core, bot, admin site) are live on Vercel + Supabase (dev). Accounts are in progress: roles,
-sign-up, Users page, Telegram linking, profile and characters, roster approval and new season are done; notes on
-every answer and the Roles page are next. Then an alpha with testers, reminders (M4) and production.
+sign-up, Users page, Telegram linking, profile and characters, roster approval, new season and notes on every answer
+are done; the Roles page is next. Then an alpha with testers, reminders (M4) and production.
 See `.claude/plans`.

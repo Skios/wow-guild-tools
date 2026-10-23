@@ -25,6 +25,8 @@ export interface RosterRow {
   isConfirmed: boolean;
   /** Only meaningful while status is LATE; null = not said. */
   lateMinutes: number | null;
+  /** The player's own note, read-only here. */
+  note: string | null;
   /** What the server has; null for a character added in this session. */
   saved: SavedState | null;
 }
@@ -56,6 +58,7 @@ export function rowsFromResponses(responses: EventResponse[], startTime: string)
       status: r.status,
       isConfirmed: r.isConfirmed,
       lateMinutes,
+      note: r.note ?? null,
       saved: { status: r.status, isConfirmed: r.isConfirmed, lateMinutes },
     };
   });
@@ -106,6 +109,7 @@ export function addCharacter(
     status,
     isConfirmed: false,
     lateMinutes: null,
+    note: null,
     saved: null,
   };
   return [...rows, added];

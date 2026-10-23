@@ -11,7 +11,7 @@ vi.mock('../services/telegram-callback.service.js', async (orig) => ({
   ...(await orig<object>()),
   handleCallbackQuery: handle,
 }));
-vi.mock('../services/late.service.js', () => ({ handleLateMessage: lateMessage }));
+vi.mock('../services/followup.service.js', () => ({ handleFollowUp: lateMessage }));
 const reset = vi.hoisted(() => vi.fn());
 vi.mock('../services/link.service.js', () => ({ handleStart: start, handleReset: reset, linkConfig: () => ({ key: null, siteUrl: undefined }) }));
 vi.mock('../integrations/telegram/telegram.client.js', () => ({
@@ -175,7 +175,7 @@ describe('POST /webhooks/telegram', () => {
     expect(answer).toHaveBeenCalledWith('q1', 'Register first', undefined);
   });
 
-  test('a private message that answers the late question is not treated as anything else', async () => {
+  test('a private message that answers the follow-up (note, minutes) is not treated as anything else', async () => {
     lateMessage.mockResolvedValue({ text: 'Noted: late by 15 min.' });
     const payload = { update_id: 7, message: { chat: { id: 42, type: 'private' }, from: { id: 42 }, text: '15' } };
 

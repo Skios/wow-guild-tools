@@ -36,6 +36,7 @@ export function PersonRow({ row, eventStart, disabled, onStatus, onConfirm, onLa
         <CharacterName name={row.name} classId={row.class} nickname={row.nickname} />
         {late && row.lateMinutes !== null && <span className="muted"> ({formatTime(arrivalTime(eventStart, row.lateMinutes))})</span>}
         {row.username && !row.nickname && <span className="muted person-user"> @{row.username}</span>}
+        {row.note && <span className="person-note">{row.note}</span>}
       </span>
 
       <span className="person-controls">
