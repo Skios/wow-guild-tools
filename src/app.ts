@@ -3,7 +3,8 @@ import rateLimit from '@fastify/rate-limit';
 import { adminRoutes } from './controllers/admin.controller.js';
 import { eventRoutes } from './controllers/event.controller.js';
 import { groupRoutes } from './controllers/group.controller.js';
-import { signupRoutes, type Accounts } from './controllers/signup.controller.js';
+import { accountRoutes } from './controllers/account.controller.js';
+import { signupRoutes } from './controllers/signup.controller.js';
 import { roleRoutes } from './controllers/role.controller.js';
 import { profileRoutes } from './controllers/profile.controller.js';
 import { rosterRoutes } from './controllers/roster.controller.js';
@@ -13,10 +14,13 @@ import { sendError } from './lib/http-error.js';
 import { OfficerService, supabaseAuthAdmin } from './services/officer.service.js';
 import { requireCapability, requireSiteUser, supabaseTokenVerifier, type TokenVerifier } from './plugins/auth.js';
 
+// What the routes use from OfficerService (tests pass a stand-in).
+type AccountService = Pick<OfficerService, 'signup' | 'listAccounts' | 'resetPasswordFor' | 'changeOwnPassword'>;
+
 const BODY_LIMIT_BYTES = 100 * 1024;
 const RATE_LIMIT_PER_MINUTE = 300;
 
-export async function buildApp(options: { logger?: FastifyServerOptions['logger']; verifyToken?: TokenVerifier; accounts?: Accounts } = {}) {
+export async function buildApp(options: { logger?: FastifyServerOptions['logger']; verifyToken?: TokenVerifier; accounts?: AccountService } = {}) {
   const app = Fastify({
     logger: options.logger ?? false,
     bodyLimit: BODY_LIMIT_BYTES,
@@ -55,6 +59,7 @@ export async function buildApp(options: { logger?: FastifyServerOptions['logger'
       });
       await site.register(adminRoutes); // who am I, game data: any site user
       await site.register(roleRoutes); // each route checks Owner / accounts.manage itself
+      await site.register(accountRoutes(accounts)); // Users page (accounts.manage) and your own password
       await guarded('events.manage', eventRoutes);
       await guarded('roster.manage', rosterRoutes);
       await guarded('roster.manage', profileRoutes);

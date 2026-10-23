@@ -101,7 +101,7 @@ publishable key.
 ## Order (each: tests first, review agents, commit)
 1. [x] roles table + migration + capabilities from the code + rules + API (+ script creates only Owners)
 2. [x] signup API + password policy + /signup and /login (Chrome-friendly), /characters closed to Raiders
-3. Users page: role assignment + password reset + mustChangePassword + /account/password
+3. [x] Users page: role assignment + password reset + mustChangePassword + /account/password
 4. Telegram link token (both directions) + removal of the bot registration flow
 5. /profile + Raider.IO autocomplete + claim
 6. roster approval + answers only for approved characters

@@ -1,11 +1,19 @@
 import { createContext, useContext } from 'react';
 import type { Api } from './api';
 import { DEFAULT_PREFS, type Prefs } from './theme';
-import type { Meta, RoleId } from './types';
+import type { Meta, Officer, RoleId } from './types';
 
 export const ApiContext = createContext<Api | null>(null);
 export const MetaContext = createContext<Meta | null>(null);
 export const PrefsContext = createContext<Prefs>(DEFAULT_PREFS);
+export const OfficerContext = createContext<Officer | null>(null);
+
+/** The signed-in account (provided by the app shell). */
+export function useOfficer(): Officer {
+  const officer = useContext(OfficerContext);
+  if (!officer) throw new Error('OfficerContext is missing');
+  return officer;
+}
 
 export function useApi(): Api {
   const api = useContext(ApiContext);

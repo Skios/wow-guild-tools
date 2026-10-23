@@ -1,5 +1,5 @@
 import type {
-  CharacterSummary, EventDetail, EventSummary, Meta, MessageResult, NewEvent, Officer, RosterCharacter, RosterEntryInput, RosterSelection,
+  Account, CharacterSummary, EventDetail, SiteRoleSummary, EventSummary, Meta, MessageResult, NewEvent, Officer, RosterCharacter, RosterEntryInput, RosterSelection,
 } from './types';
 
 const BASE = '/api';
@@ -73,6 +73,7 @@ export function createApi({ fetchImpl = fetch, getToken = async () => null, onUn
     }
     if (response.status === 403) throw new ApiError('Your account does not have access to this.', 403);
     if (!response.ok) throw await errorFrom(response);
+    if (response.status === 204) return undefined as T;
 
     try {
       return (await response.json()) as T;
@@ -106,6 +107,13 @@ export function createApi({ fetchImpl = fetch, getToken = async () => null, onUn
       request<RosterCharacter>(`/roster/${id(characterId)}`, send('PUT', entry)),
     removeFromRoster: (characterId: string) => request<{ success: true }>(`/roster/${id(characterId)}`, send('DELETE')),
     releaseRosterEntry: (characterId: string) => request<RosterCharacter>(`/roster/${id(characterId)}/release`, send('POST')),
+
+    listUsers: () => request<Account[]>('/users'),
+    listRoles: () => request<SiteRoleSummary[]>('/roles'),
+    setUserRole: (userId: string, roleId: string) => request<void>(`/users/${id(userId)}/role`, send('PUT', { roleId })),
+    resetUserPassword: (userId: string) => request<{ password: string }>(`/users/${id(userId)}/password-reset`, send('POST')),
+    changePassword: (currentPassword: string, password: string) =>
+      request<void>('/auth/password', send('POST', { currentPassword, password })),
   };
 }
 

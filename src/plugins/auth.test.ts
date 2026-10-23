@@ -77,13 +77,14 @@ describe('supabaseTokenVerifier', () => {
 });
 
 describe('requireSiteUser', () => {
-  const officerIdentity = { user: { id: 'u1', username: 'Brannock', role: { name: 'Officer', position: 20, isOwner: false, capabilities: ['roster.manage', 'gone.away'] } } };
+  const officerIdentity = { user: { id: 'u1', username: 'Brannock', mustChangePassword: false, role: { name: 'Officer', position: 20, isOwner: false, capabilities: ['roster.manage', 'gone.away'] } } };
 
   async function app(verifier: TokenVerifier = verify) {
     const fastify = Fastify();
     await fastify.register(async (scope) => {
       requireSiteUser(scope, verifier);
       scope.get('/secure', async (request) => request.officer);
+      scope.get('/me', { config: { duringPasswordChange: true } }, async () => ({ ok: true }));
     });
     fastify.get('/open', async () => ({ ok: true }));
     return fastify;
@@ -101,7 +102,7 @@ describe('requireSiteUser', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
-      userId: 'u1', username: 'Brannock', role: 'Officer', position: 20, isOwner: false,
+      userId: 'u1', username: 'Brannock', role: 'Officer', position: 20, isOwner: false, mustChangePassword: false,
       capabilities: ['roster.manage'], // a stale capability name grants nothing
     });
     expect(prismaMock.identity.findUnique).toHaveBeenCalledWith(expect.objectContaining({
@@ -143,6 +144,17 @@ describe('requireSiteUser', () => {
     expect((await call(`Bearer ${await signer.sign()}`)).statusCode).toBe(403);
   });
 
+  test('with a temporary password only the routes meant for changing it work', async () => {
+    prismaMock.identity.findUnique.mockResolvedValue({ user: { ...officerIdentity.user, mustChangePassword: true } });
+    const fastify = await app();
+    const headers = { authorization: `Bearer ${await signer.sign()}` };
+
+    const blocked = await fastify.inject({ url: '/secure', headers });
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.json()).toEqual({ error: 'Change your password first', code: 'password_change_required' });
+    expect((await fastify.inject({ url: '/me', headers })).statusCode).toBe(200);
+  });
+
   test('a database outage is not mistaken for a missing officer', async () => {
     prismaMock.identity.findUnique.mockRejectedValue(new Error('db down'));
 
@@ -159,7 +171,7 @@ describe('requireCapability / requireOwner', () => {
   async function app(officer: Partial<Officer> | undefined) {
     const fastify = Fastify();
     fastify.addHook('onRequest', async (request) => {
-      if (officer) request.officer = { userId: 'u1', username: 'x', role: 'Officer', position: 20, isOwner: false, capabilities: [], ...officer };
+      if (officer) request.officer = { userId: 'u1', username: 'x', role: 'Officer', position: 20, isOwner: false, mustChangePassword: false, capabilities: [], ...officer };
     });
     fastify.get('/accounts', { onRequest: requireCapability('accounts.manage') }, async () => ({ ok: true }));
     fastify.get('/owner', { onRequest: requireOwner }, async () => ({ ok: true }));

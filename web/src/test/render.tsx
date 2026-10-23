@@ -6,7 +6,8 @@ import { ApiContext, MetaContext } from '../context';
 import type { CharacterSummary, EventDetail, EventResponse, EventSummary, Meta, NoAnswerEntry, Officer } from '../types';
 
 export const OFFICER: Officer = {
-  userId: 'u1', username: 'cid', role: 'Officer', capabilities: ['accounts.manage', 'events.manage', 'messages.send', 'roster.manage'],
+  userId: 'u1', username: 'cid', role: 'Officer', position: 20, isOwner: false, mustChangePassword: false,
+  capabilities: ['accounts.manage', 'events.manage', 'messages.send', 'roster.manage'],
 };
 
 export const META: Meta = {
@@ -55,6 +56,11 @@ export function fakeApi(overrides: Overrides = {}): Api {
     updateRosterEntry: vi.fn().mockResolvedValue({}),
     removeFromRoster: vi.fn().mockResolvedValue({ success: true }),
     releaseRosterEntry: vi.fn().mockResolvedValue({}),
+    listUsers: vi.fn().mockResolvedValue([]),
+    listRoles: vi.fn().mockResolvedValue([]),
+    setUserRole: vi.fn().mockResolvedValue(undefined),
+    resetUserPassword: vi.fn().mockResolvedValue({ password: 'Temp-password-123' }),
+    changePassword: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as Api;
 }

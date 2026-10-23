@@ -8,41 +8,51 @@ import { createSupabaseAuth, useSession, type AuthClient } from './auth';
 import { AppearancePicker } from './components/AppearancePicker';
 import { Login } from './components/Login';
 import { Signup } from './components/Signup';
-import { ApiContext, MetaContext, PrefsContext } from './context';
+import { ChangePassword } from './components/ChangePassword';
+import { ApiContext, MetaContext, OfficerContext, PrefsContext } from './context';
 import { usePrefs } from './theme';
 import type { Officer } from './types';
 import { errorMessage, useAsync } from './useAsync';
 
-function Shell({ api, officer, onSignOut, children }: { api: Api; officer: Officer; onSignOut: () => void; children: ReactNode }) {
-  const meta = useAsync(() => api.getMeta(), [api]);
-  const onRoster = usePathname().startsWith('/roster');
+function Shell({ api, auth, officer, onSignOut, onAccountChanged, children }: {
+  api: Api; auth: AuthClient; officer: Officer; onSignOut: () => void; onAccountChanged: () => void; children: ReactNode;
+}) {
+  const path = usePathname();
+  const forced = officer.mustChangePassword === true;
+  // With a temporary password the API refuses game data: don't ask for it until the password is changed.
+  const meta = useAsync(() => (forced ? Promise.resolve(null) : api.getMeta()), [api, forced]);
+  const onRoster = path.startsWith('/roster');
   const { prefs, setTheme, setIcons } = usePrefs();
   // ?? []: an API deployed before this site answers without capabilities; show the welcome, don't crash.
   const can = (capability: string) => (officer.capabilities ?? []).includes(capability);
-  const hasPages = can('events.manage') || can('roster.manage');
+  const hasPages = can('events.manage') || can('roster.manage') || can('accounts.manage');
+  const changePassword = forced || path === '/account/password';
 
   return (
     <PrefsContext.Provider value={prefs}>
       <header className="topbar">
         <Link href="/events" className="brand">Guild Raid Admin</Link>
         <nav aria-label="Main">
-          {can('events.manage') && <Link href="/events" aria-current={onRoster ? undefined : 'page'}>Events</Link>}
-          {can('roster.manage') && <Link href="/roster" aria-current={onRoster ? 'page' : undefined}>Roster</Link>}
+          {!forced && can('events.manage') && <Link href="/events" aria-current={path.startsWith('/events') ? 'page' : undefined}>Events</Link>}
+          {!forced && can('roster.manage') && <Link href="/roster" aria-current={onRoster ? 'page' : undefined}>Roster</Link>}
+          {!forced && can('accounts.manage') && <Link href="/users" aria-current={path.startsWith('/users') ? 'page' : undefined}>Users</Link>}
         </nav>
         <AppearancePicker prefs={prefs} onTheme={setTheme} onIcons={setIcons} />
-        <span className="muted">{officer.username}</span>
+        <Link href="/account/password" className="muted" title="Your account">{officer.username}</Link>
         <button type="button" onClick={onSignOut}>Sign out</button>
       </header>
       <main className="page">
-        {meta.error && (
+        {/* Needs no game data, so it never waits on (or fails with) it. */}
+        {changePassword && <ChangePassword auth={auth} username={officer.username} forced={forced} onDone={onAccountChanged} />}
+        {!changePassword && meta.error && (
           <p role="alert" className="error">
             Could not load game data: {meta.error} <button type="button" onClick={meta.reload}>Retry</button>
           </p>
         )}
-        {meta.loading && !meta.data && <p className="muted" role="status">Loading…</p>}
-        {meta.data && (
+        {!changePassword && meta.loading && !meta.data && <p className="muted" role="status">Loading…</p>}
+        {!changePassword && meta.data && (
           <MetaContext.Provider value={meta.data}>
-            {hasPages ? children : <Welcome officer={officer} />}
+            <OfficerContext.Provider value={officer}>{hasPages ? children : <Welcome officer={officer} />}</OfficerContext.Provider>
           </MetaContext.Provider>
         )}
       </main>
@@ -62,7 +72,7 @@ function Welcome({ officer }: { officer: Officer }) {
 }
 
 /** Asks the server who this is; only officers get past, and they get the whole app. */
-function OfficerGate({ api, onSignOut, children }: { api: Api; onSignOut: () => void; children: ReactNode }) {
+function OfficerGate({ api, auth, onSignOut, children }: { api: Api; auth: AuthClient; onSignOut: () => void; children: ReactNode }) {
   const who = useAsync(
     () => api.me().then(
       officer => ({ officer }),
@@ -71,7 +81,9 @@ function OfficerGate({ api, onSignOut, children }: { api: Api; onSignOut: () => 
     [api],
   );
 
-  if (who.data?.officer) return <Shell api={api} officer={who.data.officer} onSignOut={onSignOut}>{children}</Shell>;
+  if (who.data?.officer) {
+    return <Shell api={api} auth={auth} officer={who.data.officer} onSignOut={onSignOut} onAccountChanged={who.reload}>{children}</Shell>;
+  }
   return (
     <main className="page login">
       <div className="card stack">
@@ -105,7 +117,7 @@ function SignedIn({ auth, api: injected, fetchImpl, children }: { auth: AuthClie
   if (session === null) return onSignup ? <Signup auth={auth} /> : <Login auth={auth} />;
   return (
     <ApiContext.Provider value={api}>
-      <OfficerGate key={session.user.id} api={api} onSignOut={signOut}>{children}</OfficerGate>
+      <OfficerGate key={session.user.id} api={api} auth={auth} onSignOut={signOut}>{children}</OfficerGate>
     </ApiContext.Provider>
   );
 }

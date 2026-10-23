@@ -26,7 +26,7 @@ export async function buildRouteAppAs(capabilities: string[], ...plugins: Fastif
 
 /** A route app signed in as an Officer, with any field overridden (e.g. { isOwner: true }). */
 export async function buildRouteAppFor(over: Partial<Officer>, ...plugins: FastifyPluginAsync[]) {
-  const officer: Officer = { userId: uuid(1), username: 'Officer', role: 'Officer', position: 20, isOwner: false, capabilities: [], ...over };
+  const officer: Officer = { userId: uuid(1), username: 'Officer', role: 'Officer', position: 20, isOwner: false, capabilities: [], mustChangePassword: false, ...over };
   officer.capabilities.forEach(registerCapability);
   const app = Fastify();
   app.addHook('onRequest', async (request) => {

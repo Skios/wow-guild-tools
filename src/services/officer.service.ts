@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { prisma } from '../config/db.js';
 import { passwordProblem } from '../domain/password.js';
 import { AppError, ConflictError, NotFoundError } from '../lib/errors.js';
+import type { Officer } from '../plugins/auth.js';
 
 // Officers sign in with a nickname and a password. Supabase Auth needs an email, so the nickname is
 // mapped to an address on the reserved .invalid domain: no real email (or person) is ever stored,
@@ -31,6 +32,8 @@ export type AuthAdmin = {
   createUser(email: string, password: string): Promise<string>;
   setPassword(id: string, password: string): Promise<void>;
   deleteUser(id: string): Promise<void>;
+  /** True if the password is right; a wrong one is false, an outage throws. */
+  verifyPassword(email: string, password: string): Promise<boolean>;
 };
 
 export function supabaseAuthAdmin(supabaseUrl: string, secretKey: string, fetchImpl: typeof fetch = fetch): AuthAdmin {
@@ -61,6 +64,17 @@ export function supabaseAuthAdmin(supabaseUrl: string, secretKey: string, fetchI
     async setPassword(id, password) {
       const res = await call(`/${id}`, 'PUT', { password });
       if (!res.ok) throw failure('update password', res);
+    },
+    async verifyPassword(email, password) {
+      // The password sign-in endpoint (the secret key works as apikey); the session it opens is simply unused.
+      const res = await fetchImpl(`${supabaseUrl.replace(/\/+$/, '')}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: { apikey: secretKey, 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (res.ok) return true;
+      if (res.status === 400) return false;
+      throw failure('check password', res);
     },
     async deleteUser(id) {
       const res = await call(`/${id}`, 'DELETE');
@@ -122,11 +136,63 @@ export class OfficerService {
     }
   }
 
+  /** Script: new temporary password for an account (e.g. a locked-out Owner). */
   async resetPassword(rawName: unknown) {
     const login = await this.requireLogin(parseOfficerName(rawName));
+    return this.setTemporaryPassword(login);
+  }
+
+  /** Accounts that can sign in, for the Users page. */
+  listAccounts() {
+    return prisma.user.findMany({
+      where: { identities: { some: { platform: 'supabase' } } },
+      select: {
+        id: true, username: true, mustChangePassword: true,
+        role: { select: { id: true, name: true, position: true, isOwner: true } },
+        characters: { select: { name: true, realm: true, class: true }, orderBy: { name: 'asc' } },
+      },
+      orderBy: [{ role: { position: 'asc' } }, { username: 'asc' }],
+    });
+  }
+
+  /** Users page: a temporary password for someone below the actor (the Owner: anyone else). Shown once. */
+  async resetPasswordFor(actor: Officer, userId: string) {
+    if (actor.userId === userId) throw new AppError('Change your own password from your account page', 403);
+    const login = await prisma.identity.findFirst({
+      where: { platform: 'supabase', userId },
+      select: { platformUserId: true, userId: true, user: { select: { role: { select: { position: true, isOwner: true } } } } },
+    });
+    if (!login) throw new NotFoundError('No account with a login');
+    const role = login.user.role;
+    if (!actor.isOwner && role && (role.isOwner || role.position <= actor.position)) {
+      throw new AppError('You can only reset the password of someone below you', 403);
+    }
+    return this.setTemporaryPassword(login);
+  }
+
+  /**
+   * Anyone signed in, for themselves; also lifts the temporary-password lock. The current password is
+   * required (after a reset: the temporary one), so a stolen session alone cannot take the account over.
+   */
+  async changeOwnPassword(userId: string, username: string, currentPassword: string, rawPassword: unknown) {
+    if (typeof rawPassword !== 'string') throw new AppError('Password: required', 400);
+    const problem = passwordProblem(rawPassword, username);
+    if (problem) throw new AppError(problem, 400);
+    if (rawPassword === currentPassword) throw new AppError('Choose a different password from the current one', 400);
+    if (!(await this.admin.verifyPassword(officerEmail(username), currentPassword))) {
+      throw new AppError('The current password is wrong', 400);
+    }
+    const login = await prisma.identity.findFirst({ where: { platform: 'supabase', userId }, select: { platformUserId: true } });
+    if (!login) throw new NotFoundError('No account with a login');
+    await this.admin.setPassword(login.platformUserId, rawPassword);
+    await prisma.user.update({ where: { id: userId }, data: { mustChangePassword: false } });
+  }
+
+  // Supabase also revokes the user's refresh tokens; an access token already issued lives until it expires (1h).
+  private async setTemporaryPassword(login: { platformUserId: string; userId: string }) {
     const password = generatePassword();
-    // Supabase also revokes the user's refresh tokens; an access token already issued lives until it expires (1h).
     await this.admin.setPassword(login.platformUserId, password);
+    await prisma.user.update({ where: { id: login.userId }, data: { mustChangePassword: true } });
     return password;
   }
 

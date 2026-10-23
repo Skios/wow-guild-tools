@@ -144,5 +144,27 @@ export interface Officer {
   userId: string;
   username: string;
   role: string;
+  position: number; // lower = higher rank
+  isOwner: boolean;
   capabilities: string[];
+  mustChangePassword: boolean; // signed in with a temporary password
+}
+
+export interface SiteRoleSummary {
+  id: string;
+  name: string;
+  position: number;
+  capabilities: string[];
+  isOwner: boolean;
+  isDefault: boolean;
+  users: number;
+}
+
+/** A row of the Users page (GET /users). */
+export interface Account {
+  id: string;
+  username: string;
+  mustChangePassword: boolean;
+  role: { id: string; name: string; position: number; isOwner: boolean } | null;
+  characters: { name: string; realm: string; class: string }[];
 }

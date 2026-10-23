@@ -48,6 +48,7 @@ model User {
   // Site role; null = no site access. Capabilities: src/domain/roles.ts.
   roleId       String?
   role         Role?       @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  mustChangePassword Boolean @default(false) // signed in with a temporary password: only the change-password route works
   identities   Identity[]
   characters   Character[]
   eventsCreated Event[]

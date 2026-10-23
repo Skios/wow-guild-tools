@@ -34,7 +34,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   resetPrismaMock();
-  prismaMock.identity.findUnique.mockResolvedValue({ user: { id: 'u1', username: 'Brannock', role: OFFICER } });
+  prismaMock.identity.findUnique.mockResolvedValue({ user: { id: 'u1', username: 'Brannock', role: OFFICER, mustChangePassword: false } });
 });
 
 const OFFICER = { name: 'Officer', position: 20, isOwner: false, capabilities: ['roster.manage', 'events.manage', 'messages.send', 'accounts.manage'] };
@@ -73,6 +73,9 @@ describe('buildApp', () => {
     ['GET', '/api/roles'],
     ['POST', '/api/roles'],
     ['PUT', `/api/users/${ID}/role`],
+    ['GET', '/api/users'],
+    ['POST', `/api/users/${ID}/password-reset`],
+    ['POST', '/api/auth/password'],
   ] as const)('%s %s needs an officer login', async (method, url) => {
     const app = await buildApp();
 
@@ -86,6 +89,19 @@ describe('buildApp', () => {
     expect((await app.inject({ method, url, headers: KEY })).statusCode).toBe(403);
   });
 
+  test('with a temporary password only "who am I" and changing the password are open', async () => {
+    prismaMock.identity.findUnique.mockResolvedValue({ user: { id: 'u1', username: 'Brannock', role: OFFICER, mustChangePassword: true } });
+    const app = await buildApp();
+
+    expect((await app.inject({ url: '/api/events', headers: KEY })).statusCode).toBe(403);
+    expect((await app.inject({ url: '/api/roster', headers: KEY })).statusCode).toBe(403);
+    const me = await app.inject({ url: '/api/auth/me', headers: KEY });
+    expect(me.statusCode).toBe(200);
+    expect(me.json().mustChangePassword).toBe(true);
+    // Reaches the route (503: this test app has no Supabase secret key), not the 403 lock.
+    expect((await app.inject({ method: 'POST', url: '/api/auth/password', headers: KEY, payload: { currentPassword: 'y', password: 'x' } })).statusCode).toBe(503);
+  });
+
   test('the token is not accepted from the query string', async () => {
     const token = KEY.authorization.slice('Bearer '.length);
     expect((await (await buildApp()).inject(`/api/events?access_token=${token}`)).statusCode).toBe(401);
@@ -95,7 +111,7 @@ describe('buildApp', () => {
     const res = await (await buildApp()).inject({ url: '/api/auth/me', headers: KEY });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
-      userId: 'u1', username: 'Brannock', role: 'Officer', position: 20, isOwner: false,
+      userId: 'u1', username: 'Brannock', role: 'Officer', position: 20, isOwner: false, mustChangePassword: false,
       capabilities: ['accounts.manage', 'events.manage', 'messages.send', 'roster.manage'],
     });
   });
@@ -125,7 +141,7 @@ describe('buildApp', () => {
 
 describe('POST /api/signup', () => {
   const signup = vi.fn();
-  const withAccounts = () => realBuildApp({ verifyToken: supabaseTokenVerifier(SUPABASE_URL, signer.jwks), accounts: { signup } });
+  const withAccounts = () => realBuildApp({ verifyToken: supabaseTokenVerifier(SUPABASE_URL, signer.jwks), accounts: { signup } as never });
   const body = { username: 'ulfgaar', password: 'Correct-horse1' };
   beforeEach(() => signup.mockReset().mockResolvedValue({ name: 'ulfgaar' }));
 

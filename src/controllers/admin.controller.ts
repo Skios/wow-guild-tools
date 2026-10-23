@@ -10,7 +10,7 @@ const SearchQuerySchema = z.object({ search: z.string().trim().max(50).optional(
 
 export async function adminRoutes(fastify: FastifyInstance) {
   // Who is signed in: lets the admin site greet the officer (and tells it the login is accepted).
-  fastify.get('/auth/me', async (request) => request.officer);
+  fastify.get('/auth/me', { config: { duringPasswordChange: true } }, async (request) => request.officer);
 
   // Single source of truth for class colours, labels and valid roles.
   fastify.get('/meta/wow', async () => ({

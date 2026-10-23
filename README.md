@@ -28,7 +28,8 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
 `web/` is the officers' admin (Next.js App Router, client rendering). With the API running on :3000:
 `cd web && npm install && npm run dev`, then open http://127.0.0.1:5173 (`/api/*` is proxied to `API_ORIGIN`).
 
-- Pages: **Events** (list, create, board) and **Roster** (add / edit / remove / release names).
+- Pages: **Events** (list, create, board), **Roster** (add / edit / remove / release names), **Users** (roles,
+  password resets), and your account (change password). The menu shows what your role can open.
 - **Appearance** menu: four themes (Midnight, Parchment, Void, Daylight) and three icon styles (game, line, none).
 - Tests: `cd web && npm test`.
 - `npx tsx scripts/seed-dev.ts` loads a demo roster and raid into a local database.
@@ -50,6 +51,10 @@ the API (never in the site). The Owner is bootstrapped with a script:
 
 - `npm run officer -- create <name>` creates an **Owner** (prints the password once); also `reset <name>`,
   `revoke <name>`, `list`. Everyone else gets their role in the site.
+- **Users** page (`accounts.manage`): every account with its role and characters; give a role, or reset a password.
+  A reset shows a temporary password once; with it the account can only open the change-password page until it
+  picks its own (the API refuses everything else). Anyone changes their own password by clicking their name in the
+  top bar. `npm run officer -- reset` gives a temporary password the same way.
 - Roles live in the `roles` table, configured by the Owner: **Owner** (everything, configures roles) above
   Guildmaster, Officer, Raidleader and **Raider** (the default). Whoever has `accounts.manage` gives roles equal to
   or below their own (and only with capabilities they have), to people below them, never to themselves. The last Owner cannot be revoked.
@@ -72,7 +77,8 @@ Players answer with the IN / LATE / TENTATIVE / OUT buttons; LATE asks for the m
 Every route is under `/api` (the same domain serves the admin site on Vercel). Main routes: `GET/POST /roster`, `PUT/DELETE /roster/:id`, `POST /roster/:id/release`,
 `GET/POST /events`, `GET /events/:id`, `PATCH /events/:id/roster`, `POST /events/:id/publish`,
 `POST /events/:id/message`, `GET /meta/wow`, `GET /auth/me`, `GET/POST /roles`, `PUT/DELETE /roles/:id`,
-`GET /roles/capabilities`, `PUT /users/:id/role`, `POST /webhooks/telegram` (own secret).
+`GET /roles/capabilities`, `PUT /users/:id/role`, `GET /users`, `POST /users/:id/password-reset`,
+`POST /auth/password`, `POST /signup` (no login), `POST /webhooks/telegram` (own secret).
 
 ## Deploy (Vercel + Supabase, free tiers)
 Two Vercel projects, each with Production (`main`) and Preview `develop` (the dev environment):

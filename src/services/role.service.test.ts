@@ -11,7 +11,7 @@ import { RoleService } from './role.service.js';
 const OWNER_ROLE = { id: 'r0', name: 'Owner', position: 0, capabilities: [], isOwner: true, isDefault: false };
 const OFFICER_ROLE = { id: 'r2', name: 'Officer', position: 20, capabilities: ['accounts.manage'], isOwner: false, isDefault: false };
 const RAIDER_ROLE = { id: 'r4', name: 'Raider', position: 40, capabilities: [], isOwner: false, isDefault: true };
-const officer: Officer = { userId: 'me', username: 'raidlead', role: 'Officer', position: 20, isOwner: false, capabilities: ['accounts.manage'] };
+const officer: Officer = { userId: 'me', username: 'raidlead', role: 'Officer', position: 20, isOwner: false, capabilities: ['accounts.manage'], mustChangePassword: false };
 const owner: Officer = { ...officer, username: 'gm', role: 'Owner', position: 0, isOwner: true };
 
 let roles: RoleService;

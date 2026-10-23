@@ -9,7 +9,7 @@ const SIGNUPS_PER_HOUR = 10;
 // Nickname and password rules live in OfficerService.signup; this only checks the shape.
 const SignupSchema = z.object({ username: z.string().max(64), password: z.string().max(256) });
 
-export type Accounts = Pick<OfficerService, 'signup'>;
+type Accounts = Pick<OfficerService, 'signup'>;
 
 /** Open sign-up (no login). `accounts` is null when the API has no Supabase secret key. */
 export function signupRoutes(accounts: Accounts | null) {

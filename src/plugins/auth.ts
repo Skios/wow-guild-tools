@@ -4,12 +4,19 @@ import { prisma } from '../config/db.js';
 import { capabilitiesOf, registerCapability, type SiteRole } from '../domain/roles.js';
 
 /** The signed-in site user. `role` is the role's name; position and isOwner drive the role-change rules. */
-export type Officer = { userId: string; username: string; role: string; position: number; isOwner: boolean; capabilities: string[] };
+export type Officer = {
+  userId: string; username: string; role: string; position: number; isOwner: boolean; capabilities: string[];
+  mustChangePassword: boolean; // signed in with a temporary password
+};
 export type TokenVerifier = (token: string) => Promise<{ sub: string }>;
 
 declare module 'fastify' {
   interface FastifyRequest {
     officer?: Officer;
+  }
+  interface FastifyContextConfig {
+    /** Reachable with a temporary password (who am I, change password); every other route waits. */
+    duringPasswordChange?: boolean;
   }
 }
 
@@ -58,18 +65,21 @@ export function requireSiteUser(scope: FastifyInstance, verify: TokenVerifier) {
     // A database error propagates to the error handler: an outage must not look like "not an officer".
     const identity = await prisma.identity.findUnique({
       where: { platform_platformUserId: { platform: 'supabase', platformUserId: sub } },
-      select: { user: { select: { id: true, username: true, role: { select: ROLE_FIELDS } } } },
+      select: { user: { select: { id: true, username: true, mustChangePassword: true, role: { select: ROLE_FIELDS } } } },
     });
     const user = identity?.user;
     if (!user?.role) return reply.code(403).send({ error: 'Forbidden' });
 
-    request.officer = asOfficer(user.id, user.username, user.role);
+    request.officer = { ...asOfficer(user.id, user.username, user.role), mustChangePassword: user.mustChangePassword };
+    if (user.mustChangePassword && !request.routeOptions.config?.duringPasswordChange) {
+      return reply.code(403).send({ error: 'Change your password first', code: 'password_change_required' });
+    }
   });
 }
 
-export const ROLE_FIELDS = { name: true, position: true, capabilities: true, isOwner: true } as const;
+const ROLE_FIELDS = { name: true, position: true, capabilities: true, isOwner: true } as const;
 
-export const asOfficer = (userId: string, username: string, role: SiteRole): Officer => ({
+const asOfficer = (userId: string, username: string, role: SiteRole) => ({
   userId, username, role: role.name, position: role.position, isOwner: role.isOwner, capabilities: capabilitiesOf(role),
 });
 

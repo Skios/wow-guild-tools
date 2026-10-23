@@ -70,6 +70,65 @@ describe('accounts', () => {
   });
 });
 
+describe('account pages', () => {
+  test('after a reset the only page is choosing a new password; then the site opens', async () => {
+    const me = vi.fn()
+      .mockResolvedValueOnce({ ...OFFICER, mustChangePassword: true })
+      .mockResolvedValue(OFFICER);
+    const listEvents = vi.fn().mockResolvedValue([eventSummary()]);
+    const injected = api({ me, listEvents });
+    render(<App auth={fakeAuth()} api={injected}><Routed /></App>);
+
+    expect(await screen.findByText(/signed in with a temporary password/i)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Events' })).not.toBeInTheDocument();
+    expect(listEvents).not.toHaveBeenCalled();
+
+    await userEvent.type(screen.getByLabelText('Temporary password'), 'Temp-password-123');
+    await userEvent.type(screen.getByLabelText('New password'), 'Correct-horse1');
+    await userEvent.type(screen.getByLabelText('Repeat new password'), 'Correct-horse1');
+    await userEvent.click(screen.getByRole('button', { name: 'Change password' }));
+
+    expect(await screen.findByRole('link', { name: 'Raid Night' })).toBeInTheDocument();
+    expect(injected.changePassword).toHaveBeenCalledWith('Temp-password-123', 'Correct-horse1');
+  });
+
+  test('the forced change works even though the API refuses game data until then', async () => {
+    const me = vi.fn().mockResolvedValue({ ...OFFICER, mustChangePassword: true });
+    const getMeta = vi.fn().mockRejectedValue(new ApiError('Change your password first', 403));
+    render(<App auth={fakeAuth()} api={api({ me, getMeta })}><Routed /></App>);
+
+    expect(await screen.findByLabelText('New password')).toBeInTheDocument();
+    expect(screen.queryByText(/Could not load game data/)).not.toBeInTheDocument();
+  });
+
+  test('your name in the top bar opens the change-password page, for every account', async () => {
+    const me = vi.fn().mockResolvedValue({ ...OFFICER, capabilities: [], role: 'Raider' });
+    render(<App auth={fakeAuth()} api={api({ me })}><Routed /></App>);
+
+    await userEvent.click(await screen.findByRole('link', { name: 'cid' }));
+
+    expect(await screen.findByRole('heading', { name: 'Change password' })).toBeInTheDocument();
+    expect(currentPath()).toBe('/account/password');
+  });
+
+  test('accounts.manage shows the Users page in the menu', async () => {
+    const injected = api();
+    render(<App auth={fakeAuth()} api={injected}><Routed /></App>);
+
+    await userEvent.click(await screen.findByRole('link', { name: 'Users' }));
+
+    expect(await screen.findByRole('heading', { name: 'Users' })).toBeInTheDocument();
+    expect(injected.listUsers).toHaveBeenCalled();
+  });
+
+  test('without accounts.manage there is no Users entry', async () => {
+    const me = vi.fn().mockResolvedValue({ ...OFFICER, capabilities: ['events.manage'] });
+    render(<App auth={fakeAuth()} api={api({ me })}><Routed /></App>);
+    await screen.findByRole('link', { name: 'Events' });
+    expect(screen.queryByRole('link', { name: 'Users' })).not.toBeInTheDocument();
+  });
+});
+
 describe('navigation', () => {
   test('the menu switches between events and the roster, marking the current page', async () => {
     render(<App auth={fakeAuth()} api={api({ listRoster: vi.fn().mockResolvedValue([]) })}><Routed /></App>);
