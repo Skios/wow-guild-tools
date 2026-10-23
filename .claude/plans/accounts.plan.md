@@ -110,6 +110,8 @@ publishable key.
   `Response.note` (max 200 chars). Changing the answer clears the note. The board shows it next to the name.
 
 ## UI polish (user feedback 2026-10-23)
+- The account page becomes "Profile" (your name in the top bar): characters first; Telegram on one line (status +
+  Link/Unlink); "Change password" closed behind a button, the form opens only on click (forced change stays open).
 - Password fields show the rules as a checklist that ticks while typing (sign-up and change password).
 - Users table: aligned columns, nicer look.
 
@@ -119,7 +121,8 @@ publishable key.
 3. [x] Users page: role assignment + password reset + mustChangePassword + account page
 4. [x] Telegram link token (both directions) + removal of the bot registration flow
 4b. [x] password checklist + Users table polish
-5. nickname on the account + /profile (claim, add with Raider.IO autocomplete) + officer assigns characters
+5. nickname on the account + Profile page (claim, add with Raider.IO autocomplete; Telegram line; password behind a
+   button) + officer assigns characters
 6. roster approval + answers only for approved characters
 7. notes on every answer
 8. Roles page (Owner)
