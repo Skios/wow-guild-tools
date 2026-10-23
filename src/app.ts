@@ -3,12 +3,12 @@ import rateLimit from '@fastify/rate-limit';
 import { adminRoutes } from './controllers/admin.controller.js';
 import { eventRoutes } from './controllers/event.controller.js';
 import { groupRoutes } from './controllers/group.controller.js';
+import { roleRoutes } from './controllers/role.controller.js';
 import { profileRoutes } from './controllers/profile.controller.js';
 import { rosterRoutes } from './controllers/roster.controller.js';
 import { telegramRoutes } from './controllers/telegram.controller.js';
 import { getEnv } from './config/env.js';
 import { sendError } from './lib/http-error.js';
-import type { Capability } from './domain/roles.js';
 import { requireCapability, requireSiteUser, supabaseTokenVerifier, type TokenVerifier } from './plugins/auth.js';
 
 const BODY_LIMIT_BYTES = 100 * 1024;
@@ -42,11 +42,12 @@ export async function buildApp(options: { logger?: FastifyServerOptions['logger'
     await api.register(telegramRoutes);
     await api.register(async (site) => {
       requireSiteUser(site, verifyToken);
-      const guarded = (capability: Capability, routes: FastifyPluginAsync) => site.register(async (scope) => {
+      const guarded = (capability: string, routes: FastifyPluginAsync) => site.register(async (scope) => {
         scope.addHook('onRequest', requireCapability(capability));
         await scope.register(routes);
       });
       await site.register(adminRoutes); // who am I, game data: any site user
+      await site.register(roleRoutes); // each route checks Owner / accounts.manage itself
       await guarded('events.manage', eventRoutes);
       await guarded('roster.manage', rosterRoutes);
       await guarded('roster.manage', profileRoutes);

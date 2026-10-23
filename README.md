@@ -44,10 +44,14 @@ Officers sign in with a **nickname and a password** (Supabase Auth). No email or
 the nickname becomes `<name>@wgt.invalid`, an address that can never receive mail. Signup is closed;
 accounts are managed with a script that needs `SUPABASE_SECRET_KEY` (never give that key to the app):
 
-- `npm run officer -- create <name> [--role owner|officer]` (prints the password once), `role <name> <owner|officer>`,
-  `reset <name>`, `revoke <name>`, `list`
-- roles: **Owner** (everything, admin) above **Officer** (roster, events, messages, accounts); the last Owner
-  cannot be revoked or demoted. Capabilities per role live in `src/domain/roles.ts`.
+- `npm run officer -- create <name>` creates an **Owner** (prints the password once); also `reset <name>`,
+  `revoke <name>`, `list`. Everyone else gets their role in the site.
+- Roles live in the `roles` table, configured by the Owner: **Owner** (everything, configures roles) above
+  Guildmaster, Officer, Raidleader and **Raider** (the default). Whoever has `accounts.manage` gives roles equal to
+  or below their own (and only with capabilities they have), to people below them, never to themselves. The last Owner cannot be revoked.
+- Capabilities come from the code: `requireCapability('x.y')` on a route registers it, and
+  `GET /api/roles/capabilities` lists them. Renaming one needs a migration with
+  `array_replace("capabilities", 'old', 'new')` on `roles` (a test fails otherwise). See `src/domain/roles.ts`.
 
 Every route needs `Authorization: Bearer <Supabase access token>` of a user with a role, and the capability
 its route group asks for. The role is read on every request, so a revoke or demotion takes effect immediately.
@@ -63,7 +67,8 @@ Players answer with the IN / LATE / TENTATIVE / OUT buttons; LATE asks for the m
 ## API
 Every route is under `/api` (the same domain serves the admin site on Vercel). Main routes: `GET/POST /roster`, `PUT/DELETE /roster/:id`, `POST /roster/:id/release`,
 `GET/POST /events`, `GET /events/:id`, `PATCH /events/:id/roster`, `POST /events/:id/publish`,
-`POST /events/:id/message`, `GET /meta/wow`, `GET /auth/me`, `POST /webhooks/telegram` (own secret).
+`POST /events/:id/message`, `GET /meta/wow`, `GET /auth/me`, `GET/POST /roles`, `PUT/DELETE /roles/:id`,
+`GET /roles/capabilities`, `PUT /users/:id/role`, `POST /webhooks/telegram` (own secret).
 
 ## Deploy (Vercel + Supabase, free tiers)
 Two Vercel projects, each with Production (`main`) and Preview `develop` (the dev environment):

@@ -1,6 +1,5 @@
 import { randomBytes } from 'node:crypto';
 import { prisma } from '../config/db.js';
-import { parseRole } from '../domain/roles.js';
 import { AppError, ConflictError, NotFoundError } from '../lib/errors.js';
 
 // Officers sign in with a nickname and a password. Supabase Auth needs an email, so the nickname is
@@ -62,17 +61,21 @@ export function supabaseAuthAdmin(supabaseUrl: string, secretKey: string, fetchI
 export class OfficerService {
   constructor(private readonly admin: AuthAdmin) {}
 
-  /** Creates the login and its account. Returns the password, which is shown once and never stored by us. */
-  async create(rawName: unknown, rawRole: unknown = 'OFFICER') {
+  /**
+   * Creates an Owner (bootstrap or recovery; everyone else signs up and is promoted in the site).
+   * Returns the password, which is shown once and never stored by us.
+   */
+  async create(rawName: unknown) {
     const name = parseOfficerName(rawName);
-    const role = parseRole(rawRole);
+    const ownerRole = await prisma.role.findFirst({ where: { isOwner: true }, select: { id: true } });
+    if (!ownerRole) throw new Error('No Owner role in this database: apply the migrations first');
     if (await this.findLogin(name)) throw new ConflictError('That officer name is already taken');
 
     const password = generatePassword();
     const authId = await this.admin.createUser(officerEmail(name), password);
     try {
       await prisma.user.create({
-        data: { username: name, role, identities: { create: { platform: 'supabase', platformUserId: authId } } },
+        data: { username: name, roleId: ownerRole.id, identities: { create: { platform: 'supabase', platformUserId: authId } } },
       });
     } catch (error) {
       // A login without an officer row would be a dead account. If even the clean-up fails, the
@@ -98,34 +101,29 @@ export class OfficerService {
   async revoke(rawName: unknown) {
     const login = await this.requireLogin(parseOfficerName(rawName));
     await this.keepAnOwner(login.user.role);
-    if ((await prisma.user.count({ where: { role: { not: null } } })) <= 1) {
+    if ((await prisma.identity.count({ where: { platform: 'supabase' } })) <= 1) {
       throw new ConflictError('Refusing to remove the last account that can sign in');
     }
     // Login first: if Supabase fails nothing has changed and the revoke can be retried.
     await this.admin.deleteUser(login.platformUserId);
     await prisma.$transaction([
-      prisma.user.update({ where: { id: login.userId }, data: { role: null } }),
+      prisma.user.update({ where: { id: login.userId }, data: { roleId: null } }),
       prisma.identity.delete({ where: { id: login.id } }),
     ]);
   }
 
-  async setRole(rawName: unknown, rawRole: unknown) {
-    const role = parseRole(rawRole);
-    const login = await this.requireLogin(parseOfficerName(rawName));
-    if (role !== 'OWNER') await this.keepAnOwner(login.user.role);
-    await prisma.user.update({ where: { id: login.userId }, data: { role } });
-  }
-
   async list() {
     const users = await prisma.user.findMany({
-      where: { role: { not: null } }, select: { username: true, role: true }, orderBy: [{ role: 'asc' }, { username: 'asc' }],
+      where: { identities: { some: { platform: 'supabase' } } },
+      select: { username: true, role: { select: { name: true } } },
+      orderBy: [{ role: { position: 'asc' } }, { username: 'asc' }],
     });
-    return users.map(user => ({ name: user.username, role: user.role }));
+    return users.map(user => ({ name: user.username, role: user.role?.name ?? null }));
   }
 
   // ponytail: count-then-write isn't atomic; fine for a script one person runs.
-  private async keepAnOwner(currentRole: string | null) {
-    if (currentRole === 'OWNER' && (await prisma.user.count({ where: { role: 'OWNER' } })) <= 1) {
+  private async keepAnOwner(currentRole: { isOwner: boolean } | null) {
+    if (currentRole?.isOwner && (await prisma.user.count({ where: { role: { isOwner: true } } })) <= 1) {
       throw new ConflictError('Refusing to remove the last Owner');
     }
   }
@@ -133,7 +131,7 @@ export class OfficerService {
   private findLogin(name: string) {
     return prisma.identity.findFirst({
       where: { platform: 'supabase', user: { username: name } },
-      include: { user: { select: { role: true } } },
+      include: { user: { select: { role: { select: { isOwner: true } } } } },
     });
   }
 

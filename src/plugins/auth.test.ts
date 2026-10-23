@@ -6,7 +6,10 @@ import { ISSUER, OFFICER_SUB, SUPABASE_URL, makeSigner, unsignedToken } from '..
 
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 
-import { requireCapability, requireSiteUser, supabaseTokenVerifier, type TokenVerifier } from './auth.js';
+import { knownCapabilities, registerCapability } from '../domain/roles.js';
+import { requireCapability, requireOwner, requireSiteUser, supabaseTokenVerifier, type Officer, type TokenVerifier } from './auth.js';
+
+registerCapability('roster.manage'); // as a route would
 
 let signer: Awaited<ReturnType<typeof makeSigner>>;
 let verify: TokenVerifier;
@@ -74,7 +77,7 @@ describe('supabaseTokenVerifier', () => {
 });
 
 describe('requireSiteUser', () => {
-  const officerIdentity = { user: { id: 'u1', username: 'Brannock', role: 'OFFICER' } };
+  const officerIdentity = { user: { id: 'u1', username: 'Brannock', role: { name: 'Officer', position: 20, isOwner: false, capabilities: ['roster.manage', 'gone.away'] } } };
 
   async function app(verifier: TokenVerifier = verify) {
     const fastify = Fastify();
@@ -98,8 +101,8 @@ describe('requireSiteUser', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
-      userId: 'u1', username: 'Brannock', role: 'OFFICER',
-      capabilities: ['roster.manage', 'events.manage', 'messages.send'],
+      userId: 'u1', username: 'Brannock', role: 'Officer', position: 20, isOwner: false,
+      capabilities: ['roster.manage'], // a stale capability name grants nothing
     });
     expect(prismaMock.identity.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: { platform_platformUserId: { platform: 'supabase', platformUserId: OFFICER_SUB } },
@@ -152,27 +155,40 @@ describe('requireSiteUser', () => {
   });
 });
 
-describe('requireCapability', () => {
-  async function app(role: 'OWNER' | 'OFFICER' | undefined) {
+describe('requireCapability / requireOwner', () => {
+  async function app(officer: Partial<Officer> | undefined) {
     const fastify = Fastify();
     fastify.addHook('onRequest', async (request) => {
-      if (role) request.officer = { userId: 'u1', username: 'x', role, capabilities: role === 'OWNER' ? ['admin'] : ['roster.manage'] };
+      if (officer) request.officer = { userId: 'u1', username: 'x', role: 'Officer', position: 20, isOwner: false, capabilities: [], ...officer };
     });
-    fastify.get('/admin', { onRequest: requireCapability('admin') }, async () => ({ ok: true }));
+    fastify.get('/accounts', { onRequest: requireCapability('accounts.manage') }, async () => ({ ok: true }));
+    fastify.get('/owner', { onRequest: requireOwner }, async () => ({ ok: true }));
     return fastify;
   }
 
   test('lets through a user who has the capability', async () => {
-    expect((await (await app('OWNER')).inject('/admin')).statusCode).toBe(200);
+    expect((await (await app({ capabilities: ['accounts.manage'] })).inject('/accounts')).statusCode).toBe(200);
   });
 
   test('403 for a signed-in user without it', async () => {
-    const res = await (await app('OFFICER')).inject('/admin');
+    const res = await (await app({ capabilities: ['roster.manage'] })).inject('/accounts');
     expect(res.statusCode).toBe(403);
     expect(res.json()).toEqual({ error: 'Forbidden' });
   });
 
   test('403 when nobody is signed in (never trusts a missing user)', async () => {
-    expect((await (await app(undefined)).inject('/admin')).statusCode).toBe(403);
+    expect((await (await app(undefined)).inject('/accounts')).statusCode).toBe(403);
+    expect((await (await app(undefined)).inject('/owner')).statusCode).toBe(403);
+  });
+
+  test('declaring a capability on a route makes it known (and a malformed name fails at startup)', () => {
+    requireCapability('brand.new');
+    expect(knownCapabilities()).toContain('brand.new');
+    expect(() => requireCapability('admin')).toThrow(/capability/i);
+  });
+
+  test('Owner-only routes refuse everyone else, whatever their capabilities', async () => {
+    expect((await (await app({ isOwner: true })).inject('/owner')).statusCode).toBe(200);
+    expect((await (await app({ capabilities: ['accounts.manage', 'roster.manage'] })).inject('/owner')).statusCode).toBe(403);
   });
 });

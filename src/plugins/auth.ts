@@ -1,10 +1,10 @@
-import type { SiteRole } from '@prisma/client';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import { prisma } from '../config/db.js';
-import { capabilitiesOf, type Capability } from '../domain/roles.js';
+import { capabilitiesOf, registerCapability, type SiteRole } from '../domain/roles.js';
 
-export type Officer = { userId: string; username: string; role: SiteRole; capabilities: Capability[] };
+/** The signed-in site user. `role` is the role's name; position and isOwner drive the role-change rules. */
+export type Officer = { userId: string; username: string; role: string; position: number; isOwner: boolean; capabilities: string[] };
 export type TokenVerifier = (token: string) => Promise<{ sub: string }>;
 
 declare module 'fastify' {
@@ -58,18 +58,33 @@ export function requireSiteUser(scope: FastifyInstance, verify: TokenVerifier) {
     // A database error propagates to the error handler: an outage must not look like "not an officer".
     const identity = await prisma.identity.findUnique({
       where: { platform_platformUserId: { platform: 'supabase', platformUserId: sub } },
-      select: { user: { select: { id: true, username: true, role: true } } },
+      select: { user: { select: { id: true, username: true, role: { select: ROLE_FIELDS } } } },
     });
     const user = identity?.user;
     if (!user?.role) return reply.code(403).send({ error: 'Forbidden' });
 
-    request.officer = { userId: user.id, username: user.username, role: user.role, capabilities: capabilitiesOf(user.role) };
+    request.officer = asOfficer(user.id, user.username, user.role);
   });
 }
 
-/** Route hook: 403 unless the signed-in user's role grants `capability`. Runs after requireSiteUser. */
-export function requireCapability(capability: Capability) {
+export const ROLE_FIELDS = { name: true, position: true, capabilities: true, isOwner: true } as const;
+
+export const asOfficer = (userId: string, username: string, role: SiteRole): Officer => ({
+  userId, username, role: role.name, position: role.position, isOwner: role.isOwner, capabilities: capabilitiesOf(role),
+});
+
+/**
+ * Route hook: 403 unless the signed-in user's role grants `capability`. Runs after requireSiteUser.
+ * Calling it registers the capability, which makes it selectable on the Roles page.
+ */
+export function requireCapability(capability: string) {
+  registerCapability(capability);
   return async (request: FastifyRequest, reply: FastifyReply) => {
     if (!request.officer?.capabilities.includes(capability)) return reply.code(403).send({ error: 'Forbidden' });
   };
+}
+
+/** Route hook: only the Owner (configuring roles is not a capability that can be handed out). */
+export async function requireOwner(request: FastifyRequest, reply: FastifyReply) {
+  if (!request.officer?.isOwner) return reply.code(403).send({ error: 'Forbidden' });
 }

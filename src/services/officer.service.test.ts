@@ -12,6 +12,7 @@ let service: OfficerService;
 
 beforeEach(() => {
   resetPrismaMock();
+  prismaMock.role.findFirst.mockResolvedValue({ id: 'owner-role' });
   admin = { createUser: vi.fn().mockResolvedValue(AUTH_ID), setPassword: vi.fn(), deleteUser: vi.fn() };
   service = new OfficerService(admin as unknown as AuthAdmin);
 });
@@ -43,20 +44,22 @@ describe('generatePassword', () => {
 });
 
 describe('OfficerService.create', () => {
-  test('creates an Owner when asked', async () => {
+  test('the script only makes Owners: everyone else signs up and gets promoted in the site', async () => {
     prismaMock.user.create.mockResolvedValue({ id: 'u1' });
 
-    await service.create('guildmaster', 'owner');
+    await service.create('guildmaster');
 
-    expect(prismaMock.user.create.mock.calls[0]![0].data).toMatchObject({ username: 'guildmaster', role: 'OWNER' });
+    expect(prismaMock.role.findFirst).toHaveBeenCalledWith({ where: { isOwner: true }, select: { id: true } });
+    expect(prismaMock.user.create.mock.calls[0]![0].data).toMatchObject({ username: 'guildmaster', roleId: 'owner-role' });
   });
 
-  test('an unknown role is refused before touching Supabase', async () => {
-    await expect(service.create('raidlead', 'emperor')).rejects.toThrow(/role/i);
+  test('without the Owner role (migrations not applied) nothing is created', async () => {
+    prismaMock.role.findFirst.mockResolvedValue(null);
+    await expect(service.create('guildmaster')).rejects.toThrow(/Owner role/);
     expect(admin.createUser).not.toHaveBeenCalled();
   });
 
-  test('creates the login and an officer backed by it, and returns the one-time password', async () => {
+  test('creates the login and an account backed by it, and returns the one-time password', async () => {
     prismaMock.user.create.mockResolvedValue({ id: 'u1' });
 
     const result = await service.create('RaidLead');
@@ -64,7 +67,7 @@ describe('OfficerService.create', () => {
     expect(result).toEqual({ name: 'raidlead', password: expect.stringMatching(/^[A-Za-z0-9_-]{24}$/) });
     expect(admin.createUser).toHaveBeenCalledWith('raidlead@wgt.invalid', result.password);
     expect(prismaMock.user.create).toHaveBeenCalledWith({
-      data: { username: 'raidlead', role: 'OFFICER', identities: { create: { platform: 'supabase', platformUserId: AUTH_ID } } },
+      data: { username: 'raidlead', roleId: 'owner-role', identities: { create: { platform: 'supabase', platformUserId: AUTH_ID } } },
     });
   });
 
@@ -113,14 +116,15 @@ describe('OfficerService.resetPassword', () => {
 
 describe('OfficerService.revoke', () => {
   beforeEach(() => {
-    prismaMock.identity.findFirst.mockResolvedValue({ id: 'i1', platformUserId: AUTH_ID, userId: 'u1', user: { role: 'OFFICER' } });
+    prismaMock.identity.findFirst.mockResolvedValue({ id: 'i1', platformUserId: AUTH_ID, userId: 'u1', user: { role: { isOwner: false } } });
     prismaMock.user.count.mockResolvedValue(2);
+    prismaMock.identity.count.mockResolvedValue(2);
   });
 
   test('removes the role, deletes the login and its link', async () => {
     await service.revoke('raidlead');
 
-    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { role: null } });
+    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { roleId: null } });
     expect(prismaMock.identity.delete).toHaveBeenCalledWith({ where: { id: 'i1' } });
     expect(admin.deleteUser).toHaveBeenCalledWith(AUTH_ID);
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
@@ -134,24 +138,24 @@ describe('OfficerService.revoke', () => {
     expect(prismaMock.identity.delete).not.toHaveBeenCalled();
   });
 
-  test('refuses to remove the last account with a role (nobody could sign in any more)', async () => {
-    prismaMock.user.count.mockImplementation(async ({ where }: { where: object }) => ('role' in where && where.role === 'OWNER' ? 0 : 1));
+  test('refuses to remove the last account that can sign in', async () => {
+    prismaMock.identity.count.mockResolvedValue(1);
 
     await expect(service.revoke('raidlead')).rejects.toBeInstanceOf(ConflictError);
     expect(admin.deleteUser).not.toHaveBeenCalled();
   });
 
   test('refuses to remove the last Owner (nobody could run the site any more)', async () => {
-    prismaMock.identity.findFirst.mockResolvedValue({ id: 'i1', platformUserId: AUTH_ID, userId: 'u1', user: { role: 'OWNER' } });
+    prismaMock.identity.findFirst.mockResolvedValue({ id: 'i1', platformUserId: AUTH_ID, userId: 'u1', user: { role: { isOwner: true } } });
     prismaMock.user.count.mockResolvedValue(1);
 
     await expect(service.revoke('guildmaster')).rejects.toBeInstanceOf(ConflictError);
-    expect(prismaMock.user.count).toHaveBeenCalledWith({ where: { role: 'OWNER' } });
+    expect(prismaMock.user.count).toHaveBeenCalledWith({ where: { role: { isOwner: true } } });
     expect(admin.deleteUser).not.toHaveBeenCalled();
   });
 
   test('an Owner can go when another Owner remains', async () => {
-    prismaMock.identity.findFirst.mockResolvedValue({ id: 'i1', platformUserId: AUTH_ID, userId: 'u1', user: { role: 'OWNER' } });
+    prismaMock.identity.findFirst.mockResolvedValue({ id: 'i1', platformUserId: AUTH_ID, userId: 'u1', user: { role: { isOwner: true } } });
     prismaMock.user.count.mockResolvedValue(2);
 
     await service.revoke('guildmaster');
@@ -164,37 +168,15 @@ describe('OfficerService.revoke', () => {
   });
 });
 
-describe('OfficerService.setRole', () => {
-  test('changes the role of an existing account', async () => {
-    prismaMock.identity.findFirst.mockResolvedValue({ id: 'i1', platformUserId: AUTH_ID, userId: 'u1', user: { role: 'OFFICER' } });
-
-    await service.setRole('raidlead', 'owner');
-
-    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { role: 'OWNER' } });
-  });
-
-  test('refuses to demote the last Owner', async () => {
-    prismaMock.identity.findFirst.mockResolvedValue({ id: 'i1', platformUserId: AUTH_ID, userId: 'u1', user: { role: 'OWNER' } });
-    prismaMock.user.count.mockResolvedValue(1);
-
-    await expect(service.setRole('guildmaster', 'officer')).rejects.toBeInstanceOf(ConflictError);
-    expect(prismaMock.user.update).not.toHaveBeenCalled();
-  });
-
-  test('unknown role or account are refused', async () => {
-    await expect(service.setRole('raidlead', 'emperor')).rejects.toThrow(/role/i);
-    prismaMock.identity.findFirst.mockResolvedValue(null);
-    await expect(service.setRole('ghost', 'officer')).rejects.toBeInstanceOf(NotFoundError);
-  });
-});
-
 describe('OfficerService.list', () => {
-  test('lists every account with a site role, highest first', async () => {
-    prismaMock.user.findMany.mockResolvedValue([{ username: 'gm', role: 'OWNER' }, { username: 'raidlead', role: 'OFFICER' }]);
+  test('lists every account that can sign in, highest role first', async () => {
+    prismaMock.user.findMany.mockResolvedValue([{ username: 'gm', role: { name: 'Owner' } }, { username: 'raidlead', role: null }]);
 
-    await expect(service.list()).resolves.toEqual([{ name: 'gm', role: 'OWNER' }, { name: 'raidlead', role: 'OFFICER' }]);
+    await expect(service.list()).resolves.toEqual([{ name: 'gm', role: 'Owner' }, { name: 'raidlead', role: null }]);
     expect(prismaMock.user.findMany).toHaveBeenCalledWith({
-      where: { role: { not: null } }, select: { username: true, role: true }, orderBy: [{ role: 'asc' }, { username: 'asc' }],
+      where: { identities: { some: { platform: 'supabase' } } },
+      select: { username: true, role: { select: { name: true } } },
+      orderBy: [{ role: { position: 'asc' } }, { username: 'asc' }],
     });
   });
 });

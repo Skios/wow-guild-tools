@@ -13,7 +13,7 @@ Status: reviewed by ponytail + user feedback 2026-10-23, waiting for go.
 4. Officer+ can reset someone's password from the site. The user signs in with the temporary password and is
    sent to a page to set a new one.
 5. Adding a character uses autocomplete from Raider.IO search, so names and realms are spelled right.
-6. LATE gets a note too (like TENTATIVE).
+6. Every answer can carry a note (e.g. IN but leaving 30 min early).
 
 ## Model
 ```
@@ -41,12 +41,18 @@ publishable key.
 - **Capabilities come from the code**: `requireCapability('roster.manage')` registers the name where the route
   declares it. `GET /api/roles/capabilities` returns that list, which the Roles page uses as autocomplete.
   Nobody types a capability by hand. A test lists the expected set, so a new or renamed one is noticed.
+- Renaming a capability ships with a migration that updates the roles holding it
+  (`UPDATE roles SET capabilities = array_replace(capabilities, 'old', 'new')`). A test checks that
+  after all migrations every capability stored in `roles` exists in the code, so a rename without its
+  migration fails CI (a test replays the migrations' seeds, array_replace and array_remove on "roles").
 - Rules (server-side, tested): only the Owner creates/edits/deletes roles; the Owner role is fixed and always
   has everything; at least one Owner. Anyone with `accounts.manage` assigns roles **equal to or below
-  their own**, only to users below them, never to themselves. Role read from the DB on every request.
+  their own** whose capabilities they all have, only to users below them, never to themselves. Role read from the DB on every request.
 - API: GET/POST/PUT/DELETE /api/roles (Owner), PUT /api/users/:id/role.
 
 ## 2. Accounts, sign-up, password reset
+- `GET /api/characters` (character search, open to any site user today) must need roster.manage or events.manage
+  before sign-up opens: Raiders must not list everyone.
 - Script: `npm run officer -- create <name> --owner` only (bootstrap, or recover the Owner).
 - POST /api/signup { username, password, link? }: validates, creates the Supabase login with the admin API
   and the User with the default role (Raider). Rate-limited.
@@ -82,19 +88,20 @@ publishable key.
 - Roster page: "Pending" list (characters with inRoster = false and an owner) with Approve / Reject.
 - Event answers only for characters with inRoster = true, enforced in ResponseService for every path.
 
-## 6. LATE and TENTATIVE notes
-- LATE: the bot's question becomes "Minutes late, and a note if you want (e.g. `15 traffic`)". One message:
-  the number is the minutes, the rest is the note.
-- TENTATIVE: the bot asks "Why? (optional, send /skip)"; the reply is the note.
-- Both use the existing chat_drafts follow-up and `Response.note` (max 200 chars). Any other answer clears
-  the note. The board shows it next to the name.
+## 6. Notes on every answer
+- After any answer the bot says "Noted. Reply with a note if you want (e.g. leaving 30 min early)"; the next
+  private message (not a command) becomes the note.
+- LATE: "Minutes late, and a note if you want (e.g. `15 traffic`)". One message: the number is the minutes,
+  the rest is the note.
+- Same chat_drafts follow-up as today's late question (one draft kind for all answers), stored in
+  `Response.note` (max 200 chars). Changing the answer clears the note. The board shows it next to the name.
 
 ## Order (each: tests first, review agents, commit)
-1. roles table + migration + capabilities from the code + rules + API (+ script reduced to --owner)
+1. [x] roles table + migration + capabilities from the code + rules + API (+ script creates only Owners)
 2. secret key decision -> signup API + password policy + /signup and /login (Chrome-friendly)
 3. Users page: role assignment + password reset + mustChangePassword + /account/password
 4. Telegram link token (both directions) + removal of the bot registration flow
 5. /profile + Raider.IO autocomplete + claim
 6. roster approval + answers only for approved characters
-7. LATE / TENTATIVE notes
+7. notes on every answer
 8. Roles page (Owner)

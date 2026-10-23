@@ -10,13 +10,6 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ponytail: fixed roles with capabilities mapped in code; move to a roles table when the Owner
-// needs to configure them (routes already ask for capabilities, not roles).
-enum SiteRole {
-  OWNER
-  OFFICER
-}
-
 enum ResponseStatus {
   IN
   OUT
@@ -52,8 +45,9 @@ model User {
   id           String      @id @default(uuid())
   username     String
   preferredChannel String?    @default("telegram")
-  // Admin-site role; null = no site access (players use the bot). Capabilities: src/domain/roles.ts.
-  role         SiteRole?
+  // Site role; null = no site access. Capabilities: src/domain/roles.ts.
+  roleId       String?
+  role         Role?       @relation(fields: [roleId], references: [id], onDelete: Restrict)
   identities   Identity[]
   characters   Character[]
   eventsCreated Event[]
@@ -62,6 +56,22 @@ model User {
   updatedAt    DateTime    @updatedAt
 
   @@map("users")
+}
+
+// Site roles, configured by the Owner. Lower position = higher rank. Exactly one isOwner and one isDefault
+// (partial unique indexes in the migration). capabilities: names registered by the routes (src/domain/roles.ts).
+model Role {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  position     Int
+  capabilities String[] @default([])
+  isDefault    Boolean  @default(false) // given to new accounts
+  isOwner      Boolean  @default(false) // has every capability, configures roles
+  users        User[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("roles")
 }
 
 // One row per linked chat account; a User can have one per platform.

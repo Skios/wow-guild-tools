@@ -2,7 +2,7 @@ import { vi, type Mock } from 'vitest';
 
 type Method = 'findUnique' | 'findFirst' | 'findMany' | 'create' | 'update' | 'updateMany' | 'upsert' | 'delete' | 'deleteMany' | 'count';
 type ModelMock = Record<Method, Mock>;
-type ModelName = 'user' | 'identity' | 'character' | 'event' | 'response' | 'rosterGroup' | 'groupMember' | 'chatDraft';
+type ModelName = 'user' | 'role' | 'identity' | 'character' | 'event' | 'response' | 'rosterGroup' | 'groupMember' | 'chatDraft';
 
 const models = new Map<string, ModelMock>();
 const registry = new Map<string, Record<string, Mock>>();

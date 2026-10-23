@@ -16,7 +16,10 @@ vi.mock('./integrations/telegram/telegram.client.js', () => ({
   TelegramClient: class { answerCallback = vi.fn(); sendMessage = vi.fn(); getBotUsername = vi.fn(); },
 }));
 
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { buildApp as realBuildApp } from './app.js';
+import { knownCapabilities } from './domain/roles.js';
 import { supabaseTokenVerifier } from './plugins/auth.js';
 
 const ID = '3f2b8c1e-8a4d-4c55-9d7e-000000000001';
@@ -31,8 +34,10 @@ beforeAll(async () => {
 
 beforeEach(() => {
   resetPrismaMock();
-  prismaMock.identity.findUnique.mockResolvedValue({ user: { id: 'u1', username: 'Brannock', role: 'OFFICER' } });
+  prismaMock.identity.findUnique.mockResolvedValue({ user: { id: 'u1', username: 'Brannock', role: OFFICER } });
 });
+
+const OFFICER = { name: 'Officer', position: 20, isOwner: false, capabilities: ['roster.manage', 'events.manage', 'messages.send', 'accounts.manage'] };
 
 describe('buildApp', () => {
   test('health check is public', async () => {
@@ -65,6 +70,9 @@ describe('buildApp', () => {
     ['POST', `/api/events/${ID}/message`],
     ['GET', '/api/meta/wow'],
     ['GET', '/api/auth/me'],
+    ['GET', '/api/roles'],
+    ['POST', '/api/roles'],
+    ['PUT', `/api/users/${ID}/role`],
   ] as const)('%s %s needs an officer login', async (method, url) => {
     const app = await buildApp();
 
@@ -73,6 +81,8 @@ describe('buildApp', () => {
     expect((await app.inject({ method, url, headers: { 'x-api-key': 'a_long_random_api_key_1234' } })).statusCode).toBe(401);
 
     prismaMock.identity.findUnique.mockResolvedValue({ user: { id: 'u2', username: 'Rando', role: null } });
+    expect((await app.inject({ method, url, headers: KEY })).statusCode).toBe(403);
+    prismaMock.identity.findUnique.mockResolvedValue(null);
     expect((await app.inject({ method, url, headers: KEY })).statusCode).toBe(403);
   });
 
@@ -84,7 +94,10 @@ describe('buildApp', () => {
   test('GET /auth/me says which officer is signed in', async () => {
     const res = await (await buildApp()).inject({ url: '/api/auth/me', headers: KEY });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ userId: 'u1', username: 'Brannock', role: 'OFFICER' });
+    expect(res.json()).toEqual({
+      userId: 'u1', username: 'Brannock', role: 'Officer', position: 20, isOwner: false,
+      capabilities: ['accounts.manage', 'events.manage', 'messages.send', 'roster.manage'],
+    });
   });
 
   test('an officer login opens officer routes', async () => {
@@ -107,6 +120,32 @@ describe('buildApp', () => {
   test('unknown routes are 404 (and unauthenticated probing learns nothing about officer routes)', async () => {
     const app = await buildApp();
     expect((await app.inject('/api/nope')).statusCode).toBe(404);
+  });
+});
+
+describe('capabilities', () => {
+  // Capabilities are registered by the routes that check them. A new or renamed one shows up here.
+  test('the routes register exactly these', async () => {
+    await buildApp();
+    expect(knownCapabilities()).toEqual(['accounts.manage', 'events.manage', 'messages.send', 'roster.manage']);
+  });
+
+  // Replays what the migrations store in "roles"."capabilities": seeds (ARRAY[...]), array_replace, array_remove.
+  // A capability renamed in the code without a migration that renames it in the roles fails here.
+  test('every capability the migrations store in roles still exists in the code', async () => {
+    await buildApp();
+    const dir = join(import.meta.dirname, '../prisma/migrations');
+    const sql = readdirSync(dir).filter(name => !name.endsWith('.toml')).sort()
+      .map(name => readFileSync(join(dir, name, 'migration.sql'), 'utf8')).join('\n');
+    const stored = new Set<string>();
+    const ops = /INSERT INTO "roles"[\s\S]*?;|array_replace\("capabilities", '([^']+)', '([^']+)'\)|array_remove\("capabilities", '([^']+)'\)/g;
+    for (const [match, from, to, removed] of sql.matchAll(ops)) {
+      if (from && to) { if (stored.delete(from)) stored.add(to); }
+      else if (removed) stored.delete(removed);
+      else for (const [, name] of match.matchAll(/'([a-z]+(?:\.[a-z]+)+)'/g)) stored.add(name!);
+    }
+    expect(stored.size).toBeGreaterThan(0);
+    expect([...stored].filter(name => !knownCapabilities().includes(name))).toEqual([]);
   });
 });
 
