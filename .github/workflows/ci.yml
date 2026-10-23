@@ -40,7 +40,12 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm run test:coverage
+      # Placeholder values (public-key shaped, nothing secret): the build then prerenders pages like Vercel does,
+      # so code that only breaks on the server (e.g. reading window) fails here instead of in the deploy.
       - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
 
   # develop -> dev, main -> prod (the "prod" GitHub Environment requires your approval).
   # Order matters: schema first, then the code that needs it. Vercel does not deploy on push;

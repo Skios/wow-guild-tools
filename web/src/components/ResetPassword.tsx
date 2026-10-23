@@ -1,17 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { ApiError, resetWithLinkRequest } from '../api';
 import { passwordProblem } from '../password';
 import { PasswordChecklist } from './PasswordChecklist';
 
 type Reset = (token: string, password: string) => Promise<void>;
-const tokenFromUrl = () => new URLSearchParams(window.location.search).get('t') ?? '';
 
 /** /reset?t=...: the link the bot sends to an account's own Telegram. No sign-in needed. */
 export function ResetPassword({ reset = resetWithLinkRequest }: { reset?: Reset }) {
-  const [token] = useState(tokenFromUrl);
+  // Read after mounting: Next prerenders this page on the server, where there is no URL to read. null = not read yet.
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => setToken(new URLSearchParams(window.location.search).get('t') ?? ''), []);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
@@ -27,7 +28,7 @@ export function ResetPassword({ reset = resetWithLinkRequest }: { reset?: Reset 
     setError(null);
     setBusy(true);
     try {
-      await reset(token, password);
+      await reset(token ?? '', password);
       setDone(true);
     } catch (failure) {
       setError(failure instanceof ApiError ? failure.message : 'Could not change the password. Try again.');
@@ -39,7 +40,7 @@ export function ResetPassword({ reset = resetWithLinkRequest }: { reset?: Reset 
     <main className="page login">
       <div className="card stack">
         <h1>Choose a new password</h1>
-        {!token && <p role="alert" className="error">This link is incomplete: send /reset to the guild&apos;s Telegram bot for a new one.</p>}
+        {token === '' && <p role="alert" className="error">This link is incomplete: send /reset to the guild&apos;s Telegram bot for a new one.</p>}
         {done ? (
           <p role="status">Password changed. <Link href="/events">Sign in</Link> with it.</p>
         ) : token && (
