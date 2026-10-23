@@ -4,10 +4,10 @@ import { buildRouteApp, prismaError, uuid } from '../test/helpers.js';
 
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 
-import { rosterRoutes } from './roster.controller.js';
+import { rosterApprovalRoutes, rosterRoutes } from './roster.controller.js';
 
 const C = uuid(1);
-const app = () => buildRouteApp(rosterRoutes);
+const app = () => buildRouteApp(rosterRoutes, rosterApprovalRoutes);
 const entry = { name: 'Brannock', realm: 'Silvermoon', class: 'WARRIOR', spec: 'PROTECTION' };
 const stored = (over = {}) => ({
   id: C, name: 'Brannock', realm: 'Silvermoon', class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK',
@@ -210,5 +210,98 @@ describe('GET /roster/accounts', () => {
       select: { id: true, username: true, nickname: true },
       orderBy: { username: 'asc' },
     });
+  });
+});
+
+describe('approval (roster.approve)', () => {
+  const inject = async (method: 'GET' | 'POST' | 'DELETE', url: string) => (await app()).inject({ method, url });
+
+  test('GET /roster/pending lists characters players added that are not on the roster yet', async () => {
+    prismaMock.character.findMany.mockResolvedValue([stored({ inRoster: false, userId: 'u1', user: { username: 'aure', nickname: 'Matte' } })]);
+
+    const res = await inject('GET', '/roster/pending');
+
+    expect(res.json()).toEqual([expect.objectContaining({ name: 'Brannock', nickname: 'Matte', username: 'aure' })]);
+    expect(prismaMock.character.findMany.mock.calls[0]![0].where).toEqual({ inRoster: false, userId: { not: null } });
+  });
+
+  test('POST /roster/:id/approve puts a pending character on the roster', async () => {
+    prismaMock.character.updateMany.mockResolvedValue({ count: 1 });
+
+    expect((await inject('POST', `/roster/${C}/approve`)).statusCode).toBe(200);
+    expect(prismaMock.character.updateMany).toHaveBeenCalledWith({ where: { id: C, inRoster: false, userId: { not: null } }, data: { inRoster: true } });
+  });
+
+  test('POST /roster/:id/revoke takes an owned character off the roster; the player keeps it', async () => {
+    prismaMock.character.updateMany.mockResolvedValue({ count: 1 });
+
+    expect((await inject('POST', `/roster/${C}/revoke`)).statusCode).toBe(200);
+    expect(prismaMock.character.updateMany).toHaveBeenCalledWith({ where: { id: C, inRoster: true, userId: { not: null } }, data: { inRoster: false } });
+    // Its answers to coming, unpublished events go (else the player could answer twice); past ones stay.
+    const { where } = prismaMock.response.deleteMany.mock.calls[0]![0];
+    expect(where).toEqual({ characterId: C, event: { isPublished: false, startTime: { gt: expect.any(Date) } } });
+  });
+
+  test('approve / revoke of something not in that state is a 404', async () => {
+    prismaMock.character.updateMany.mockResolvedValue({ count: 0 });
+    expect((await inject('POST', `/roster/${C}/approve`)).statusCode).toBe(404);
+    expect((await inject('POST', `/roster/${C}/revoke`)).statusCode).toBe(404);
+  });
+
+  test('DELETE /roster/:id/pending rejects: a character that never answered is deleted (only while still pending)', async () => {
+    prismaMock.character.findFirst.mockResolvedValue({ id: C, userId: 'u1', isMain: false });
+    prismaMock.character.deleteMany.mockResolvedValue({ count: 1 });
+
+    expect((await inject('DELETE', `/roster/${C}/pending`)).statusCode).toBe(200);
+    expect(prismaMock.character.deleteMany).toHaveBeenCalledWith({ where: { id: C, inRoster: false, userId: { not: null }, responses: { none: {} } } });
+    expect(prismaMock.character.updateMany).not.toHaveBeenCalled();
+  });
+
+  test('a rejected character with history is unlinked instead; a rejected main hands main to the next', async () => {
+    prismaMock.character.findFirst.mockResolvedValueOnce({ id: C, userId: 'u1', isMain: true }).mockResolvedValueOnce({ id: 'alt' });
+    prismaMock.character.deleteMany.mockResolvedValue({ count: 0 });
+    prismaMock.character.updateMany.mockResolvedValue({ count: 1 });
+
+    expect((await inject('DELETE', `/roster/${C}/pending`)).statusCode).toBe(200);
+    expect(prismaMock.character.updateMany).toHaveBeenCalledWith({ where: { id: C, inRoster: false, userId: { not: null } }, data: { userId: null, isMain: false } });
+    expect(prismaMock.character.update).toHaveBeenCalledWith({ where: { id: 'alt' }, data: { isMain: true } });
+  });
+
+  test('approved by someone else meanwhile: the reject is a 404 and the character stays', async () => {
+    prismaMock.character.findFirst.mockResolvedValue({ id: C, userId: 'u1', isMain: false });
+    prismaMock.character.deleteMany.mockResolvedValue({ count: 0 });
+    prismaMock.character.updateMany.mockResolvedValue({ count: 0 });
+
+    expect((await inject('DELETE', `/roster/${C}/pending`)).statusCode).toBe(404);
+  });
+
+  test('rejecting something that is not pending is a 404, nothing removed', async () => {
+    prismaMock.character.findFirst.mockResolvedValue(null);
+
+    expect((await inject('DELETE', `/roster/${C}/pending`)).statusCode).toBe(404);
+    expect(prismaMock.character.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /roster/new-season', () => {
+  const post = async (payload: object) => (await app()).inject({ method: 'POST', url: '/roster/new-season', payload });
+
+  test('empties the roster in one transaction: empty unclaimed slots go, everything else leaves the roster', async () => {
+    prismaMock.$transaction.mockResolvedValue([{ count: 9 }, { count: 2 }, { count: 5 }]);
+
+    const res = await post({ confirm: 'NEW SEASON' });
+
+    expect(res.json()).toEqual({ deleted: 2, removed: 5 });
+    expect(prismaMock.character.deleteMany).toHaveBeenCalledWith({ where: { inRoster: true, userId: null, responses: { none: {} } } });
+    expect(prismaMock.character.updateMany).toHaveBeenCalledWith({ where: { inRoster: true }, data: { inRoster: false } });
+    expect(prismaMock.response.deleteMany.mock.calls[0]![0].where).toEqual({
+      character: { inRoster: true }, event: { isPublished: false, startTime: { gt: expect.any(Date) } },
+    });
+  });
+
+  test('needs the typed confirmation', async () => {
+    expect((await post({ confirm: 'new season' })).statusCode).toBe(400);
+    expect((await post({})).statusCode).toBe(400);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 });

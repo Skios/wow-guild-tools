@@ -5,6 +5,7 @@ import { useApi, useAuth, useSpecLabel } from '../context';
 import type { MyCharacter } from '../types';
 import { errorMessage, useAsync } from '../useAsync';
 import { ChangePassword } from './ChangePassword';
+import { PencilIcon, XIcon } from './icons';
 import { CharacterName } from './CharacterName';
 import { OffSpecs } from './OffSpecs';
 import { RosterForm } from './RosterForm';
@@ -12,34 +13,64 @@ import { TelegramCard } from './TelegramCard';
 
 const CHANNEL_LABEL: Record<string, string> = { telegram: 'Telegram' };
 
-function CharacterRow({ character, busy, onMain, onEdit, onRemove }: {
-  character: MyCharacter; busy: boolean; onMain: () => void; onEdit: () => void; onRemove: () => void;
+function CharacterRow({ character, busy, onEdit, onRemove }: {
+  character: MyCharacter; busy: boolean; onEdit: () => void; onRemove: () => void;
 }) {
   const spec = useSpecLabel(character.class, character.spec);
   const [confirming, setConfirming] = useState(false);
   return (
-    <li className="my-character">
-      <span className="role-cell">
-        <CharacterName name={character.name} classId={character.class} />
-        <span className="muted">{spec}</span>
-        <OffSpecs classId={character.class} offSpecs={character.offSpecs} />
-      </span>
-      <span className="muted">{character.realm}</span>
-      <span>
+    <tr>
+      <td>
+        <span className="role-cell">
+          <CharacterName name={character.name} classId={character.class} />
+          <span className="muted">{spec}</span>
+          <OffSpecs classId={character.class} offSpecs={character.offSpecs} />
+        </span>
+      </td>
+      <td className="muted">{character.realm}</td>
+      <td>
         {character.isMain && <span className="badge badge-published">Main</span>}
         {!character.inRoster && <span className="badge badge-open" title="It joins the roster once an officer approves it">Waiting for an officer</span>}
-      </span>
-      <span className="actions compact">
-        {!character.isMain && <button type="button" disabled={busy} onClick={onMain}>Make main</button>}
-        <button type="button" disabled={busy} onClick={onEdit}>Edit specs</button>
+      </td>
+      <td className="cell-actions">
         {confirming ? (
-          <>
+          <span className="actions compact">
             <button type="button" className="danger" disabled={busy} onClick={onRemove}>Confirm remove</button>
             <button type="button" onClick={() => setConfirming(false)}>Cancel</button>
-          </>
-        ) : <button type="button" disabled={busy} onClick={() => setConfirming(true)}>Remove</button>}
-      </span>
-    </li>
+          </span>
+        ) : (
+          <span className="actions compact">
+            <button type="button" className="icon-button" disabled={busy} onClick={onEdit} aria-label={`Edit ${character.name}`} title="Edit"><PencilIcon /></button>
+            <button type="button" className="icon-button" disabled={busy} onClick={() => setConfirming(true)} aria-label={`Remove ${character.name}`} title="Remove"><XIcon /></button>
+          </span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+/** Specs (name, realm and class stay as the game spells them) and, for an alt, "Make main". */
+function EditCharacter({ character, busy, onSave, onMain, onClose }: {
+  character: MyCharacter; busy: boolean;
+  onSave: (specs: { spec: string; offSpecs: string[] }) => Promise<void>; onMain: () => void; onClose: () => void;
+}) {
+  return (
+    <div className="modal-backdrop">
+      <div role="dialog" aria-modal="true" aria-label={`Edit ${character.name}`} className="modal stack">
+        <h2>{character.name}</h2>
+        <RosterForm
+          lockIdentity hideNickname submitLabel="Save specs" onCancel={onClose}
+          initial={{ name: character.name, realm: character.realm, class: character.class, spec: character.spec ?? '', offSpecs: character.offSpecs, nickname: '' }}
+          onSubmit={entry => onSave({ spec: entry.spec, offSpecs: entry.offSpecs })}
+        />
+        {!character.isMain && (
+          <div className="stack">
+            <p className="muted">The main answers events from Telegram by default.</p>
+            <div><button type="button" disabled={busy} onClick={onMain}>Make main</button></div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -115,43 +146,50 @@ export function ProfileView() {
       <section className="card stack">
         <h2>Characters</h2>
         {me.characters.length === 0 && <p className="muted">No characters yet: claim your name below or add one.</p>}
-        <ul className="my-characters">
-          {me.characters.map(c => (
-            <CharacterRow
-              key={c.id} character={c} busy={busy}
-              onMain={() => void act(() => api.setMainCharacter(c.id))}
-              onEdit={() => { setAdding(false); setEditing(c); }}
-              onRemove={() => void act(() => api.removeMyCharacter(c.id))}
-            />
-          ))}
-        </ul>
+        {me.characters.length > 0 && (
+          <table className="table">
+            <thead>
+              <tr><th scope="col">Character</th><th scope="col">Realm</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Actions</span></th></tr>
+            </thead>
+            <tbody>
+              {me.characters.map(c => (
+                <CharacterRow
+                  key={c.id} character={c} busy={busy}
+                  onEdit={() => { setAdding(false); setEditing(c); }}
+                  onRemove={() => void act(() => api.removeMyCharacter(c.id))}
+                />
+              ))}
+            </tbody>
+          </table>
+        )}
         {editing && (
-          <RosterForm
-            key={editing.id} lockIdentity hideNickname submitLabel="Save specs" onCancel={() => setEditing(null)}
-            initial={{ name: editing.name, realm: editing.realm, class: editing.class, spec: editing.spec ?? '', offSpecs: editing.offSpecs, nickname: '' }}
-            onSubmit={async entry => {
-              await api.updateMyCharacter(editing.id, { spec: entry.spec, offSpecs: entry.offSpecs });
+          <EditCharacter
+            key={editing.id} character={editing} busy={busy} onClose={() => setEditing(null)}
+            onSave={async specs => {
+              await api.updateMyCharacter(editing.id, specs);
               setEditing(null);
               profile.reload();
             }}
+            onMain={() => { setEditing(null); void act(() => api.setMainCharacter(editing.id), `${editing.name} is now your main.`); }}
           />
         )}
 
         {(claimable.data?.length ?? 0) > 0 && (
           <>
             <h3>Roster names nobody has claimed</h3>
-            <ul className="my-characters">
-              {claimable.data!.map(c => (
-                <li key={c.id} className="my-character">
-                  <CharacterName name={c.name} classId={c.class} />
-                  <span className="muted">{c.realm}</span>
-                  <span />
-                  <span className="actions compact">
-                    <button type="button" disabled={busy} onClick={() => void act(() => api.claimCharacter(c.id), `${c.name} is now yours.`)}>It&apos;s mine</button>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <table className="table">
+              <tbody>
+                {claimable.data!.map(c => (
+                  <tr key={c.id}>
+                    <td><CharacterName name={c.name} classId={c.class} /></td>
+                    <td className="muted">{c.realm}</td>
+                    <td className="cell-actions">
+                      <button type="button" disabled={busy} onClick={() => void act(() => api.claimCharacter(c.id), `${c.name} is now yours.`)}>It&apos;s mine</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </>
         )}
 

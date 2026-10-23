@@ -29,7 +29,6 @@ export function SpecIcon({ classId, spec, role, size = 24 }: Props) {
       alt={[specLabel, className].filter(Boolean).join(' ')}
       width={size}
       height={size}
-      loading="lazy"
       onError={() => setBrokenSrc(src)}
     />
   );

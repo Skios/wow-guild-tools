@@ -1,6 +1,6 @@
 # Plan: accounts, configurable roles, characters, contact channels
 
-Status: reviewed by ponytail + user feedback 2026-10-23, waiting for go.
+Status: steps 1-6 done (2026-10-23); 7 (notes) and 8 (Roles page) next.
 
 ## User decisions
 1. Configurable roles with capabilities now. Base roles: Guildmaster, Officer, Raidleader, Raider.
@@ -97,14 +97,39 @@ publishable key.
 - Claim a free roster name.
 - preferredChannel stays Telegram; a channel picker comes with the second channel (Discord).
 
-## 5. Roster approval and event answers
-- Roster page: "Pending" list (characters with inRoster = false and an owner) with Approve / Reject, and the officer's
-  assign menu (fixes a name someone took that isn't theirs: the API already lets officers reassign off-roster characters).
-- To discuss: should claiming a free roster name also wait for approval? Today a claim is immediate (officers can
-  reassign afterwards).
-- Event answers only for characters with inRoster = true, enforced in ResponseService for every path.
+## 5. Roster approval, which character answers, new season (steps 6+4, user decisions 2026-10-23)
+- Only approved characters (inRoster = true) answer events, enforced in ResponseService for every path (bot, board,
+  officers' bulk edit). The event page's "Add a character" lists only approved characters.
+- Roster page: "Pending" list (characters with an owner and inRoster = false) with Approve / Reject, plus the
+  assign menu (fixes a name someone took that isn't theirs). Approve = inRoster true. Reject = the character leaves
+  the account (same as the player removing it: deleted if it never answered).
+- Claiming a name that is already on the roster needs no approval (as today).
+- Revoke approval: officers and raid leaders take a character off the roster (existing "Remove", which keeps it
+  on the player's account, now shown as pending again). Approve/revoke get their own capability `roster.approve`
+  (Guildmaster, Officer, Raidleader); editing the roster stays `roster.manage`.
+- Which character answers from the bot: the answer is saved on the main (or the first approved character if the
+  main isn't approved). If the player has more than one approved character, the bot's DM after the tap lists them
+  as buttons (callback `as_<index>_<eventId>`: the index in a fixed order fits Telegram's 64 bytes): a tap moves that event's answer to the chosen character (status kept). A later tap on the channel
+  keeps the character already answering for that event.
+- New season: a button on the Roster page (`roster.manage`, typed confirmation; one transaction). Every character
+  leaves the roster (owned ones go back to pending, empty unclaimed slots without answers are deleted). Accounts,
+  characters and past events stay. Officers re-approve.
+- Future: how to sign up with an alt when a player has several valid characters (homepage, see below).
+
+## UI fixes (user feedback 2026-10-23)
+- Profile, characters table: pencil icon = edit (opens a dialog with specs + "Make main"), x icon = remove.
+  Icons as inline SVG copied from Lucide (ISC licence, no new dependency).
+- Roster page: characters sorted by player, alts as indented rows under the main (no toggle).
+- Alts added to the roster don't show the account's nickname: bug. Likely cause: the roster form sends an empty
+  nickname for a claimed character and it overwrites the account's. Fix: claimed characters don't show or send a
+  nickname from the roster form (the account's nickname is edited on the profile or the Users page).
+- Names: show only the nickname when there is one (no "@username" next to it); the username only when there is no nickname.
+- Event page "Add a character": alts and players already on the list showed up (fixed by the approved-only list above).
 
 ## 6. Notes on every answer
+- Telegram can't put a text field in a channel message: the note is asked in the private chat after the tap.
+- Later: a homepage for everyone with my next events and quick answers (In / Out / Tentative / Note; Note opens a
+  small dialog with the 3 buttons + a text field). How officers use it: to discuss.
 - After any answer the bot says "Noted. Reply with a note if you want (e.g. leaving 30 min early)"; the next
   private message (not a command) becomes the note.
 - LATE: "Minutes late, and a note if you want (e.g. `15 traffic`)". One message: the number is the minutes,
@@ -126,6 +151,16 @@ publishable key.
 4b. [x] password checklist + Users table polish
 5. [x] nickname on the account + Profile page (claim, add with Raider.IO autocomplete; Telegram line; password in a
    dialog + reset link on Telegram, bot /reset, /reset page) + officer assigns characters (Roster page)
-6. roster approval + answers only for approved characters
+6. [x] roster approval + answers only for approved characters + which character answers (bot) + new season + UI fixes
+   (also: event page "Add a character" removed, the no-answer panel's "Mark as" covers it; spec icons load eagerly)
 7. notes on every answer
 8. Roles page (Owner)
+
+## Later (user decisions 2026-10-23)
+- Reminders as scheduled jobs per event: officers set times (e.g. Sunday 20:00, Monday 13:00); at each time the
+  people who haven't answered get a DM. A table of reminders (event, time, sent); Supabase pg_cron runs every few
+  minutes and sends the due ones (Vercel Hobby cron runs only once a day).
+- In-game invite string: `/invite Name-Realm` lines for the approved roster, kept up to date, with a copy button.
+- Preferred channel picker: stays (shown with the second channel).
+- Production: after an alpha preview with a group of testers.
+- Discord: later; the proof of concept stays on Telegram.

@@ -79,12 +79,10 @@ describe('requests', () => {
     expect(call().url).toBe('/api/events/a%2Fb%20c');
   });
 
-  test('lists characters and game data', async () => {
-    fetchMock.mockImplementation(async () => json([{ id: 'c1' }]));
-    await expect(api().listCharacters()).resolves.toEqual([{ id: 'c1' }]);
+  test('game data', async () => {
+    fetchMock.mockImplementation(async () => json({}));
     await api().getMeta();
-    expect(call(0).url).toBe('/api/characters');
-    expect(call(1).url).toBe('/api/meta/wow');
+    expect(call(0).url).toBe('/api/meta/wow');
   });
 
   test('manages the raid roster', async () => {
@@ -105,6 +103,23 @@ describe('requests', () => {
     ]);
     expect(call(1).body).toEqual(entry);
     expect(call(3).headers.has('content-type')).toBe(false);
+  });
+
+  test('approves, revokes and rejects characters, and starts a new season', async () => {
+    await api().listPendingRoster();
+    await api().approveRoster('c 1');
+    await api().revokeRoster('c 1');
+    await api().rejectPending('c 1');
+    await api().newSeason();
+
+    expect([0, 1, 2, 3, 4].map(n => `${call(n).method} ${call(n).url}`)).toEqual([
+      'GET /api/roster/pending',
+      'POST /api/roster/c%201/approve',
+      'POST /api/roster/c%201/revoke',
+      'DELETE /api/roster/c%201/pending',
+      'POST /api/roster/new-season',
+    ]);
+    expect(call(4).body).toEqual({ confirm: 'NEW SEASON' });
   });
 });
 

@@ -10,18 +10,25 @@ export const shownNickname = (character: { nickname: string | null; user?: { nic
   character.user?.nickname ?? character.nickname;
 
 export function toRosterDto(character: RosterRow) {
-  const { user, userId, inRoster, isMain, ...rest } = character;
-  void inRoster; void isMain;
+  const { user, userId, inRoster, ...rest } = character;
+  void inRoster;
   return { ...rest, nickname: shownNickname(character), claimed: userId !== null, username: user?.username ?? null };
 }
 
+const PENDING = { inRoster: false, userId: { not: null } } as const;
+/** Events still open to answers: a character leaving the roster loses its answers there (history stays). */
+const coming = () => ({ isPublished: false, startTime: { gt: new Date() } });
+
 const withOwner = { user: { select: { username: true, nickname: true } } } as const;
 
-/** A claimed character's nickname belongs to its account: write it there, not on the character. */
+/**
+ * A claimed character's nickname belongs to its account: write it there, not on the character.
+ * An empty one is ignored (the form leaves it blank for claimed characters): it must not wipe the account's.
+ */
 async function splitNickname<T extends { nickname?: string | null | undefined }>(userId: string | null, entry: T) {
-  if (!userId || entry.nickname === undefined) return entry;
+  if (!userId) return entry;
   const { nickname, ...rest } = entry;
-  await prisma.user.update({ where: { id: userId }, data: { nickname } });
+  if (nickname) await prisma.user.update({ where: { id: userId }, data: { nickname } });
   return rest;
 }
 
@@ -126,5 +133,48 @@ export class RosterService {
     if (!character.userId) throw new ConflictError('Nobody has claimed this character');
     const freed = await prisma.character.update({ where: { id }, data: { userId: null, isMain: false }, include: withOwner });
     return toRosterDto(freed);
+  }
+
+  /** Characters players added that wait for an officer's approval. */
+  async pending() {
+    const rows = await prisma.character.findMany({ where: PENDING, include: withOwner, orderBy: { name: 'asc' } });
+    return rows.map(toRosterDto);
+  }
+
+  /**
+   * Rejected = as if the player removed it: deleted, or only unlinked if it has history. Every write checks it is
+   * still pending, so an approval landing meanwhile wins (404) instead of losing the character.
+   */
+  async reject(id: string) {
+    const character = await prisma.character.findFirst({ where: { id, ...PENDING } });
+    if (!character?.userId) throw new NotFoundError('No pending character');
+    const { count: deleted } = await prisma.character.deleteMany({ where: { id, ...PENDING, responses: { none: {} } } });
+    if (deleted === 0) {
+      const { count } = await prisma.character.updateMany({ where: { id, ...PENDING }, data: { userId: null, isMain: false } });
+      if (count === 0) throw new NotFoundError('No pending character');
+    }
+    if (character.isMain) await promoteNextMain(character.userId, id);
+  }
+
+  async approve(id: string) {
+    const { count } = await prisma.character.updateMany({ where: { id, ...PENDING }, data: { inRoster: true } });
+    if (count === 0) throw new NotFoundError('No pending character');
+  }
+
+  /** Off the roster but still the player's: it waits for approval again. Its answers to coming events go. */
+  async revoke(id: string) {
+    const { count } = await prisma.character.updateMany({ where: { id, inRoster: true, userId: { not: null } }, data: { inRoster: false } });
+    if (count === 0) throw new NotFoundError('No approved character with an owner');
+    await prisma.response.deleteMany({ where: { characterId: id, event: coming() } });
+  }
+
+  /** Starts the roster over: players' characters go back to pending, empty unclaimed slots disappear, history stays. */
+  async newSeason() {
+    const [, deleted, removed] = await prisma.$transaction([
+      prisma.response.deleteMany({ where: { character: { inRoster: true }, event: coming() } }),
+      prisma.character.deleteMany({ where: { inRoster: true, userId: null, responses: { none: {} } } }),
+      prisma.character.updateMany({ where: { inRoster: true }, data: { inRoster: false } }),
+    ]);
+    return { deleted: deleted.count, removed: removed.count };
   }
 }

@@ -19,9 +19,15 @@ export function registerCapability(name: string): string {
 export const knownCapabilities = (): string[] => [...registered].sort();
 export const isKnownCapability = (name: string): boolean => registered.has(name);
 
+// Editing the roster includes approving characters for it (the Roster page reads it with roster.approve).
+const IMPLIES: Record<string, string[]> = { 'roster.manage': ['roster.approve'] };
+
 /** The Owner has everything; any other role only what the code still knows (a stale name grants nothing). */
-export const capabilitiesOf = (role: SiteRole): string[] =>
-  role.isOwner ? knownCapabilities() : role.capabilities.filter(isKnownCapability).sort();
+export function capabilitiesOf(role: SiteRole): string[] {
+  if (role.isOwner) return knownCapabilities();
+  const held = role.capabilities.flatMap(c => [c, ...(IMPLIES[c] ?? [])]);
+  return [...new Set(held)].filter(isKnownCapability).sort();
+}
 
 type Holder = { userId: string; role: SiteRole | null };
 

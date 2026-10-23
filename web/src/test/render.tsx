@@ -2,12 +2,12 @@ import { render } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { vi } from 'vitest';
 import type { Api } from '../api';
-import { ApiContext, MetaContext } from '../context';
-import type { CharacterSummary, EventDetail, EventResponse, EventSummary, Meta, NoAnswerEntry, Officer } from '../types';
+import { ApiContext, MetaContext, OfficerContext } from '../context';
+import type { EventDetail, EventResponse, EventSummary, Meta, NoAnswerEntry, Officer, RoleId } from '../types';
 
 export const OFFICER: Officer = {
   userId: 'u1', username: 'cid', role: 'Officer', position: 20, isOwner: false, mustChangePassword: false,
-  capabilities: ['accounts.manage', 'events.manage', 'messages.send', 'roster.manage'],
+  capabilities: ['accounts.manage', 'events.manage', 'messages.send', 'roster.approve', 'roster.manage'],
 };
 
 export const META: Meta = {
@@ -49,7 +49,6 @@ export function fakeApi(overrides: Overrides = {}): Api {
     createEvent: vi.fn().mockResolvedValue({}),
     saveRoster: vi.fn().mockResolvedValue({ success: true }),
     publish: vi.fn().mockResolvedValue({ success: true }),
-    listCharacters: vi.fn().mockResolvedValue([]),
     message: vi.fn().mockResolvedValue({ results: [] }),
     listRoster: vi.fn().mockResolvedValue([]),
     addToRoster: vi.fn().mockResolvedValue({}),
@@ -79,22 +78,24 @@ export function fakeApi(overrides: Overrides = {}): Api {
     searchCharacters: vi.fn().mockResolvedValue([]),
     rosterAccounts: vi.fn().mockResolvedValue([]),
     assignRosterOwner: vi.fn().mockResolvedValue({}),
+    listPendingRoster: vi.fn().mockResolvedValue([]),
+    approveRoster: vi.fn().mockResolvedValue(undefined),
+    revokeRoster: vi.fn().mockResolvedValue(undefined),
+    rejectPending: vi.fn().mockResolvedValue(undefined),
+    newSeason: vi.fn().mockResolvedValue({ deleted: 0, removed: 0 }),
     ...overrides,
   } as unknown as Api;
 }
 
-export function renderWith(ui: ReactElement, api: Api = fakeApi(), meta: Meta = META) {
+export function renderWith(ui: ReactElement, api: Api = fakeApi(), meta: Meta = META, officer: Officer = OFFICER) {
   return render(
     <ApiContext.Provider value={api}>
-      <MetaContext.Provider value={meta}>{ui}</MetaContext.Provider>
+      <OfficerContext.Provider value={officer}>
+        <MetaContext.Provider value={meta}>{ui}</MetaContext.Provider>
+      </OfficerContext.Provider>
     </ApiContext.Provider>,
   );
 }
-
-export const character = (name: string, over: Partial<CharacterSummary> = {}): CharacterSummary => ({
-  id: `c-${name}`, userId: `u-${name}`, name, realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', role: 'RANGED_DPS',
-  isMain: true, username: `${name.toLowerCase()}_player`, ...over,
-});
 
 export const eventSummary = (over: Partial<EventSummary> = {}): EventSummary => ({
   id: 'e1', title: 'Raid Night', startTime: '2099-10-18T19:00:00Z', endTime: '2099-10-18T22:00:00Z', description: null,
@@ -102,7 +103,7 @@ export const eventSummary = (over: Partial<EventSummary> = {}): EventSummary => 
 });
 
 export const response = (
-  name: string, role: CharacterSummary['role'], status: EventResponse['status'], isConfirmed = false, cls = 'MAGE',
+  name: string, role: RoleId, status: EventResponse['status'], isConfirmed = false, cls = 'MAGE',
   arrivalTime: string | null = null,
 ): EventResponse => ({
   id: `r-${name}`, characterId: `c-${name}`, status, isConfirmed, arrivalTime,

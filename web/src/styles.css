@@ -171,13 +171,15 @@ button.danger { background: var(--danger); border-color: var(--danger); color: #
 .profile-head h1 { margin: 0; }
 .inline-form { display: flex; align-items: flex-end; gap: 0.6rem; flex-wrap: wrap; }
 .inline-form > div { flex: 1 1 220px; max-width: 320px; }
-.my-characters { list-style: none; margin: 0; padding: 0; }
-.my-character {
-  display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) auto auto; gap: 0.5rem 1rem; align-items: center;
-  padding: 0.55rem 0; border-bottom: 1px solid var(--border);
-}
-.my-character .badge { margin-right: 0.3rem; }
-.my-character .actions { justify-content: flex-end; }
+.table .badge { margin-right: 0.3rem; }
+.cell-actions { width: 1%; white-space: nowrap; text-align: right; }
+.cell-actions .actions { justify-content: flex-end; }
+.icon-button { display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0; }
+.icon-button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+/* A player's other characters, under their main. */
+.alt-row td { border-top: none; }
+.alt-row td:first-child { padding-left: 1.75rem; position: relative; }
+.alt-row td:first-child::before { content: '↳'; position: absolute; left: 0.6rem; color: var(--muted); }
 .modal-backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.55); display: grid; place-items: center; padding: 1rem; z-index: 50; }
 .modal { width: min(520px, 100%); max-height: 90vh; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow); }
 .chips { display: inline-flex; flex-wrap: wrap; gap: 0.15rem 0.8rem; }
@@ -272,8 +274,6 @@ button.danger { background: var(--danger); border-color: var(--danger); color: #
   .grid.four { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 640px) {
-  .my-character { grid-template-columns: 1fr; }
-  .my-character .actions { justify-content: flex-start; }
   .grid, .grid.four { grid-template-columns: 1fr; }
   .span-2 { grid-column: auto; }
   .role-label { display: none; }

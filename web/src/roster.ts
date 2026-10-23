@@ -1,4 +1,4 @@
-import type { CharacterSummary, EventResponse, NoAnswerEntry, ResponseStatus, RoleId, RosterSelection } from './types';
+import type { EventResponse, NoAnswerEntry, ResponseStatus, RoleId, RosterSelection } from './types';
 
 export const ROLE_ORDER: Record<RoleId, number> = { TANK: 0, HEALER: 1, DPS: 2, RANGED_DPS: 3 };
 export const ROLES: RoleId[] = ['TANK', 'HEALER', 'DPS', 'RANGED_DPS'];
@@ -89,7 +89,7 @@ export function setLateMinutes(row: RosterRow, minutes: number | null): RosterRo
 
 export function addCharacter(
   rows: RosterRow[],
-  character: CharacterSummary | NoAnswerEntry,
+  character: NoAnswerEntry,
   status: ResponseStatus = 'IN',
 ): RosterRow[] {
   if (rows.some(r => r.characterId === character.id)) return rows;
@@ -101,8 +101,8 @@ export function addCharacter(
     spec: character.spec,
     role: character.role,
     username: character.username,
-    offSpecs: character.offSpecs ?? [],
-    nickname: character.nickname ?? null,
+    offSpecs: character.offSpecs,
+    nickname: character.nickname,
     status,
     isConfirmed: false,
     lateMinutes: null,

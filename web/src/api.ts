@@ -1,5 +1,5 @@
 import type {
-  Account, CharacterSuggestion, CharacterSummary, ClaimableCharacter, EventDetail, Profile, RosterAccount, SiteRoleSummary, EventSummary, Meta, MessageResult, NewEvent, Officer, RosterCharacter, RosterEntryInput, RosterSelection,
+  Account, CharacterSuggestion, ClaimableCharacter, EventDetail, Profile, RosterAccount, SiteRoleSummary, EventSummary, Meta, MessageResult, NewEvent, Officer, RosterCharacter, RosterEntryInput, RosterSelection,
 } from './types';
 
 const BASE = '/api';
@@ -113,7 +113,6 @@ export function createApi({ fetchImpl = fetch, getToken = async () => null, onUn
     publish: (eventId: string) => request<{ success: true }>(`/events/${id(eventId)}/publish`, send('POST')),
     message: (eventId: string, characterIds: string[], text?: string) =>
       request<{ results: MessageResult[] }>(`/events/${id(eventId)}/message`, send('POST', { characterIds, ...(text && { text }) })),
-    listCharacters: () => request<CharacterSummary[]>('/characters'),
 
     listRoster: () => request<RosterCharacter[]>('/roster'),
     addToRoster: (entry: RosterEntryInput) => request<RosterCharacter>('/roster', send('POST', entry)),
@@ -121,6 +120,11 @@ export function createApi({ fetchImpl = fetch, getToken = async () => null, onUn
       request<RosterCharacter>(`/roster/${id(characterId)}`, send('PUT', entry)),
     removeFromRoster: (characterId: string) => request<{ success: true }>(`/roster/${id(characterId)}`, send('DELETE')),
     releaseRosterEntry: (characterId: string) => request<RosterCharacter>(`/roster/${id(characterId)}/release`, send('POST')),
+    listPendingRoster: () => request<RosterCharacter[]>('/roster/pending'),
+    approveRoster: (characterId: string) => request<unknown>(`/roster/${id(characterId)}/approve`, send('POST')),
+    revokeRoster: (characterId: string) => request<unknown>(`/roster/${id(characterId)}/revoke`, send('POST')),
+    rejectPending: (characterId: string) => request<unknown>(`/roster/${id(characterId)}/pending`, send('DELETE')),
+    newSeason: () => request<{ deleted: number; removed: number }>('/roster/new-season', send('POST', { confirm: 'NEW SEASON' })),
 
     listUsers: () => request<Account[]>('/users'),
     listRoles: () => request<SiteRoleSummary[]>('/roles'),

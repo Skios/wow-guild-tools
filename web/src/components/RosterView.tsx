@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useApi, useMeta, useRoleLabel, useSpecLabel } from '../context';
+import { useApi, useMeta, useOfficer, useRoleLabel, useSpecLabel } from '../context';
 import { ROLES, ROLE_ORDER } from '../roster';
 import { errorMessage, useAsync } from '../useAsync';
 import type { RosterAccount, RosterCharacter, RosterEntryInput } from '../types';
@@ -7,16 +7,44 @@ import { CharacterName } from './CharacterName';
 import { OffSpecs } from './OffSpecs';
 import { RoleIcon } from './RoleIcon';
 import { RosterForm } from './RosterForm';
+import { AssignSelect, NewSeason, PendingList } from './RosterPending';
 import { SpecIcon } from './SpecIcon';
 
 const LAST_REALM_KEY = 'guild-admin-last-realm';
 const lastRealm = () => { try { return localStorage.getItem(LAST_REALM_KEY) ?? ''; } catch { return ''; } };
 const rememberRealm = (realm: string) => { try { localStorage.setItem(LAST_REALM_KEY, realm); } catch { /* optional */ } };
 
-type Pending = { id: string; kind: 'remove' | 'release' };
+type Pending = { id: string; kind: 'remove' | 'release' | 'revoke' };
 
-function Row({ person, editing, pending, busy, accounts, onAssign, onEdit, onAsk, onConfirm, onCancel, onSave }: {
+const QUESTION: Record<Pending['kind'], (name: string) => string> = {
+  remove: name => `Remove ${name} from the roster?`,
+  release: name => `Free ${name} so another player can take it?`,
+  revoke: name => `Take ${name} off the roster? The player keeps it and it waits for approval again.`,
+};
+const DONE: Record<Pending['kind'], (name: string) => string> = {
+  remove: name => `${name} removed from the roster.`,
+  release: name => `${name} is free to be claimed again.`,
+  revoke: name => `${name} is waiting for approval again.`,
+};
+
+/** Each player's characters together (main first, alts after), players by their first character's role, then name. */
+function byPlayer(people: RosterCharacter[]): { person: RosterCharacter; alt: boolean }[] {
+  const groups = new Map<string, RosterCharacter[]>();
+  for (const p of people) {
+    const key = p.claimed ? `player:${p.username}` : `slot:${p.id}`;
+    groups.set(key, [...(groups.get(key) ?? []), p]);
+  }
+  const order = (a: RosterCharacter, b: RosterCharacter) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role] || a.name.localeCompare(b.name);
+  return [...groups.values()]
+    .map(list => [...list].sort((a, b) => Number(b.isMain) - Number(a.isMain) || order(a, b)))
+    .sort((a, b) => order(a[0]!, b[0]!))
+    .flatMap(list => list.map((person, i) => ({ person, alt: i > 0 })));
+}
+
+function Row({ person, alt, canEdit, editing, pending, busy, accounts, onAssign, onEdit, onAsk, onConfirm, onCancel, onSave }: {
   person: RosterCharacter;
+  alt: boolean;
+  canEdit: boolean;
   accounts: RosterAccount[];
   onAssign: (account: RosterAccount) => void;
   editing: boolean;
@@ -38,53 +66,45 @@ function Row({ person, editing, pending, busy, accounts, onAssign, onEdit, onAsk
       <tr>
         <td colSpan={6}>
           <RosterForm
-            initial={{ name: person.name, realm: person.realm, class: person.class, spec: person.spec ?? '', offSpecs: person.offSpecs, nickname: person.nickname ?? '' }}
+            initial={{ name: person.name, realm: person.realm, class: person.class, spec: person.spec ?? '', offSpecs: person.offSpecs, nickname: person.claimed ? '' : person.nickname ?? '' }}
             submitLabel="Save changes"
             onSubmit={onSave}
             onCancel={onCancel}
+            hideNickname={person.claimed}
           />
         </td>
       </tr>
     );
   }
   return (
-    <tr>
-      <td><span className="role-cell"><SpecIcon classId={person.class} spec={person.spec} role={person.role} /><OffSpecs classId={person.class} offSpecs={person.offSpecs} /><CharacterName name={person.name} classId={person.class} nickname={person.nickname} /></span></td>
+    <tr className={alt ? 'alt-row' : undefined}>
+      <td><span className="role-cell"><SpecIcon classId={person.class} spec={person.spec} role={person.role} /><OffSpecs classId={person.class} offSpecs={person.offSpecs} /><CharacterName name={person.name} classId={person.class} nickname={person.claimed ? null : person.nickname} /></span></td>
       <td className="muted">{person.realm}</td>
       <td>{[spec, className].filter(Boolean).join(' ')}</td>
       <td><span className="role-cell"><RoleIcon role={person.role} /><span className="role-label">{role}</span></span></td>
       <td>
         {person.claimed
-          ? <span>@{person.username}</span>
+          ? <span>{person.nickname ?? person.username}</span>
           : (
             <span className="role-cell">
               <span className="badge badge-open" title="Nobody has linked this name yet">Waiting for a player</span>
-              {accounts.length > 0 && (
-                <select
-                  aria-label={`Assign ${person.name} to an account`} value="" disabled={busy}
-                  onChange={e => { const a = accounts.find(x => x.id === e.target.value); if (a) onAssign(a); }}
-                >
-                  <option value="">Assign to…</option>
-                  {accounts.map(a => <option key={a.id} value={a.id}>{a.nickname ? `${a.nickname} (${a.username})` : a.username}</option>)}
-                </select>
-              )}
+              <AssignSelect person={person} accounts={accounts} busy={busy} onAssign={onAssign} />
             </span>
           )}
       </td>
       <td>
         {mine ? (
           <span className="actions compact" role="group" aria-label={`Confirm for ${person.name}`}>
-            <span>{mine.kind === 'remove'
-              ? `Remove ${person.name} from the roster?${person.claimed ? ' The player keeps their character.' : ''}`
-              : `Free ${person.name} so another player can take it?`}</span>
+            <span>{QUESTION[mine.kind](person.name)}</span>
             <button type="button" className="danger" disabled={busy} onClick={onConfirm}>Yes</button>
             <button type="button" disabled={busy} onClick={onCancel}>Cancel</button>
           </span>
         ) : (
           <span className="actions compact">
-            <button type="button" onClick={onEdit} aria-label={`Edit ${person.name}`}>Edit</button>
-            {person.claimed && <button type="button" onClick={() => onAsk('release')} aria-label={`Release ${person.name}`}>Release</button>}
-            <button type="button" onClick={() => onAsk('remove')} aria-label={`Remove ${person.name}`}>Remove</button>
+            {canEdit && <button type="button" onClick={onEdit} aria-label={`Edit ${person.name}`}>Edit</button>}
+            {person.claimed && canEdit && <button type="button" onClick={() => onAsk('release')} aria-label={`Release ${person.name}`}>Release</button>}
+            {person.claimed && <button type="button" onClick={() => onAsk('revoke')} aria-label={`Revoke ${person.name}`}>Revoke</button>}
+            {!person.claimed && canEdit && <button type="button" onClick={() => onAsk('remove')} aria-label={`Remove ${person.name}`}>Remove</button>}
           </span>
         )}
       </td>
@@ -95,8 +115,11 @@ function Row({ person, editing, pending, busy, accounts, onAssign, onEdit, onAsk
 export function RosterView() {
   const api = useApi();
   const meta = useMeta();
+  // Raid leaders approve and revoke; editing the roster needs roster.manage.
+  const canEdit = useOfficer().capabilities.includes('roster.manage');
   const roster = useAsync(() => api.listRoster(), [api]);
-  const accounts = useAsync(() => api.rosterAccounts(), [api]);
+  const waiting = useAsync(() => api.listPendingRoster(), [api]);
+  const accounts = useAsync(() => (canEdit ? api.rosterAccounts() : Promise.resolve([])), [api, canEdit]);
   const [editing, setEditing] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState(false);
@@ -104,29 +127,28 @@ export function RosterView() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const people = roster.data ?? [];
-  const sorted = useMemo(
-    () => [...people].sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role] || a.name.localeCompare(b.name)),
-    [people],
-  );
+  const rows = useMemo(() => byPlayer(people), [people]);
   const claimed = people.filter(p => p.claimed).length;
   const byRole = ROLES.map(role => ({ role, count: people.filter(p => p.role === role).length }));
 
-  async function act(action: () => Promise<unknown>, done: string) {
+  async function act<T>(action: () => Promise<T>, done: (result: T) => string) {
     setBusy(true);
     setProblem(null);
     setNotice(null);
     try {
-      await action();
-      setNotice(done);
+      setNotice(done(await action()));
       setPending(null);
       setEditing(null);
       roster.reload();
+      waiting.reload();
     } catch (e) {
       setProblem(errorMessage(e));
     } finally {
       setBusy(false);
     }
   }
+  const assign = (person: RosterCharacter, account: RosterAccount) =>
+    act(() => api.assignRosterOwner(person.id, account.id), () => `${person.name} is now ${account.nickname ?? account.username}’s.`);
 
   const add = async (entry: RosterEntryInput) => {
     await api.addToRoster(entry);
@@ -140,8 +162,8 @@ export function RosterView() {
       <section className="card">
         <h2>Raid roster</h2>
         <p className="muted">
-          The standing roster: everyone here is invited to every event. Players claim their name on their profile, or you
-          assign it to their account here.
+          The standing roster: everyone here is invited to every event. Players claim their name or add their characters
+          on their profile; characters they add wait for approval.
         </p>
         <ul className="summary" aria-label="Roster totals">
           <li><strong>{people.length}</strong> characters</li>
@@ -154,10 +176,19 @@ export function RosterView() {
       {notice && <p className="notice" role="status">{notice}</p>}
       {(problem || roster.error) && <p role="alert" className="error">{problem ?? roster.error}</p>}
 
+      <PendingList
+        people={waiting.data ?? []}
+        accounts={accounts.data ?? []}
+        busy={busy}
+        onApprove={person => act(() => api.approveRoster(person.id), () => `${person.name} is on the roster.`)}
+        onReject={person => act(() => api.rejectPending(person.id), () => `${person.name} rejected.`)}
+        onAssign={assign}
+      />
+
       <section className="card" aria-label="Roster characters">
         {roster.loading && !roster.data && <p className="muted" role="status">Loading the roster…</p>}
-        {roster.data && people.length === 0 && <p className="muted">The roster is empty. Add the first character below.</p>}
-        {sorted.length > 0 && (
+        {roster.data && people.length === 0 && <p className="muted">The roster is empty.{canEdit && ' Add the first character below.'}</p>}
+        {rows.length > 0 && (
           <table className="table">
             <thead>
               <tr>
@@ -166,22 +197,25 @@ export function RosterView() {
               </tr>
             </thead>
             <tbody>
-              {sorted.map(person => (
+              {rows.map(({ person, alt }) => (
                 <Row
                   key={person.id}
                   person={person}
+                  alt={alt}
+                  canEdit={canEdit}
                   editing={editing === person.id}
                   pending={pending}
                   busy={busy}
                   accounts={accounts.data ?? []}
-                  onAssign={account => act(() => api.assignRosterOwner(person.id, account.id), `${person.name} is now ${account.nickname ?? account.username}’s.`)}
+                  onAssign={account => assign(person, account)}
                   onEdit={() => { setEditing(person.id); setPending(null); setNotice(null); }}
                   onAsk={kind => { setPending({ id: person.id, kind }); setEditing(null); }}
                   onCancel={() => { setPending(null); setEditing(null); }}
-                  onConfirm={() => act(
-                    () => (pending?.kind === 'release' ? api.releaseRosterEntry(person.id) : api.removeFromRoster(person.id)),
-                    pending?.kind === 'release' ? `${person.name} is free to be claimed again.` : `${person.name} removed from the roster.`,
-                  )}
+                  onConfirm={() => {
+                    const kind = pending!.kind;
+                    const call = { remove: api.removeFromRoster, release: api.releaseRosterEntry, revoke: api.revokeRoster }[kind];
+                    return act(() => call(person.id), () => DONE[kind](person.name));
+                  }}
                   onSave={async entry => { await api.updateRosterEntry(person.id, entry); setEditing(null); setNotice(`${entry.name} updated.`); roster.reload(); }}
                 />
               ))}
@@ -190,15 +224,27 @@ export function RosterView() {
         )}
       </section>
 
-      <section className="card" aria-label="Add to the roster">
-        <h3>Add a character</h3>
-        <RosterForm
-          initial={{ name: '', realm: lastRealm(), class: '', spec: '', offSpecs: [], nickname: '' }}
-          submitLabel="Add to roster"
-          onSubmit={add}
-          keepAfterSave={['realm']}
+      {canEdit && (
+        <section className="card" aria-label="Add to the roster">
+          <h3>Add a character</h3>
+          <RosterForm
+            initial={{ name: '', realm: lastRealm(), class: '', spec: '', offSpecs: [], nickname: '' }}
+            submitLabel="Add to roster"
+            onSubmit={add}
+            keepAfterSave={['realm']}
+          />
+        </section>
+      )}
+
+      {canEdit && (
+        <NewSeason
+          busy={busy}
+          onStart={() => act(
+            () => api.newSeason(),
+            ({ removed }) => `New season started: ${removed} characters left the roster. Approve them again as players come back.`,
+          )}
         />
-      </section>
+      )}
     </div>
   );
 }

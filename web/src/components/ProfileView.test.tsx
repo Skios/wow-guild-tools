@@ -21,7 +21,7 @@ function setup(over: Parameters<typeof fakeApi>[0] = {}) {
   renderWith(<AuthContext.Provider value={fakeAuth()}><ProfileView /></AuthContext.Provider>, api);
   return api;
 }
-const row = async (name: string) => (await screen.findByText(name)).closest('li')!;
+const row = async (name: string) => (await screen.findByText(name)).closest('tr')!;
 
 describe('ProfileView: summary', () => {
   test('shows the account, its role and nickname; the nickname can be changed', async () => {
@@ -48,34 +48,53 @@ describe('ProfileView: characters', () => {
     expect(within(jaina).getByText('Waiting for an officer')).toBeInTheDocument();
   });
 
-  test('makes another character the main', async () => {
+  test('editing opens a dialog: specs (name, realm and class stay)', async () => {
     const api = setup();
-    await userEvent.click(within(await row('Jaina')).getByRole('button', { name: 'Make main' }));
+    await userEvent.click(within(await row('Ulfgaar')).getByRole('button', { name: 'Edit Ulfgaar' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Edit Ulfgaar' });
+    expect(within(dialog).getByLabelText('Character')).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Make main' })).not.toBeInTheDocument(); // already the main
+    await userEvent.selectOptions(within(dialog).getByLabelText('Specialization'), 'FURY');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save specs' }));
+
+    expect(api.updateMyCharacter).toHaveBeenCalledWith('c1', { spec: 'FURY', offSpecs: [] });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  test('"Make main" is in the edit dialog of the other characters', async () => {
+    const api = setup();
+    expect(within(await row('Jaina')).queryByRole('button', { name: 'Make main' })).not.toBeInTheDocument();
+    await userEvent.click(within(await row('Jaina')).getByRole('button', { name: 'Edit Jaina' }));
+
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Edit Jaina' })).getByRole('button', { name: 'Make main' }));
+
     expect(api.setMainCharacter).toHaveBeenCalledWith('c2');
+    expect(await screen.findByText('Jaina is now your main.')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(api.profile).toHaveBeenCalledTimes(2);
   });
 
-  test('removing asks first', async () => {
+  test('the dialog closes without saving', async () => {
+    const api = setup();
+    await userEvent.click(within(await row('Jaina')).getByRole('button', { name: 'Edit Jaina' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(api.updateMyCharacter).not.toHaveBeenCalled();
+  });
+
+  test('removing (the x button) asks first', async () => {
     const api = setup();
     const jaina = await row('Jaina');
-    await userEvent.click(within(jaina).getByRole('button', { name: 'Remove' }));
+    await userEvent.click(within(jaina).getByRole('button', { name: 'Remove Jaina' }));
     expect(api.removeMyCharacter).not.toHaveBeenCalled();
     await userEvent.click(within(jaina).getByRole('button', { name: 'Confirm remove' }));
     expect(api.removeMyCharacter).toHaveBeenCalledWith('c2');
   });
 
-  test('edits the specs of a character (name, realm and class stay)', async () => {
-    const api = setup();
-    await userEvent.click(within(await row('Ulfgaar')).getByRole('button', { name: 'Edit specs' }));
-    expect(screen.getByLabelText('Character')).toBeDisabled();
-    await userEvent.selectOptions(screen.getByLabelText('Specialization'), 'FURY');
-    await userEvent.click(screen.getByRole('button', { name: 'Save specs' }));
-    expect(api.updateMyCharacter).toHaveBeenCalledWith('c1', { spec: 'FURY', offSpecs: [] });
-  });
-
   test('claims a free roster name', async () => {
     const api = setup({ claimable: vi.fn().mockResolvedValue([{ id: 'c9', name: 'Thrall', realm: 'Nemesis', class: 'MAGE', spec: 'FROST' }]) });
-    const free = (await screen.findByText('Thrall')).closest('li')!;
+    const free = (await screen.findByText('Thrall')).closest('tr')!;
     await userEvent.click(within(free).getByRole('button', { name: "It's mine" }));
     expect(api.claimCharacter).toHaveBeenCalledWith('c9');
   });

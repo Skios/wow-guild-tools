@@ -4,7 +4,7 @@ import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 vi.mock('../repositories/draft.repository.js', async () => (await import('../test/memory-drafts.js')).memoryDraftStore());
 
-import { expectLateMinutes, handleLateMessage } from './late.service.js';
+import { expectLateMinutes, forgetLateMinutes, handleLateMessage } from './late.service.js';
 
 let nextId = 5000;
 const player = () => ({ id: nextId++ });
@@ -15,6 +15,35 @@ beforeEach(() => {
   resetPrismaMock();
   prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, startTime: start });
   prismaMock.response.upsert.mockResolvedValue({});
+  prismaMock.character.count.mockResolvedValue(1);
+});
+
+test('a character released or given to someone else meanwhile is not written to', async () => {
+  const p = player();
+  await expectLateMinutes(p.id, 'e1', 'c1');
+  prismaMock.character.count.mockResolvedValue(0);
+
+  expect((await say(p, '15'))?.text).toMatch(/no longer yours/);
+  expect(prismaMock.character.count).toHaveBeenCalledWith({
+    where: { id: 'c1', user: { identities: { some: { platform: 'telegram', platformUserId: String(p.id) } } } },
+  });
+  expect(prismaMock.response.upsert).not.toHaveBeenCalled();
+});
+
+test('forgetLateMinutes closes the question', async () => {
+  const p = player();
+  await expectLateMinutes(p.id, 'e1', 'c1');
+  await forgetLateMinutes(p.id);
+  expect(await say(p, '15')).toBeNull();
+});
+
+test('a character taken off the roster meanwhile: the player is told and the question closes', async () => {
+  const p = player();
+  await expectLateMinutes(p.id, 'e1', 'c1');
+  prismaMock.character.count.mockResolvedValue(0);
+
+  expect((await say(p, '15'))?.text).toMatch(/approved/);
+  expect(await say(p, '15')).toBeNull();
 });
 
 describe('late follow-up', () => {

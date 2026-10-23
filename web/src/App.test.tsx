@@ -68,6 +68,13 @@ describe('accounts', () => {
     expect(await screen.findByRole('link', { name: 'Events' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Roster' })).not.toBeInTheDocument();
   });
+
+  test('approving characters (raid leaders) opens the Roster page too', async () => {
+    const me = vi.fn().mockResolvedValue({ userId: 'u3', username: 'rl', role: 'Raidleader', capabilities: ['roster.approve'] });
+    render(<App auth={fakeAuth()} api={api({ me })}><Routed /></App>);
+
+    expect(await screen.findByRole('link', { name: 'Roster' })).toBeInTheDocument();
+  });
 });
 
 describe('account pages', () => {

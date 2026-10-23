@@ -79,7 +79,7 @@ describe('toRosterDto', () => {
   test('hides internals and exposes who owns the character', () => {
     const dto = toRosterDto({ ...base, userId: 'u1', user: { username: 'aure' } } as never);
 
-    expect(dto).toMatchObject({ claimed: true, username: 'aure' });
+    expect(dto).toMatchObject({ claimed: true, username: 'aure', isMain: true });
     expect(dto).not.toHaveProperty('userId');
     expect(dto).not.toHaveProperty('inRoster');
   });
@@ -129,6 +129,17 @@ describe('RosterService.add', () => {
 
     expect(prismaMock.character.update.mock.calls[0]![0].data).not.toHaveProperty('nickname');
     expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { nickname: 'Matte' } });
+  });
+
+  test("an empty nickname from the roster form never wipes the account's nickname", async () => {
+    prismaMock.character.findFirst.mockResolvedValue({ id: 'c1', inRoster: true, userId: 'u1' });
+    prismaMock.character.update.mockResolvedValue({ id: 'c1', userId: 'u1', user: { username: 'thrall', nickname: 'Matte' }, ...entry, nickname: null });
+
+    const dto = await new RosterService().update('c1', { ...entry, offSpecs: [], nickname: null });
+
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+    expect(prismaMock.character.update.mock.calls[0]![0].data).not.toHaveProperty('nickname');
+    expect(dto.nickname).toBe('Matte');
   });
 
   test('editing an unclaimed slot keeps the nickname on the character', async () => {

@@ -102,6 +102,7 @@ describe('PATCH /events/:id/roster', () => {
   beforeEach(() => {
     prismaMock.event.findUnique.mockResolvedValue({ isPublished: false });
     prismaMock.response.upsert.mockResolvedValue({});
+    prismaMock.character.count.mockResolvedValue(1);
   });
 
   test('saves the roster', async () => {
@@ -134,11 +135,11 @@ describe('PATCH /events/:id/roster', () => {
     expect(res.statusCode).toBe(409);
   });
 
-  test('400 for a character that does not exist', async () => {
-    prismaMock.$transaction.mockRejectedValue(prismaError('P2003'));
+  test('409 for a character that does not exist or is not approved for the roster', async () => {
+    prismaMock.character.count.mockResolvedValue(0);
     const res = await patch(`/events/${EID}/roster`, { selections });
-    expect(res.statusCode).toBe(400);
-    expect(res.json()).toEqual({ error: 'Invalid reference' });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toMatch(/approved/);
   });
 });
 

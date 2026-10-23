@@ -3,18 +3,21 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ApiError } from '../api';
 import type { RosterCharacter } from '../types';
-import { fakeApi, renderWith } from '../test/render';
+import { OFFICER, fakeApi, renderWith } from '../test/render';
 import { RosterView } from './RosterView';
 
 afterEach(() => vi.restoreAllMocks());
 
 const member = (name: string, over: Partial<RosterCharacter> = {}): RosterCharacter => ({
-  id: `c-${name}`, name, realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', role: 'RANGED_DPS', claimed: false, username: null, offSpecs: [], nickname: null, ...over,
+  id: `c-${name}`, name, realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', role: 'RANGED_DPS', claimed: false, username: null, offSpecs: [], nickname: null,
+  isMain: false, ...over,
 });
 
-const setup = (people = [member('Jaina')], over = {}) => {
+const RAID_LEADER = { ...OFFICER, role: 'Raidleader', capabilities: ['events.manage', 'messages.send', 'roster.approve'] };
+
+const setup = (people = [member('Jaina')], over = {}, officer = OFFICER) => {
   const api = fakeApi({ listRoster: vi.fn().mockResolvedValue(people), ...over });
-  renderWith(<RosterView />, api);
+  renderWith(<RosterView />, api, undefined, officer);
   return api;
 };
 
@@ -37,7 +40,7 @@ describe('the roster list', () => {
     await screen.findByText('Jaina');
     const jaina = rowOf('Jaina');
     expect(within(jaina).getByText('Fire Mage')).toBeInTheDocument();
-    expect(within(jaina).getByText('@jaina_player')).toBeInTheDocument();
+    expect(within(jaina).getByText('jaina_player')).toBeInTheDocument();
     expect(within(jaina).getByText('Silvermoon')).toBeInTheDocument();
     expect(within(rowOf('Brannock')).getByText('Waiting for a player')).toBeInTheDocument();
     expect(within(rowOf('Brannock')).getByText('Protection Warrior')).toBeInTheDocument();
@@ -215,14 +218,18 @@ describe('editing', () => {
 });
 
 describe('removing and releasing', () => {
-  test('asks first, and explains that a player keeps their character', async () => {
+  test("a player's character is not removed but taken off the roster (revoked): the player keeps it", async () => {
     const api = setup([member('Jaina', { claimed: true, username: 'jp' })]);
     await screen.findByText('Jaina');
+    expect(screen.queryByRole('button', { name: 'Remove Jaina' })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove Jaina' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Revoke Jaina' }));
+    expect(screen.getByText(/Take Jaina off the roster\? The player keeps it/)).toBeInTheDocument();
+    expect(api.revokeRoster).not.toHaveBeenCalled();
+    await userEvent.click(within(screen.getByRole('group', { name: 'Confirm for Jaina' })).getByRole('button', { name: 'Yes' }));
 
-    expect(screen.getByText(/Remove Jaina from the roster\? The player keeps their character/)).toBeInTheDocument();
-    expect(api.removeFromRoster).not.toHaveBeenCalled();
+    await waitFor(() => expect(api.revokeRoster).toHaveBeenCalledWith('c-Jaina'));
+    expect(await screen.findByText('Jaina is waiting for approval again.')).toBeInTheDocument();
   });
 
   test('removing an unclaimed name does not mention a player', async () => {
@@ -529,5 +536,122 @@ describe('assigning a roster name to an account', () => {
     });
     await screen.findByText('Jaina');
     expect(within(rowOf('Jaina')).queryByRole('combobox')).not.toBeInTheDocument();
+  });
+});
+
+describe('grouped by player', () => {
+  test("a player's alts follow their main, indented; the player column shows the nickname, else the username", async () => {
+    setup([
+      member('Zalt', { claimed: true, username: 'cid', nickname: 'Ulfy', role: 'TANK', class: 'WARRIOR', spec: 'PROTECTION' }),
+      member('Main', { claimed: true, username: 'cid', nickname: 'Ulfy', isMain: true }),
+      member('Solo', { claimed: true, username: 'solo' }),
+      member('Free'),
+    ]);
+
+    await screen.findByText('Main');
+    const rows = within(screen.getByRole('region', { name: 'Roster characters' })).getAllByRole('row').slice(1);
+    const names = rows.map(r => within(r).getAllByRole('cell')[0]!.textContent);
+    expect(names.indexOf('Zalt')).toBe(names.indexOf('Main') + 1);
+    expect(rowOf('Zalt')).toHaveClass('alt-row');
+    expect(rowOf('Main')).not.toHaveClass('alt-row');
+    expect(within(rowOf('Main')).getByText('Ulfy')).toBeInTheDocument();
+    expect(within(rowOf('Main')).queryByText(/cid/)).not.toBeInTheDocument();
+    expect(within(rowOf('Solo')).getByText('solo')).toBeInTheDocument();
+  });
+
+  test("editing a player's character has no nickname field (it belongs to the account)", async () => {
+    setup([member('Jaina', { claimed: true, username: 'jp' })]);
+    await screen.findByText('Jaina');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Jaina' }));
+
+    expect(within(screen.getByRole('form', { name: 'Save changes' })).queryByLabelText('Nickname (optional)')).not.toBeInTheDocument();
+  });
+});
+
+describe('characters waiting for approval', () => {
+  const waiting = member('Kerlink', { claimed: true, username: 'cid', nickname: 'Ulfy', class: 'PALADIN', spec: 'PROTECTION', role: 'TANK' });
+  const pendingList = () => screen.getByRole('region', { name: 'Waiting for approval' });
+
+  test('are listed with their player; approving puts them on the roster', async () => {
+    const api = setup([], { listPendingRoster: vi.fn().mockResolvedValue([waiting]) });
+
+    await within(await screen.findByRole('region', { name: 'Waiting for approval' })).findByText('Kerlink');
+    expect(within(pendingList()).getByText('Ulfy')).toBeInTheDocument();
+    await userEvent.click(within(pendingList()).getByRole('button', { name: 'Approve Kerlink' }));
+
+    await waitFor(() => expect(api.approveRoster).toHaveBeenCalledWith('c-Kerlink'));
+    expect(await screen.findByText('Kerlink is on the roster.')).toBeInTheDocument();
+    await waitFor(() => expect(api.listRoster).toHaveBeenCalledTimes(2));
+    expect(api.listPendingRoster).toHaveBeenCalledTimes(2);
+  });
+
+  test('rejecting asks first, then takes the character from the player', async () => {
+    const api = setup([], { listPendingRoster: vi.fn().mockResolvedValue([waiting]) });
+    await within(await screen.findByRole('region', { name: 'Waiting for approval' })).findByText('Kerlink');
+
+    await userEvent.click(within(pendingList()).getByRole('button', { name: 'Reject Kerlink' }));
+    expect(api.rejectPending).not.toHaveBeenCalled();
+    await userEvent.click(within(screen.getByRole('group', { name: 'Confirm rejecting Kerlink' })).getByRole('button', { name: 'Yes' }));
+
+    await waitFor(() => expect(api.rejectPending).toHaveBeenCalledWith('c-Kerlink'));
+    expect(await screen.findByText('Kerlink rejected.')).toBeInTheDocument();
+  });
+
+  test('can be given to another account (a name someone took that is not theirs)', async () => {
+    const api = setup([], {
+      listPendingRoster: vi.fn().mockResolvedValue([waiting]),
+      rosterAccounts: vi.fn().mockResolvedValue([{ id: 'u2', username: 'thrall', nickname: null }]),
+    });
+    await within(await screen.findByRole('region', { name: 'Waiting for approval' })).findByText('Kerlink');
+
+    await userEvent.selectOptions(await within(pendingList()).findByLabelText('Assign Kerlink to an account'), 'u2');
+
+    await waitFor(() => expect(api.assignRosterOwner).toHaveBeenCalledWith('c-Kerlink', 'u2'));
+  });
+
+  test('nothing waiting: the section is not shown', async () => {
+    setup([member('Jaina')]);
+    await screen.findByText('Jaina');
+    expect(screen.queryByRole('region', { name: 'Waiting for approval' })).not.toBeInTheDocument();
+  });
+});
+
+describe('raid leaders (approve and revoke only)', () => {
+  test('see the roster and approve, but cannot edit, remove, add, assign or start a season', async () => {
+    const api = setup(
+      [member('Jaina', { claimed: true, username: 'jp' }), member('Free')],
+      { listPendingRoster: vi.fn().mockResolvedValue([member('Kerlink', { claimed: true, username: 'cid' })]) },
+      RAID_LEADER,
+    );
+
+    await screen.findByText('Jaina');
+    expect(screen.getByRole('button', { name: 'Revoke Jaina' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Approve Kerlink' })).toBeInTheDocument();
+    for (const name of ['Edit Jaina', 'Release Jaina', 'Remove Free']) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Add to the roster' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'New season' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Assign .* to an account/)).not.toBeInTheDocument();
+    expect(api.rosterAccounts).not.toHaveBeenCalled();
+  });
+});
+
+describe('new season', () => {
+  test('needs NEW SEASON typed, then empties the roster and says what happened', async () => {
+    const api = setup([member('Jaina')], { newSeason: vi.fn().mockResolvedValue({ deleted: 1, removed: 4 }) });
+    await screen.findByText('Jaina');
+    const season = screen.getByRole('region', { name: 'New season' });
+
+    await userEvent.click(within(season).getByRole('button', { name: 'Start a new season…' }));
+    const go = within(season).getByRole('button', { name: 'Empty the roster' });
+    expect(go).toBeDisabled();
+    await userEvent.type(within(season).getByLabelText(/Type NEW SEASON/), 'new season');
+    expect(go).toBeDisabled();
+    await userEvent.clear(within(season).getByLabelText(/Type NEW SEASON/));
+    await userEvent.type(within(season).getByLabelText(/Type NEW SEASON/), 'NEW SEASON');
+    await userEvent.click(go);
+
+    await waitFor(() => expect(api.newSeason).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/New season started: 4 characters left the roster/)).toBeInTheDocument();
   });
 });

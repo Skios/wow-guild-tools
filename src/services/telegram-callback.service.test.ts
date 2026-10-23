@@ -1,87 +1,117 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
 
-const db = vi.hoisted(() => ({
-  identity: { findUnique: vi.fn(), upsert: vi.fn() },
-  character: { findFirst: vi.fn() },
-  event: { findUnique: vi.fn() },
-  response: { upsert: vi.fn() },
-}));
-vi.mock('../config/db.js', () => ({ prisma: db }));
+vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 
-const late = vi.hoisted(() => ({ expectLateMinutes: vi.fn() }));
+const late = vi.hoisted(() => ({ expectLateMinutes: vi.fn(), forgetLateMinutes: vi.fn() }));
 vi.mock('./late.service.js', () => late);
 
 import { handleCallbackQuery } from './telegram-callback.service.js';
 
 const EVENT_ID = '3f2b8c1e-8a4d-4c55-9d7e-1b2c3d4e5f60';
 const query = (data: string) => ({ id: 'q1', data, from: { id: 42, username: 'thrall' } });
+const MAIN = { id: 'aaaaaaaa-1111-4111-8111-000000000001', name: 'Ulfgaar' };
+const ALT = { id: 'bbbbbbbb-2222-4222-8222-000000000002', name: 'Kerlink' };
 
-describe('handleCallbackQuery', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    db.identity.findUnique.mockResolvedValue({ userId: 'u1' });
-    db.character.findFirst.mockResolvedValue({ id: 'c1' });
-    db.event.findUnique.mockResolvedValue({ isPublished: false });
-    db.response.upsert.mockResolvedValue({});
-  });
+beforeEach(() => {
+  resetPrismaMock();
+  late.expectLateMinutes.mockReset();
+  late.forgetLateMinutes.mockReset();
+  prismaMock.identity.findUnique.mockResolvedValue({ userId: 'u1' });
+  prismaMock.character.findMany.mockResolvedValue([MAIN]);
+  prismaMock.character.count.mockImplementation(async (args: { where: { id: { in: string[] } } }) => args.where.id.in.length);
+  prismaMock.response.findFirst.mockResolvedValue(null);
+  prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, startTime: new Date() });
+  prismaMock.response.upsert.mockResolvedValue({});
+});
 
-  test('stores the response for the main character and confirms to the user', async () => {
+const savedFor = () => prismaMock.response.upsert.mock.calls[0]![0].where.eventId_characterId.characterId;
+
+describe('handleCallbackQuery: answering', () => {
+  test('stores the answer for the main and confirms; one character means no extra message', async () => {
     const result = await handleCallbackQuery(query(`raid_tent_${EVENT_ID}`));
 
-    expect(db.response.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { eventId_characterId: { eventId: EVENT_ID, characterId: 'c1' } } }),
-    );
+    expect(savedFor()).toBe(MAIN.id);
     expect(result.text).toContain('TENTATIVE');
     expect(result.register).toBeUndefined();
+    expect(result.dm).toBeUndefined();
   });
 
-  test('looks the user up by Telegram identity, and never writes to the account (no rename, no new user)', async () => {
+  test('only approved characters are candidates: main first, then oldest', async () => {
     await handleCallbackQuery(query(`raid_in_${EVENT_ID}`));
 
-    expect(db.identity.findUnique).toHaveBeenCalledWith(
+    expect(prismaMock.character.findMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', inRoster: true },
+      orderBy: [{ isMain: 'desc' }, { createdAt: 'asc' }],
+      select: { id: true, name: true },
+    });
+  });
+
+  test('looks the user up by Telegram identity, and never writes to the account', async () => {
+    await handleCallbackQuery(query(`raid_in_${EVENT_ID}`));
+
+    expect(prismaMock.identity.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { platform_platformUserId: { platform: 'telegram', platformUserId: '42' } } }),
     );
-    expect(db.identity.upsert).not.toHaveBeenCalled();
+    expect(prismaMock.identity.upsert).not.toHaveBeenCalled();
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
   });
 
-  test('a Telegram account not linked to a site account is sent to link it', async () => {
-    db.identity.findUnique.mockResolvedValue(null);
+  test('with several approved characters the DM offers the others as buttons', async () => {
+    prismaMock.character.findMany.mockResolvedValue([MAIN, ALT]);
 
     const result = await handleCallbackQuery(query(`raid_in_${EVENT_ID}`));
 
-    expect(result.register).toBe(true);
-    expect(result.text).toMatch(/link/i);
-    expect(db.response.upsert).not.toHaveBeenCalled();
+    expect(result.dm?.text).toMatch(/Ulfgaar/);
+    expect(result.dm?.keyboard).toEqual({ inline_keyboard: [[{ text: 'Kerlink', callback_data: `as_bbbbbbbb_${EVENT_ID}` }]] });
   });
 
-  test('rejects malformed callback data without touching the database', async () => {
-    const result = await handleCallbackQuery(query('raid_in_not-a-uuid'));
-
-    expect(result.text).toMatch(/invalid/i);
-    expect(db.identity.findUnique).not.toHaveBeenCalled();
-  });
-
-  test('sends a user without a main character to the site', async () => {
-    db.character.findFirst.mockResolvedValue(null);
-
-    const result = await handleCallbackQuery(query(`raid_in_${EVENT_ID}`));
-
-    expect(result.register).toBe(true);
-    expect(result.text).toMatch(/character/i);
-    expect(db.response.upsert).not.toHaveBeenCalled();
-  });
-
-  test('tells the user when the event is already published', async () => {
-    db.event.findUnique.mockResolvedValue({ isPublished: true });
+  test('a new tap keeps the character already answering for that event', async () => {
+    prismaMock.character.findMany.mockResolvedValue([MAIN, ALT]);
+    prismaMock.response.findFirst.mockResolvedValue({ characterId: ALT.id });
 
     const result = await handleCallbackQuery(query(`raid_out_${EVENT_ID}`));
 
-    expect(result.text).toMatch(/closed/i);
+    expect(prismaMock.response.findFirst).toHaveBeenCalledWith({
+      where: { eventId: EVENT_ID, characterId: { in: [MAIN.id, ALT.id] } }, select: { characterId: true },
+    });
+    expect(savedFor()).toBe(ALT.id);
+    expect(result.dm?.keyboard?.inline_keyboard).toEqual([[{ text: 'Ulfgaar', callback_data: `as_aaaaaaaa_${EVENT_ID}` }]]);
   });
 
-  test('rethrows unexpected database errors', async () => {
-    db.event.findUnique.mockRejectedValue(new Error('db down'));
+  test('a Telegram account not linked to a site account is sent to link it', async () => {
+    prismaMock.identity.findUnique.mockResolvedValue(null);
 
+    const result = await handleCallbackQuery(query(`raid_in_${EVENT_ID}`));
+
+    expect(result).toMatchObject({ register: true, text: expect.stringMatching(/link/i) });
+    expect(prismaMock.response.upsert).not.toHaveBeenCalled();
+  });
+
+  test('no approved character: sent to the site, nothing saved', async () => {
+    prismaMock.character.findMany.mockResolvedValue([]);
+
+    const result = await handleCallbackQuery(query(`raid_in_${EVENT_ID}`));
+
+    expect(result).toMatchObject({ register: true, text: expect.stringMatching(/approve/i) });
+    expect(prismaMock.response.upsert).not.toHaveBeenCalled();
+  });
+
+  test('rejects malformed callback data without touching the database', async () => {
+    for (const data of ['raid_in_not-a-uuid', `as_xyz_${EVENT_ID}`, `as_aaaaaaaaa_${EVENT_ID}`]) {
+      expect((await handleCallbackQuery(query(data))).text).toMatch(/invalid/i);
+    }
+    expect(prismaMock.identity.findUnique).not.toHaveBeenCalled();
+  });
+
+  test('closed or missing events are reported; other errors are rethrown', async () => {
+    prismaMock.event.findUnique.mockResolvedValue({ isPublished: true });
+    expect((await handleCallbackQuery(query(`raid_out_${EVENT_ID}`))).text).toMatch(/closed/i);
+
+    prismaMock.event.findUnique.mockResolvedValue(null);
+    expect((await handleCallbackQuery(query(`raid_in_${EVENT_ID}`))).text).toMatch(/no longer exists/i);
+
+    prismaMock.event.findUnique.mockRejectedValue(new Error('db down'));
     await expect(handleCallbackQuery(query(`raid_in_${EVENT_ID}`))).rejects.toThrow('db down');
   });
 
@@ -89,42 +119,80 @@ describe('handleCallbackQuery', () => {
     test('saves LATE straight away, then asks for the minutes in the private chat', async () => {
       const result = await handleCallbackQuery(query(`raid_late_${EVENT_ID}`));
 
-      expect(db.response.upsert.mock.calls[0]![0].create.status).toBe('LATE');
+      expect(prismaMock.response.upsert.mock.calls[0]![0].create.status).toBe('LATE');
       expect(result.text).toMatch(/private chat/i);
-      expect(result.dm).toMatch(/how many minutes/i);
-      expect(late.expectLateMinutes).toHaveBeenCalledWith(42, EVENT_ID, 'c1');
+      expect(result.dm?.text).toMatch(/how many minutes/i);
+      expect(late.expectLateMinutes).toHaveBeenCalledWith(42, EVENT_ID, MAIN.id);
     });
 
-    test('does not ask for minutes when sign-ups are closed', async () => {
-      db.event.findUnique.mockResolvedValue({ isPublished: true });
+    test('with several characters the minutes question and the buttons come in one message', async () => {
+      prismaMock.character.findMany.mockResolvedValue([MAIN, ALT]);
 
       const result = await handleCallbackQuery(query(`raid_late_${EVENT_ID}`));
 
-      expect(result.text).toMatch(/closed/i);
+      expect(result.dm?.text).toMatch(/how many minutes[\s\S]*Ulfgaar/i);
+      expect(result.dm?.keyboard).toBeDefined();
+    });
+
+    test('does not ask for minutes when sign-ups are closed', async () => {
+      prismaMock.event.findUnique.mockResolvedValue({ isPublished: true });
+
+      const result = await handleCallbackQuery(query(`raid_late_${EVENT_ID}`));
+
       expect(result.dm).toBeUndefined();
       expect(late.expectLateMinutes).not.toHaveBeenCalled();
     });
 
-    test('an unlinked player is sent to link first', async () => {
-      db.character.findFirst.mockResolvedValue(null);
-
-      const result = await handleCallbackQuery(query(`raid_late_${EVENT_ID}`));
-
-      expect(result.register).toBe(true);
-      expect(late.expectLateMinutes).not.toHaveBeenCalled();
-    });
-
-    test('the other buttons never open the question', async () => {
+    test('the other buttons never open the question, and drop one an earlier LATE left open', async () => {
       await handleCallbackQuery(query(`raid_in_${EVENT_ID}`));
       expect(late.expectLateMinutes).not.toHaveBeenCalled();
+      expect(late.forgetLateMinutes).toHaveBeenCalledWith(42);
     });
   });
+});
 
-  test('an event that does not exist is reported, not a database error', async () => {
-    db.event.findUnique.mockResolvedValue(null);
+describe('handleCallbackQuery: answering with another character (as_<index>)', () => {
+  beforeEach(() => {
+    prismaMock.character.findMany.mockResolvedValue([MAIN, ALT]);
+    prismaMock.response.findFirst.mockResolvedValue({ characterId: MAIN.id });
+    prismaMock.response.findUnique.mockResolvedValue({ id: 'r1', status: 'IN', isConfirmed: false, arrivalTime: null, note: null });
+    prismaMock.$transaction.mockResolvedValue([]);
+  });
 
-    const result = await handleCallbackQuery(query(`raid_in_${EVENT_ID}`));
+  test('moves the answer to the chosen character', async () => {
+    const result = await handleCallbackQuery(query(`as_bbbbbbbb_${EVENT_ID}`));
 
-    expect(result.text).toMatch(/no longer exists|not found/i);
+    expect(prismaMock.response.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ eventId: EVENT_ID, characterId: ALT.id, status: 'IN' }) }));
+    expect(result.text).toMatch(/Kerlink/);
+    expect(late.forgetLateMinutes).toHaveBeenCalledWith(42); // not waiting for minutes
+  });
+
+  test('a LATE answer still waiting for minutes keeps waiting, now for the new character', async () => {
+    prismaMock.response.findUnique.mockResolvedValue({ id: 'r1', status: 'LATE', isConfirmed: false, arrivalTime: null, note: null });
+
+    await handleCallbackQuery(query(`as_bbbbbbbb_${EVENT_ID}`));
+
+    expect(late.expectLateMinutes).toHaveBeenCalledWith(42, EVENT_ID, ALT.id);
+  });
+
+  test('already answering with it: nothing changes', async () => {
+    const result = await handleCallbackQuery(query(`as_aaaaaaaa_${EVENT_ID}`));
+
+    expect(result.text).toMatch(/already/i);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  test('no answer yet, or a character no longer in the list', async () => {
+    prismaMock.response.findFirst.mockResolvedValue(null);
+    expect((await handleCallbackQuery(query(`as_bbbbbbbb_${EVENT_ID}`))).text).toMatch(/answer .*first/i);
+
+    prismaMock.response.findFirst.mockResolvedValue({ characterId: MAIN.id });
+    expect((await handleCallbackQuery(query(`as_cccccccc_${EVENT_ID}`))).text).toMatch(/no longer/i);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  test('sign-ups closed meanwhile', async () => {
+    prismaMock.event.findUnique.mockResolvedValue({ isPublished: true });
+    expect((await handleCallbackQuery(query(`as_bbbbbbbb_${EVENT_ID}`))).text).toMatch(/closed/i);
   });
 });

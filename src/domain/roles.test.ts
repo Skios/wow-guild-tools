@@ -30,7 +30,14 @@ describe('capabilities come from the code', () => {
 
   test('other roles keep only the capabilities the code knows (a stale name grants nothing)', () => {
     registerCapability('roster.manage');
-    expect(capabilitiesOf(role('X', 5, ['roster.manage', 'gone.away']))).toEqual(['roster.manage']);
+    expect(capabilitiesOf(role('X', 5, ['roster.manage', 'gone.away']))).not.toContain('gone.away');
+  });
+
+  test('roster.manage includes roster.approve (a role made later with only roster.manage still opens the Roster)', () => {
+    registerCapability('roster.manage');
+    registerCapability('roster.approve');
+    expect(capabilitiesOf(role('X', 5, ['roster.manage']))).toEqual(['roster.approve', 'roster.manage']);
+    expect(capabilitiesOf(role('Y', 5, ['roster.approve']))).toEqual(['roster.approve']);
   });
 });
 

@@ -28,12 +28,14 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
 `web/` is the officers' admin (Next.js App Router, client rendering). With the API running on :3000:
 `cd web && npm install && npm run dev`, then open http://127.0.0.1:5173 (`/api/*` is proxied to `API_ORIGIN`).
 
-- Pages: **Events** (list, create, board), **Roster** (add / edit / remove / release names, assign a free name to
-  an account), **Users** (roles, password resets), and your **Profile** (click your name). The menu shows what your
-  role can open.
-- **Profile**: nickname; your characters (main, specs and offspecs, remove); claim a free roster name or add a new
-  character with name suggestions (guild members first, then Raider.IO EU). New characters wait for an officer before
-  joining the roster. Channels (Telegram, the preferred one) and password (in a dialog, with a reset link on Telegram).
+- Pages: **Events** (list, create, board), **Roster** (each player's characters together, alts under the main;
+  add / edit / remove / release names, assign a name to an account; approve, reject or revoke characters players
+  added; **New season** empties the roster after typing NEW SEASON), **Users** (roles, password resets), and your
+  **Profile** (click your name). The menu shows what your role can open: raid leaders (`roster.approve`) see the
+  Roster to approve and revoke, without editing it.
+- **Profile**: nickname; your characters (pencil: specs and "Make main" in a dialog; x: remove); claim a free roster
+  name (no approval needed) or add a new character with name suggestions (guild members first, then Raider.IO EU).
+  New characters wait for an officer or raid leader before joining the roster. Only approved characters answer events. Channels (Telegram, the preferred one) and password (in a dialog, with a reset link on Telegram).
 - **Appearance** menu: four themes (Midnight, Parchment, Void, Daylight) and three icon styles (game, line, none).
 - Tests: `cd web && npm test`.
 - `npx tsx scripts/seed-dev.ts` loads a demo roster and raid into a local database.
@@ -87,11 +89,14 @@ Telegram needs a public HTTPS URL for the webhook. Expose the port with a tunnel
 `curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" -d url=<tunnel>/api/webhooks/telegram -d secret_token=$TELEGRAM_WEBHOOK_SECRET`
 
 The webhook is checked with `TELEGRAM_WEBHOOK_SECRET` (header `x-telegram-bot-api-secret-token`).
-Players answer with the IN / LATE / TENTATIVE / OUT buttons; LATE asks for the minutes in a private chat.
+Players answer with the IN / LATE / TENTATIVE / OUT buttons; LATE asks for the minutes in a private chat. The answer
+goes to the player's main (or the character already answering for that event); with more than one approved character
+the bot's private message has a button for each of the others, to answer with it instead.
 Set `SITE_URL` (the site's address) so `/start` can send the sign-up link.
 
 ## API
 Every route is under `/api` (the same domain serves the admin site on Vercel). Main routes: `GET/POST /roster`, `PUT/DELETE /roster/:id`, `POST /roster/:id/release`,
+`GET /roster/pending`, `POST /roster/:id/approve`, `POST /roster/:id/revoke`, `DELETE /roster/:id/pending`, `POST /roster/new-season`,
 `GET/POST /events`, `GET /events/:id`, `PATCH /events/:id/roster`, `POST /events/:id/publish`,
 `POST /events/:id/message`, `GET /meta/wow`, `GET /auth/me`, `GET/POST /roles`, `PUT/DELETE /roles/:id`,
 `GET /roles/capabilities`, `PUT /users/:id/role`, `GET /users`, `POST /users/:id/password-reset`,
@@ -109,6 +114,6 @@ The pipeline deploys only what a push changed (site, API + migrations, or both).
 
 ## Status
 Milestones 1–3 (core, bot, admin site) are live on Vercel + Supabase (dev). Accounts are in progress: roles,
-sign-up, Users page, Telegram linking, profile and characters are done; officer approval of new characters is next.
-Then reminders (M4).
+sign-up, Users page, Telegram linking, profile and characters, roster approval and new season are done; notes on
+every answer and the Roles page are next. Then an alpha with testers, reminders (M4) and production.
 See `.claude/plans`.

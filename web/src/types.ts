@@ -20,21 +20,6 @@ export interface Meta {
   roles: { id: RoleId; label: string }[];
 }
 
-export interface CharacterSummary {
-  id: string;
-  userId: string | null;
-  name: string;
-  realm: string;
-  class: string;
-  spec: string | null;
-  role: RoleId;
-  isMain: boolean;
-  username: string | null;
-  /** Not sent by every endpoint. */
-  offSpecs?: string[];
-  nickname?: string | null;
-}
-
 export interface RosterCharacter {
   id: string;
   name: string;
@@ -44,6 +29,7 @@ export interface RosterCharacter {
   role: RoleId;
   claimed: boolean;
   username: string | null;
+  isMain: boolean;
   /** Spec ids of the same class, ordered 2nd, 3rd...; never the main spec. */
   offSpecs: string[];
   nickname: string | null;

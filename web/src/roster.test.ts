@@ -3,7 +3,7 @@ import {
   addCharacter, changedSelections, confirmRow, groupRows, isDirty, rowsFromResponses, setLateMinutes, setStatus, sortRows, summarize,
   type RosterRow,
 } from './roster';
-import type { CharacterSummary, EventResponse, NoAnswerEntry, ResponseStatus } from './types';
+import type { EventResponse, NoAnswerEntry, ResponseStatus } from './types';
 
 const START = '2026-10-18T19:00:00.000Z';
 
@@ -16,10 +16,6 @@ const response = (
   isConfirmed,
   arrivalTime,
   character: { id: `c-${name}`, name, realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', role, isMain: true, user: { username: `${name}_player` }, offSpecs: [], nickname: null },
-});
-
-const candidate = (name: string, role: RosterRow['role'] = 'DPS'): CharacterSummary => ({
-  id: `c-${name}`, userId: `u-${name}`, name, realm: 'Silvermoon', class: 'MAGE', spec: 'FIRE', role, isMain: true, username: `${name}_player`,
 });
 
 const noAnswer = (name: string): NoAnswerEntry => ({
@@ -158,7 +154,7 @@ describe('setLateMinutes', () => {
 
 describe('addCharacter', () => {
   test('adds an unsaved IN row for a character who never answered', () => {
-    const next = addCharacter([], candidate('Amy'));
+    const next = addCharacter([], noAnswer('Amy'));
 
     expect(next).toHaveLength(1);
     expect(next[0]).toMatchObject({ characterId: 'c-Amy', status: 'IN', isConfirmed: false, saved: null });
@@ -175,7 +171,7 @@ describe('addCharacter', () => {
 
   test('ignores a character who is already on the list', () => {
     const existing = rows(response('Amy', 'DPS', 'OUT'));
-    expect(addCharacter(existing, candidate('Amy'))).toBe(existing);
+    expect(addCharacter(existing, noAnswer('Amy'))).toBe(existing);
   });
 });
 
@@ -195,7 +191,7 @@ describe('changedSelections / isDirty', () => {
   });
 
   test('a new row is always sent', () => {
-    expect(changedSelections(addCharacter([], candidate('Amy')))).toEqual([{ characterId: 'c-Amy', status: 'IN', isConfirmed: false }]);
+    expect(changedSelections(addCharacter([], noAnswer('Amy')))).toEqual([{ characterId: 'c-Amy', status: 'IN', isConfirmed: false }]);
   });
 
   test('late minutes travel only with LATE, and a changed delay counts as a change', () => {
@@ -287,9 +283,5 @@ describe('addCharacter off-specs and nickname', () => {
   test('copies them from a no-answer entry', () => {
     const entry = { ...noAnswer('Amy'), offSpecs: ['FROST'], nickname: 'Matte' };
     expect(addCharacter([], entry)[0]).toMatchObject({ offSpecs: ['FROST'], nickname: 'Matte' });
-  });
-
-  test('a summary without them gets none', () => {
-    expect(addCharacter([], candidate('Amy'))[0]).toMatchObject({ offSpecs: [], nickname: null });
   });
 });

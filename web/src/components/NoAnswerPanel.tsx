@@ -65,7 +65,7 @@ export function NoAnswerPanel(p: Props) {
                   {!person.reachable && (
                     <span className="muted note"> {person.username ? 'not on the bot yet' : 'unclaimed name'}</span>
                   )}
-                  {person.reachable && person.username && <span className="muted person-user"> @{person.username}</span>}
+                  {person.reachable && person.username && !person.nickname && <span className="muted person-user"> @{person.username}</span>}
                 </span>
                 <select
                   aria-label={`Mark ${person.name} as`}

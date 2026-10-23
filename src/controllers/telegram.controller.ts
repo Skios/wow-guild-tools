@@ -65,7 +65,7 @@ export async function telegramRoutes(fastify: FastifyInstance) {
       const username = result.register ? await client.getBotUsername().catch(() => undefined) : undefined;
       const url = username ? `https://t.me/${username}?start=register` : undefined;
       await client.answerCallback(query.id, result.text, url).catch(err => request.log.warn({ err }, 'answerCallbackQuery failed'));
-      if (result.dm) await reply(query.from.id, { text: result.dm });
+      if (result.dm) await reply(query.from.id, result.dm);
     }
     return response.send({ ok: true });
   });

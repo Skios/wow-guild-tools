@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test, vi } from 'vitest';
 import { ApiError } from '../api';
-import { character, eventDetail, fakeApi, noAnswer, renderWith, response } from '../test/render';
+import { eventDetail, fakeApi, noAnswer, renderWith, response } from '../test/render';
 import { EventView } from './EventView';
 
 const full = () =>
@@ -24,12 +24,8 @@ const full = () =>
     ],
   });
 
-const setup = (detail = full(), characters = [character('Newbie', { class: 'ROGUE', role: 'DPS' })], over = {}) => {
-  const api = fakeApi({
-    getEvent: vi.fn().mockResolvedValue(detail),
-    listCharacters: vi.fn().mockResolvedValue(characters),
-    ...over,
-  });
+const setup = (detail = full(), over = {}) => {
+  const api = fakeApi({ getEvent: vi.fn().mockResolvedValue(detail), ...over });
   renderWith(<EventView id="e1" />, api);
   return api;
 };
@@ -203,7 +199,7 @@ describe('no answer panel', () => {
 
   test('sends the default reminder, and shows what happened to each person', async () => {
     const message = vi.fn().mockResolvedValue({ results: [{ characterId: 'c-Silent', name: 'Silent', status: 'sent' }] });
-    const api = setup(undefined, undefined, { message });
+    const api = setup(undefined, { message });
     await ready();
 
     await userEvent.click(pick('Silent'));
@@ -259,7 +255,7 @@ describe('no answer panel', () => {
     ['unknown', /not found/],
   ] as const)('explains a %s recipient', async (status, text) => {
     const message = vi.fn().mockResolvedValue({ results: [{ characterId: 'c-Silent', name: 'Silent', status }] });
-    setup(undefined, undefined, { message });
+    setup(undefined, { message });
     await ready();
     await userEvent.click(pick('Silent'));
     await userEvent.click(send());
@@ -269,7 +265,7 @@ describe('no answer panel', () => {
 
   test('reports a delivery failure with its reason', async () => {
     const message = vi.fn().mockResolvedValue({ results: [{ characterId: 'c-Silent', name: 'Silent', status: 'failed', error: 'bot was blocked' }] });
-    setup(undefined, undefined, { message });
+    setup(undefined, { message });
     await ready();
     await userEvent.click(pick('Silent'));
     await userEvent.click(send());
@@ -279,7 +275,7 @@ describe('no answer panel', () => {
 
   test('a request that fails altogether shows the error and keeps the selection', async () => {
     const message = vi.fn().mockRejectedValue(new ApiError('Event already published', 409));
-    setup(undefined, undefined, { message });
+    setup(undefined, { message });
     await ready();
     await userEvent.click(pick('Silent'));
     await userEvent.click(send());
@@ -291,7 +287,7 @@ describe('no answer panel', () => {
   test('cannot send twice at once', async () => {
     let resolve!: (v: unknown) => void;
     const message = vi.fn().mockReturnValue(new Promise(r => { resolve = r; }));
-    setup(undefined, undefined, { message });
+    setup(undefined, { message });
     await ready();
     await userEvent.click(pick('Silent'));
 
@@ -389,7 +385,7 @@ describe('editing', () => {
   test('after reload the board shows what the server now has', async () => {
     const after = eventDetail({ responses: [response('Tom', 'TANK', 'IN', true, 'WARRIOR'), response('Cleo', 'HEALER', 'IN', true, 'PRIEST')], noAnswer: [] });
     const getEvent = vi.fn().mockResolvedValueOnce(full()).mockResolvedValue(after);
-    setup(undefined, undefined, { getEvent });
+    setup(undefined, { getEvent });
     await ready();
 
     await userEvent.click(confirmBox('Cleo'));
@@ -402,7 +398,7 @@ describe('editing', () => {
 
   test('a failed save shows the reason and keeps the edits', async () => {
     const saveRoster = vi.fn().mockRejectedValue(new ApiError('Event is locked: responses cannot be changed after publication', 409));
-    setup(undefined, undefined, { saveRoster });
+    setup(undefined, { saveRoster });
     await ready();
 
     await userEvent.selectOptions(answer('Maybe'), 'BENCH');
@@ -416,7 +412,7 @@ describe('editing', () => {
   test('controls are locked while saving, so edits cannot race the request', async () => {
     let resolve!: (v: unknown) => void;
     const saveRoster = vi.fn().mockReturnValue(new Promise(r => { resolve = r; }));
-    setup(undefined, undefined, { saveRoster });
+    setup(undefined, { saveRoster });
     await ready();
 
     await userEvent.selectOptions(answer('Maybe'), 'BENCH');
@@ -452,60 +448,6 @@ describe('editing', () => {
     const dirty = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(dirty);
     expect(dirty.defaultPrevented).toBe(true);
-  });
-});
-
-describe('adding characters from outside the roster', () => {
-  test('suggests registered characters that are not on the board yet and adds them as IN', async () => {
-    const api = setup(undefined, [character('Newbie', { class: 'ROGUE', role: 'DPS' }), character('Zed')]);
-    await ready();
-
-    const panel = await screen.findByRole('region', { name: 'Add a character' });
-    await waitFor(() => expect(within(panel).getByRole('button', { name: /Newbie/ })).toBeInTheDocument());
-    expect(within(panel).queryByRole('button', { name: /Zed/ })).not.toBeInTheDocument(); // already on the board
-
-    await userEvent.click(within(panel).getByRole('button', { name: /Newbie/ }));
-
-    expect(answer('Newbie').value).toBe('IN');
-    await userEvent.click(save());
-    await waitFor(() => expect(api.saveRoster).toHaveBeenCalledWith('e1', [{ characterId: 'c-Newbie', status: 'IN', isConfirmed: false }]));
-  });
-
-  test('filters by character or player name, ignoring case', async () => {
-    setup(undefined, [character('Alpha'), character('Bravo')]);
-    const panel = await screen.findByRole('region', { name: 'Add a character' });
-    await within(panel).findByRole('button', { name: /Alpha/ });
-
-    await userEvent.type(within(panel).getByLabelText(/Search/), 'BRAV');
-
-    expect(within(panel).queryByRole('button', { name: /Alpha/ })).not.toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: /Bravo/ })).toBeInTheDocument();
-  });
-
-  test('marks alts and unclaimed names', async () => {
-    setup(undefined, [character('Alt', { isMain: false }), character('Orphan', { username: null, userId: null })]);
-    const panel = await screen.findByRole('region', { name: 'Add a character' });
-
-    await within(panel).findByRole('button', { name: /Alt/ });
-    expect(within(panel).getByRole('button', { name: /Alt.*\(alt\)/ })).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: /Orphan.*unclaimed/ })).toBeInTheDocument();
-  });
-
-  test('keeps the list short with a hint, and a failure to load is reported without breaking the page', async () => {
-    const many = Array.from({ length: 12 }, (_, i) => character(`Char${String(i).padStart(2, '0')}`));
-    setup(undefined, many);
-    const panel = await screen.findByRole('region', { name: 'Add a character' });
-    await within(panel).findByRole('button', { name: /Char00/ });
-    expect(within(panel).getAllByRole('button')).toHaveLength(8);
-    expect(within(panel).getByText(/4 more/)).toBeInTheDocument();
-  });
-
-  test('a failure to load characters is reported without breaking the page', async () => {
-    setup(undefined, undefined, { listCharacters: vi.fn().mockRejectedValue(new Error('db down')) });
-    const panel = await screen.findByRole('region', { name: 'Add a character' });
-
-    expect(await within(panel).findByRole('alert')).toHaveTextContent('Could not load characters: db down');
-    expect(screen.getByText('Zed')).toBeInTheDocument();
   });
 });
 
@@ -564,7 +506,7 @@ describe('publishing', () => {
 
   test('when the channel refuses, shows why and leaves the event editable', async () => {
     const publish = vi.fn().mockRejectedValue(new ApiError('Publication failed on every channel', 502));
-    setup(undefined, undefined, { publish });
+    setup(undefined, { publish });
     await ready();
 
     await userEvent.click(screen.getByRole('button', { name: 'Publish roster' }));
@@ -578,7 +520,7 @@ describe('publishing', () => {
   test('cannot be triggered twice while publishing', async () => {
     let resolve!: (v: unknown) => void;
     const publish = vi.fn().mockReturnValue(new Promise(r => { resolve = r; }));
-    setup(undefined, undefined, { publish });
+    setup(undefined, { publish });
     await ready();
 
     await userEvent.click(screen.getByRole('button', { name: 'Publish roster' }));
@@ -598,7 +540,6 @@ describe('published event', () => {
     expect(screen.getByText(/can no longer be changed/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Save roster/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Publish roster' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Add a character' })).not.toBeInTheDocument();
     expect(answer('Tom')).toBeDisabled();
     expect(confirmBox('Tom')).toBeDisabled();
     expect(pick('Silent')).toBeDisabled();
@@ -607,7 +548,7 @@ describe('published event', () => {
 
   test('a locked event rejects edits even if the page was opened before it was published', async () => {
     const saveRoster = vi.fn().mockRejectedValue(new ApiError('Event is locked: responses cannot be changed after publication', 409));
-    setup(undefined, undefined, { saveRoster });
+    setup(undefined, { saveRoster });
     await ready();
 
     fireEvent.change(answer('Maybe'), { target: { value: 'BENCH' } });
@@ -632,6 +573,14 @@ describe('nickname and off-specs on the board', () => {
     expect(within(row).getByRole('group', { name: 'Off-specs: Fury (Melee DPS), Arms (Melee DPS)' })).toBeInTheDocument();
   });
 
+  test('with a nickname the username is not shown; without one it is', async () => {
+    const tom = { ...response('Tom', 'TANK', 'IN', true, 'WARRIOR'), character: { ...response('Tom', 'TANK', 'IN').character, nickname: 'Tommy' } };
+    setup(eventDetail({ responses: [tom, response('Zed', 'RANGED_DPS', 'IN', true)], noAnswer: [] }));
+    await ready();
+    expect(within(screen.getByText('Tom').closest('li')!).queryByText(/@tom_player/)).not.toBeInTheDocument();
+    expect(within(screen.getByText('Zed').closest('li')!).getByText(/@zed_player/)).toBeInTheDocument();
+  });
+
   test('a player without them looks as before', async () => {
     setup(eventDetail({ responses: [response('Zed', 'RANGED_DPS', 'IN', true)], noAnswer: [] }));
     await ready();
@@ -644,6 +593,7 @@ describe('nickname and off-specs on the board', () => {
 
     const row = within(region('No answer (1)')).getByText('Silent').closest('li')!;
     expect(within(row).getByText(/Shh/)).toHaveTextContent('· Shh');
+    expect(within(row).queryByText(/@silent_player/)).not.toBeInTheDocument(); // the nickname is enough
     expect(within(row).getByRole('group', { name: 'Off-specs: Frost (Ranged DPS), NEWSPEC' })).toHaveTextContent('?');
   });
 });

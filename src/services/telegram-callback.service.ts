@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { prisma } from '../config/db.js';
 import { EventIdSchema } from '../validators/event.validator.js';
 import { NotFoundError } from '../lib/errors.js';
-import { expectLateMinutes } from './late.service.js';
+import { expectLateMinutes, forgetLateMinutes } from './late.service.js';
+import type { Reply } from './link.service.js';
 import { EventLockedError, ResponseService } from './response.service.js';
 
 export const CallbackQuerySchema = z.object({
@@ -17,22 +18,88 @@ export const CallbackQuerySchema = z.object({
 export type CallbackQuery = z.infer<typeof CallbackQuerySchema>;
 
 const STATUS_BY_ACTION = { in: 'IN', out: 'OUT', tent: 'TENTATIVE', late: 'LATE' } as const;
-const CALLBACK_DATA = /^raid_(in|out|tent|late)_(.+)$/;
+// raid_<answer>_<event> from the channel; as_<key>_<event> from the DM: answer with another of my characters.
+// The key is the start of the character id (the whole id would pass Telegram's 64 bytes); it is only matched
+// against the presser's own approved characters, so it can't reach anyone else's.
+const CALLBACK_DATA = /^(?:raid_(in|out|tent|late)|as_([0-9a-f]{1,8}))_(.+)$/;
+const KEY_LENGTH = 8;
 
 const responseService = new ResponseService();
 
 export interface CallbackResult {
   text: string;
-  /** True when the user must link Telegram (or add a character) before answering: the bot sends the way. */
+  /** True when the user must link Telegram (or get a character approved) before answering: the bot sends the way. */
   register?: true;
-  /** A follow-up to send privately to the user (e.g. asking for the minutes of delay). */
-  dm?: string;
+  /** A follow-up sent privately to the user (minutes of delay, the other characters to answer with). */
+  dm?: Reply;
+}
+
+type Candidate = { id: string; name: string };
+
+/** Which character answers: the one already answering for this event, else the first (main first). */
+async function answering(eventId: string, characters: Candidate[]) {
+  const current = await prisma.response.findFirst({
+    where: { eventId, characterId: { in: characters.map(c => c.id) } }, select: { characterId: true },
+  });
+  return characters.find(c => c.id === current?.characterId);
+}
+
+/** "Answering with X" plus a button for each other approved character, when there are any. */
+function otherCharacters(eventId: string, characters: Candidate[], chosen: Candidate): Reply | undefined {
+  if (characters.length < 2) return undefined;
+  const buttons = characters.filter(c => c.id !== chosen.id).map(c => [{ text: c.name, callback_data: `as_${c.id.slice(0, KEY_LENGTH)}_${eventId}` }]);
+  return { text: `Answering with ${chosen.name}. Coming with another character? Tap it.`, keyboard: { inline_keyboard: buttons } };
+}
+
+function closedOrMissing(error: unknown): CallbackResult {
+  if (error instanceof EventLockedError) return { text: 'Sign-ups are closed for this event.' };
+  if (error instanceof NotFoundError) return { text: 'This event no longer exists.' };
+  throw error;
+}
+
+async function answer(query: CallbackQuery, eventId: string, status: (typeof STATUS_BY_ACTION)[keyof typeof STATUS_BY_ACTION], characters: Candidate[]) {
+  const character = (await answering(eventId, characters)) ?? characters[0]!;
+  try {
+    await responseService.updateResponse(eventId, character.id, status);
+  } catch (error) {
+    return closedOrMissing(error);
+  }
+  const others = otherCharacters(eventId, characters, character);
+  if (status !== 'LATE') {
+    await forgetLateMinutes(query.from.id); // a minutes question from an earlier LATE no longer applies
+    return { text: `Response saved: ${status}`, ...(others && { dm: others }) };
+  }
+
+  await expectLateMinutes(query.from.id, eventId, character.id);
+  const question = 'How many minutes late will you be? Send a number, for example 15. Ignore this if you are not sure yet.';
+  return {
+    text: 'Late noted. Tell me the minutes in our private chat.',
+    dm: others ? { text: `${question}\n\n${others.text}`, keyboard: others.keyboard! } : { text: question },
+  };
+}
+
+async function switchTo(query: CallbackQuery, eventId: string, key: string, characters: Candidate[]): Promise<CallbackResult> {
+  const current = await answering(eventId, characters);
+  if (!current) return { text: 'Answer in the channel first.' };
+  const target = characters.find(c => c.id.startsWith(key));
+  if (!target) return { text: 'That character is no longer in your approved list.' };
+  if (target.id === current.id) return { text: `Already answering with ${target.name}.` };
+  try {
+    await responseService.moveResponse(eventId, current.id, target.id);
+  } catch (error) {
+    return closedOrMissing(error);
+  }
+  // A LATE answer still waiting for its minutes: the minutes now go to the new character.
+  const moved = await prisma.response.findUnique({ where: { eventId_characterId: { eventId, characterId: target.id } }, select: { status: true, arrivalTime: true } });
+  if (moved?.status === 'LATE' && !moved.arrivalTime) await expectLateMinutes(query.from.id, eventId, target.id);
+  else await forgetLateMinutes(query.from.id);
+  return { text: `Now answering with ${target.name}.` };
 }
 
 /** Applies a button press and returns what to show to the user. */
 export async function handleCallbackQuery(query: CallbackQuery): Promise<CallbackResult> {
   const match = CALLBACK_DATA.exec(query.data);
-  const eventId = EventIdSchema.safeParse(match?.[2]);
+  const eventId = EventIdSchema.safeParse(match?.[3]);
   if (!match || !eventId.success) return { text: 'Invalid action' };
 
   // Read only: a button press must never create users or rename an account after its Telegram name.
@@ -42,24 +109,18 @@ export async function handleCallbackQuery(query: CallbackQuery): Promise<Callbac
   });
   if (!identity) return { text: 'Link your Telegram to your guild account first.', register: true };
 
-  const character = await prisma.character.findFirst({ where: { userId: identity.userId, isMain: true } });
-  if (!character) return { text: 'Add your main character on the guild site first.', register: true };
-
-  const status = STATUS_BY_ACTION[match[1] as keyof typeof STATUS_BY_ACTION];
-  try {
-    await responseService.updateResponse(eventId.data, character.id, status);
-  } catch (error) {
-    if (error instanceof EventLockedError) return { text: 'Sign-ups are closed for this event.' };
-    if (error instanceof NotFoundError) return { text: 'This event no longer exists.' };
-    throw error;
+  // Only characters an officer approved for the roster answer; the main comes first.
+  const characters = await prisma.character.findMany({
+    where: { userId: identity.userId, inRoster: true },
+    orderBy: [{ isMain: 'desc' }, { createdAt: 'asc' }],
+    select: { id: true, name: true },
+  });
+  if (characters.length === 0) {
+    return { text: 'Add your character on the guild site and wait for an officer to approve it.', register: true };
   }
 
-  if (status === 'LATE') {
-    await expectLateMinutes(query.from.id, eventId.data, character.id);
-    return {
-      text: 'Late noted. Tell me the minutes in our private chat.',
-      dm: 'How many minutes late will you be? Send a number, for example 15. Ignore this if you are not sure yet.',
-    };
-  }
-  return { text: `Response saved: ${status}` };
+  const action = match[1] as keyof typeof STATUS_BY_ACTION | undefined;
+  return action
+    ? answer(query, eventId.data, STATUS_BY_ACTION[action], characters)
+    : switchTo(query, eventId.data, match[2]!, characters);
 }

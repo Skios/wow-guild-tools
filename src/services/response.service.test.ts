@@ -4,12 +4,69 @@ import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 
 import { ConflictError, NotFoundError } from '../lib/errors.js';
-import { EventLockedError, ResponseService } from './response.service.js';
+import { EventLockedError, NotApprovedError, ResponseService } from './response.service.js';
 
 beforeEach(() => {
   resetPrismaMock();
   prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, startTime: new Date('2026-10-18T19:00:00Z') });
   prismaMock.response.upsert.mockImplementation(async (args: { create: object }) => ({ ...args.create }));
+  // Every character asked about is on the roster unless a test says otherwise.
+  prismaMock.character.count.mockImplementation(async (args: { where: { id: { in: string[] } } }) => args.where.id.in.length);
+});
+
+describe('only characters on the roster (approved) answer', () => {
+  test('a character waiting for approval is refused, nothing is written', async () => {
+    prismaMock.character.count.mockResolvedValue(0);
+
+    const error = await new ResponseService().updateResponse('e1', 'c1', 'IN').catch(e => e);
+
+    expect(error).toBeInstanceOf(NotApprovedError);
+    expect(error.status).toBe(409);
+    expect(prismaMock.character.count).toHaveBeenCalledWith({ where: { id: { in: ['c1'] }, inRoster: true } });
+    expect(prismaMock.response.upsert).not.toHaveBeenCalled();
+  });
+
+  test("officers' bulk edit is refused as a whole when one character is not approved", async () => {
+    prismaMock.character.count.mockResolvedValue(1);
+
+    await expect(new ResponseService().bulkUpdateResponses('e1', [
+      { characterId: 'c1', status: 'IN', isConfirmed: true },
+      { characterId: 'c2', status: 'OUT', isConfirmed: false },
+    ])).rejects.toBeInstanceOf(NotApprovedError);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('ResponseService.moveResponse (the player answers with another character)', () => {
+  test('moves status, arrival and note; the officer confirms again; a target answer is overwritten, never duplicated', async () => {
+    const answer = { status: 'LATE', arrivalTime: new Date('2026-10-18T19:15:00Z'), note: 'traffic' };
+    prismaMock.response.findUnique.mockResolvedValue({ id: 'r1', isConfirmed: true, ...answer });
+    prismaMock.$transaction.mockResolvedValue([]);
+
+    await new ResponseService().moveResponse('e1', 'main', 'alt');
+
+    expect(prismaMock.response.deleteMany).toHaveBeenCalledWith({ where: { eventId: 'e1', characterId: 'main' } });
+    expect(prismaMock.response.upsert).toHaveBeenCalledWith({
+      where: { eventId_characterId: { eventId: 'e1', characterId: 'alt' } },
+      create: { eventId: 'e1', characterId: 'alt', ...answer, isConfirmed: false },
+      update: { ...answer, isConfirmed: false },
+    });
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  test('nothing to move when the first character never answered', async () => {
+    prismaMock.response.findUnique.mockResolvedValue(null);
+
+    await expect(new ResponseService().moveResponse('e1', 'main', 'alt')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  test('the new character must be approved, and the event still open', async () => {
+    prismaMock.character.count.mockResolvedValue(0);
+    await expect(new ResponseService().moveResponse('e1', 'main', 'alt')).rejects.toBeInstanceOf(NotApprovedError);
+
+    prismaMock.event.findUnique.mockResolvedValue({ isPublished: true });
+    await expect(new ResponseService().moveResponse('e1', 'main', 'alt')).rejects.toBeInstanceOf(EventLockedError);
+  });
 });
 
 describe('ResponseService.updateResponse', () => {

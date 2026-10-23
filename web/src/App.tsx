@@ -27,7 +27,8 @@ function Shell({ api, auth, officer, onSignOut, onAccountChanged, children }: {
   const { prefs, setTheme, setIcons } = usePrefs();
   // ?? []: an API deployed before this site answers without capabilities; show the welcome, don't crash.
   const can = (capability: string) => (officer.capabilities ?? []).includes(capability);
-  const hasPages = can('events.manage') || can('roster.manage') || can('accounts.manage');
+  const seesRoster = can('roster.manage') || can('roster.approve');
+  const hasPages = can('events.manage') || seesRoster || can('accounts.manage');
   const onProfile = path.startsWith('/profile');
 
   return (
@@ -36,7 +37,7 @@ function Shell({ api, auth, officer, onSignOut, onAccountChanged, children }: {
         <Link href="/events" className="brand">Guild Raid Admin</Link>
         <nav aria-label="Main">
           {!forced && can('events.manage') && <Link href="/events" aria-current={path.startsWith('/events') ? 'page' : undefined}>Events</Link>}
-          {!forced && can('roster.manage') && <Link href="/roster" aria-current={onRoster ? 'page' : undefined}>Roster</Link>}
+          {!forced && seesRoster && <Link href="/roster" aria-current={onRoster ? 'page' : undefined}>Roster</Link>}
           {!forced && can('accounts.manage') && <Link href="/users" aria-current={path.startsWith('/users') ? 'page' : undefined}>Users</Link>}
         </nav>
         <AppearancePicker prefs={prefs} onTheme={setTheme} onIcons={setIcons} />

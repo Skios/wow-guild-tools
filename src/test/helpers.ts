@@ -3,8 +3,8 @@ import { Prisma } from '@prisma/client';
 import { registerCapability } from '../domain/roles.js';
 import type { Officer } from '../plugins/auth.js';
 
-// What the seeded Officer role grants (prisma/migrations/20261023120000_roles_table).
-export const OFFICER_CAPABILITIES = ['roster.manage', 'events.manage', 'messages.send', 'accounts.manage'];
+// What the seeded Officer role grants (roles_table + roster_approve migrations).
+export const OFFICER_CAPABILITIES = ['roster.manage', 'roster.approve', 'events.manage', 'messages.send', 'accounts.manage'];
 
 export const uuid = (n: number) => `3f2b8c1e-8a4d-4c55-9d7e-${String(n).padStart(12, '0')}`;
 

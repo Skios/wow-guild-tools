@@ -10,7 +10,7 @@ import { linkConfig } from './services/link.service.js';
 import { signupRoutes } from './controllers/signup.controller.js';
 import { roleRoutes } from './controllers/role.controller.js';
 import { meRoutes } from './controllers/me.controller.js';
-import { rosterRoutes } from './controllers/roster.controller.js';
+import { rosterApprovalRoutes, rosterRoutes } from './controllers/roster.controller.js';
 import { telegramRoutes } from './controllers/telegram.controller.js';
 import { getEnv } from './config/env.js';
 import { sendError } from './lib/http-error.js';
@@ -70,6 +70,7 @@ export async function buildApp(options: { logger?: FastifyServerOptions['logger'
       })); // your Telegram link and reset link
       await guarded('events.manage', eventRoutes);
       await guarded('roster.manage', rosterRoutes);
+      await guarded('roster.approve', rosterApprovalRoutes);
       await guarded('roster.manage', groupRoutes);
     });
   }, { prefix: '/api' });

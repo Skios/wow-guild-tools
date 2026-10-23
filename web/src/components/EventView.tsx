@@ -7,8 +7,7 @@ import {
   type RosterRow,
 } from '../roster';
 import { errorMessage, useAsync } from '../useAsync';
-import type { CharacterSummary, EventDetail, MessageResult, NoAnswerEntry, ResponseStatus } from '../types';
-import { AddCharacter } from './AddCharacter';
+import type { EventDetail, MessageResult, NoAnswerEntry, ResponseStatus } from '../types';
 import { EventBoard } from './EventBoard';
 import { NoAnswerPanel } from './NoAnswerPanel';
 import { RoleIcon } from './RoleIcon';
@@ -19,7 +18,6 @@ export function EventView({ id }: { id: string }) {
   const api = useApi();
   const meta = useMeta();
   const event = useAsync(() => api.getEvent(id), [api, id]);
-  const candidates = useAsync(() => api.listCharacters(), [api]);
 
   const [rows, setRows] = useState<RosterRow[]>([]);
   const [busy, setBusy] = useState<Busy>(null);
@@ -198,15 +196,6 @@ export function EventView({ id }: { id: string }) {
             {dirty && <span className="muted" role="status">Unsaved changes</span>}
           </div>
         </section>
-      )}
-
-      {!published && (
-        <AddCharacter
-          rows={rows}
-          candidates={candidates.data}
-          error={candidates.error}
-          onAdd={(c: CharacterSummary) => { setNotice(null); setRows(list => addCharacter(list, c)); }}
-        />
       )}
 
       {!published && (

@@ -202,7 +202,7 @@ describe('POST /webhooks/telegram', () => {
   });
 
   test('a LATE press answers the button and asks for the minutes privately', async () => {
-    handle.mockResolvedValue({ text: 'Late noted.', dm: 'How many minutes late will you be?' });
+    handle.mockResolvedValue({ text: 'Late noted.', dm: { text: 'How many minutes late will you be?' } });
 
     await (await app()).inject({
       method: 'POST', url: '/webhooks/telegram', payload: body,
@@ -213,8 +213,20 @@ describe('POST /webhooks/telegram', () => {
     expect(send).toHaveBeenCalledWith('42', 'How many minutes late will you be?', {});
   });
 
+  test('the private follow-up can carry buttons (answer with another character)', async () => {
+    const keyboard = { inline_keyboard: [[{ text: 'Kerlink', callback_data: 'as_1_x' }]] };
+    handle.mockResolvedValue({ text: 'Response saved: IN', dm: { text: 'Answering with Ulfgaar.', keyboard } });
+
+    await (await app()).inject({
+      method: 'POST', url: '/webhooks/telegram', payload: body,
+      headers: { 'x-telegram-bot-api-secret-token': 's3cret_token_value' },
+    });
+
+    expect(send).toHaveBeenCalledWith('42', 'Answering with Ulfgaar.', { reply_markup: keyboard });
+  });
+
   test('if the private follow-up cannot be delivered the webhook still answers 200', async () => {
-    handle.mockResolvedValue({ text: 'Late noted.', dm: 'How many minutes?' });
+    handle.mockResolvedValue({ text: 'Late noted.', dm: { text: 'How many minutes?' } });
     send.mockRejectedValue(new Error('403 bot was blocked'));
 
     const res = await (await app()).inject({
