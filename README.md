@@ -25,8 +25,8 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
 - Tests: `npm test` (coverage threshold 80%)
 
 ## Admin site
-`web/` is the officers' admin (React + Vite). With the API running:
-`cd web && npm install && npm run dev`, then open http://127.0.0.1:5173.
+`web/` is the officers' admin (Next.js App Router, client rendering). With the API running on :3000:
+`cd web && npm install && npm run dev`, then open http://127.0.0.1:5173 (`/api/*` is proxied to `API_ORIGIN`).
 
 - Pages: **Events** (list, create, board) and **Roster** (add / edit / remove / release names).
 - **Appearance** menu: four themes (Midnight, Parchment, Void, Daylight) and three icon styles (game, line, none).
@@ -66,11 +66,11 @@ Every route is under `/api` (the same domain serves the admin site on Vercel). M
 `POST /events/:id/message`, `GET /meta/wow`, `GET /auth/me`, `POST /webhooks/telegram` (own secret).
 
 ## Deploy (Vercel + Supabase, free tiers)
-One Vercel project serves both: `api/index.ts` is a single function that hands every `/api/*` request to
-Fastify (rewrite in `vercel.json`), and the admin site is the static build of `web/`. Region `fra1`;
-only `main` (production) and `develop` (preview = dev environment) are deployed. Security headers (CSP,
-HSTS, nosniff) are set in `vercel.json`. Bot conversations in progress are stored in `chat_drafts`,
-because serverless instances share no memory.
+Two Vercel projects, each with Production (`main`) and Preview `develop` (the dev environment):
+- **API** (repo root): `api/index.ts` is one function that hands every `/api/*` request to Fastify
+  (`vercel.json`, region `fra1`). Bot conversations in progress live in `chat_drafts` (no shared memory).
+- **Site** (`web/`): Next.js; `/api/*` is rewritten to the API of the same environment (`API_ORIGIN`).
+The pipeline deploys only what a push changed (site, API + migrations, or both). Details: `docs/deploy.md`.
 
 ## Status
 Milestones 1–3 (core, bot, admin site) are in place; reminders/nudges (M4), account linking across

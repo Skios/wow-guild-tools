@@ -55,18 +55,43 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # to see which files this push changed
+      # Deploy only what changed. Unknown history (new branch, force push) deploys everything.
+      - name: What changed
+        id: changes
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            echo "api=true" >> "$GITHUB_OUTPUT"; echo "web=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+          echo "$files" | grep -qE '^(src/|api/|prisma/|scripts/|public/|package(-lock)?\.json$|tsconfig\.json$|vercel\.json$)' \
+            && echo "api=true" >> "$GITHUB_OUTPUT" || echo "api=false" >> "$GITHUB_OUTPUT"
+          echo "$files" | grep -q '^web/' && echo "web=true" >> "$GITHUB_OUTPUT" || echo "web=false" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.changes.outputs.api == 'true'
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+        if: steps.changes.outputs.api == 'true'
       - name: Apply database migrations
+        if: steps.changes.outputs.api == 'true'
         run: npx prisma migrate deploy
         env:
           # migrate deploy only uses the direct (session pooler) connection
           DATABASE_URL: ${{ secrets.DIRECT_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-      - name: Deploy to Vercel
+      # Two Vercel projects: the API first (the site proxies /api to it), then the site.
+      - name: Deploy the API to Vercel
+        if: steps.changes.outputs.api == 'true'
         run: curl --fail --silent --show-error -X POST "$VERCEL_DEPLOY_HOOK" > /dev/null
         env:
           VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+      - name: Deploy the admin site to Vercel
+        if: steps.changes.outputs.web == 'true'
+        run: curl --fail --silent --show-error -X POST "$VERCEL_DEPLOY_HOOK_WEB" > /dev/null
+        env:
+          VERCEL_DEPLOY_HOOK_WEB: ${{ secrets.VERCEL_DEPLOY_HOOK_WEB }}

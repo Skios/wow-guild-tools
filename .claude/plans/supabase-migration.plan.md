@@ -56,11 +56,21 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 - [x] First Owner on dev (`npm run officer:dev -- create <name> --role owner`)
 
 ## After the first deploy + test
-### Migrate the admin site to Next.js (user decision 2026-10-21)
+### Migrate the admin site to Next.js — in progress (decided 2026-10-23)
 - Why: the site opens to the whole guild later and will grow with many features.
-- Keep the Fastify API as the engine (bot webhook, ~780 tests); Next.js replaces web/ (React components reused).
-- Decide: one Vercel project (Next + /api via a route handler that hands requests to Fastify) or two projects.
-- Hash routing -> App Router; supabase-js login unchanged; tests ported to the Next setup.
+- **Two Vercel projects** (user choice): `wgt-api` = today's project (Fastify in api/index.ts, unchanged), root `./`;
+  `wgt-web` = Next.js in web/, root `web`. Next rewrites `/api/:path*` to the API of its environment
+  (`API_ORIGIN`), so the browser keeps one origin, no CORS.
+- **Client rendering first** (user choice): App Router, client components, supabase-js login as today (localStorage).
+  SSR with @supabase/ssr cookies later, for public pages.
+- Routes: /login, /events, /events/[id], /roster (hash routes -> real routes). Components and pure modules reused.
+- Env (web): NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, API_ORIGIN. CSP/security headers move to next.config.
+- API project: vercel.json no longer builds web/; serves only api/ (+ a placeholder index).
+- Pipeline: deploys only what changed (web/ -> site; server files -> migrations + API; docs -> nothing).
+- After the first two-project deploy: verify the API sees the real client IP through the site's rewrite
+  (rate limiting); temporary echo of req.ip / x-forwarded-for, then remove it.
+- API changes stay backward compatible (add fields, never remove): site and API deploy separately.
+- Tests: vitest + Testing Library kept (next/navigation mocked); coverage bar unchanged.
 - Phone app: PWA (installable, free) first; native app only if really needed (React Native/Expo, separate).
 
 ## Later

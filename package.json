@@ -12,7 +12,7 @@
     "postinstall": "prisma skills sync || exit 0",
     "supabase:keys": "test -f supabase/signing_keys.json || (echo '[]' > supabase/signing_keys.json && supabase gen signing-key --algorithm ES256 --append)",
     "officer": "node --env-file-if-exists=.env --import tsx scripts/officer.ts",
-    "vercel-build": "prisma generate && npm --prefix web run build",
+    "vercel-build": "prisma generate",
     "officer:dev": "node --env-file=.env.dev --import tsx scripts/officer.ts",
     "roster:import": "node --env-file-if-exists=.env --import tsx scripts/roster-import.ts",
     "roster:import:dev": "node --env-file=.env.dev --import tsx scripts/roster-import.ts"
