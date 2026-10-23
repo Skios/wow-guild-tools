@@ -7,6 +7,7 @@ import { ApiError, createApi, type Api } from './api';
 import { createSupabaseAuth, useSession, type AuthClient } from './auth';
 import { AppearancePicker } from './components/AppearancePicker';
 import { Login } from './components/Login';
+import { Signup } from './components/Signup';
 import { ApiContext, MetaContext, PrefsContext } from './context';
 import { usePrefs } from './theme';
 import type { Officer } from './types';
@@ -16,14 +17,17 @@ function Shell({ api, officer, onSignOut, children }: { api: Api; officer: Offic
   const meta = useAsync(() => api.getMeta(), [api]);
   const onRoster = usePathname().startsWith('/roster');
   const { prefs, setTheme, setIcons } = usePrefs();
+  // ?? []: an API deployed before this site answers without capabilities; show the welcome, don't crash.
+  const can = (capability: string) => (officer.capabilities ?? []).includes(capability);
+  const hasPages = can('events.manage') || can('roster.manage');
 
   return (
     <PrefsContext.Provider value={prefs}>
       <header className="topbar">
         <Link href="/events" className="brand">Guild Raid Admin</Link>
         <nav aria-label="Main">
-          <Link href="/events" aria-current={onRoster ? undefined : 'page'}>Events</Link>
-          <Link href="/roster" aria-current={onRoster ? 'page' : undefined}>Roster</Link>
+          {can('events.manage') && <Link href="/events" aria-current={onRoster ? undefined : 'page'}>Events</Link>}
+          {can('roster.manage') && <Link href="/roster" aria-current={onRoster ? 'page' : undefined}>Roster</Link>}
         </nav>
         <AppearancePicker prefs={prefs} onTheme={setTheme} onIcons={setIcons} />
         <span className="muted">{officer.username}</span>
@@ -38,11 +42,22 @@ function Shell({ api, officer, onSignOut, children }: { api: Api; officer: Offic
         {meta.loading && !meta.data && <p className="muted" role="status">Loading…</p>}
         {meta.data && (
           <MetaContext.Provider value={meta.data}>
-            {children}
+            {hasPages ? children : <Welcome officer={officer} />}
           </MetaContext.Provider>
         )}
       </main>
     </PrefsContext.Provider>
+  );
+}
+
+/** What an account without officer pages sees (until the Profile page exists). */
+function Welcome({ officer }: { officer: Officer }) {
+  return (
+    <section className="card stack">
+      <h1>Welcome, {officer.username}</h1>
+      <p>Your account is ready. Your role is <strong>{officer.role}</strong>.</p>
+      <p className="muted">Your profile (characters, Telegram) is coming soon. An officer can give you more access.</p>
+    </section>
   );
 }
 
@@ -61,7 +76,7 @@ function OfficerGate({ api, onSignOut, children }: { api: Api; onSignOut: () => 
     <main className="page login">
       <div className="card stack">
         {who.loading && <p className="muted" role="status">Loading…</p>}
-        {who.data && <p role="alert" className="error">This account is not an officer.</p>}
+        {who.data && <p role="alert" className="error">This account has no access to the site.</p>}
         {who.error && <p role="alert" className="error">Could not check your account: {who.error}</p>}
         {who.error && <button type="button" onClick={who.reload}>Retry</button>}
         {!who.loading && <button type="button" onClick={onSignOut}>Sign out</button>}
@@ -72,6 +87,7 @@ function OfficerGate({ api, onSignOut, children }: { api: Api; onSignOut: () => 
 
 function SignedIn({ auth, api: injected, fetchImpl, children }: { auth: AuthClient; api?: Api; fetchImpl?: typeof fetch; children: ReactNode }) {
   const session = useSession(auth);
+  const onSignup = usePathname() === '/signup';
   // Global sign-out revokes the refresh token; if that cannot be done (offline), at least end it here.
   const signOut = () => {
     auth.signOut().then(({ error }) => error && auth.signOut({ scope: 'local' }), () => auth.signOut({ scope: 'local' }));
@@ -86,7 +102,7 @@ function SignedIn({ auth, api: injected, fetchImpl, children }: { auth: AuthClie
   );
 
   if (session === undefined) return <main className="page"><p className="muted" role="status">Loading…</p></main>;
-  if (session === null) return <Login auth={auth} />;
+  if (session === null) return onSignup ? <Signup auth={auth} /> : <Login auth={auth} />;
   return (
     <ApiContext.Provider value={api}>
       <OfficerGate key={session.user.id} api={api} onSignOut={signOut}>{children}</OfficerGate>

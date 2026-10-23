@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
-import { buildRouteApp } from '../test/helpers.js';
+import { buildOfficerRouteApp, buildRouteAppAs } from '../test/helpers.js';
 
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 
 import { adminRoutes } from './admin.controller.js';
 
-const app = () => buildRouteApp(adminRoutes);
+const app = () => buildOfficerRouteApp(adminRoutes);
 beforeEach(() => resetPrismaMock());
 
 describe('GET /meta/wow', () => {
@@ -34,6 +34,12 @@ describe('GET /meta/wow', () => {
 });
 
 describe('GET /characters', () => {
+  test('is for people who build event rosters, not every signed-in Raider', async () => {
+    const res = await (await buildRouteAppAs([], adminRoutes)).inject('/characters');
+    expect(res.statusCode).toBe(403);
+    expect(prismaMock.character.findMany).not.toHaveBeenCalled();
+  });
+
   const row = (name: string, isMain: boolean) => ({
     id: name, name, realm: 'Silvermoon', class: 'MAGE', role: 'RANGED_DPS', isMain, user: { username: 'u' } as { username: string } | null,
   });

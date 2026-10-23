@@ -5,7 +5,7 @@ import { ApiError } from './api';
 import { App } from './App';
 import { SESSION, fakeAuth } from './test/auth';
 import { Routed, currentPath, navigate } from './test/nav';
-import { META, eventDetail, eventSummary, fakeApi } from './test/render';
+import { META, OFFICER, eventDetail, eventSummary, fakeApi } from './test/render';
 
 const api = (over = {}) =>
   fakeApi({
@@ -37,6 +37,36 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(await screen.findByRole('link', { name: 'Raid Night' })).toBeInTheDocument();
+  });
+});
+
+describe('accounts', () => {
+  test('signed out, the login offers to create an account, which opens the sign-up form', async () => {
+    render(<App auth={fakeAuth(null)} api={api()}><Routed /></App>);
+    await userEvent.click(await screen.findByRole('link', { name: 'Create an account' }));
+
+    expect(await screen.findByRole('heading', { name: 'Create your account' })).toBeInTheDocument();
+    expect(currentPath()).toBe('/signup');
+  });
+
+  test('a Raider (no officer capability) gets a welcome instead of officer pages', async () => {
+    const me = vi.fn().mockResolvedValue({ userId: 'u9', username: 'newbie', role: 'Raider', capabilities: [] });
+    const listEvents = vi.fn();
+    render(<App auth={fakeAuth()} api={api({ me, listEvents })}><Routed /></App>);
+
+    expect(await screen.findByRole('heading', { name: 'Welcome, newbie' })).toBeInTheDocument();
+    expect(screen.getByText(/Raider/)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Events' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Roster' })).not.toBeInTheDocument();
+    expect(listEvents).not.toHaveBeenCalled();
+  });
+
+  test('the menu only shows what the role can open', async () => {
+    const me = vi.fn().mockResolvedValue({ userId: 'u3', username: 'rl', role: 'Raidleader', capabilities: ['events.manage', 'messages.send'] });
+    render(<App auth={fakeAuth()} api={api({ me })}><Routed /></App>);
+
+    expect(await screen.findByRole('link', { name: 'Events' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Roster' })).not.toBeInTheDocument();
   });
 });
 
@@ -197,7 +227,7 @@ describe('signing in', () => {
     const auth = fakeAuth();
     render(<App auth={auth} fetchImpl={server(403, { error: 'Forbidden' }) as never}><Routed /></App>);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('This account is not an officer.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('This account has no access to the site.');
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByLabelText('Nickname')).toBeInTheDocument();
@@ -214,7 +244,7 @@ describe('signing in', () => {
 
   test('every request carries the current token', async () => {
     const auth = fakeAuth();
-    const fetchImpl = server(200, { userId: 'u1', username: 'cid' });
+    const fetchImpl = server(200, OFFICER);
     render(<App auth={auth} fetchImpl={fetchImpl as never}><Routed /></App>);
     await screen.findByText('cid');
 
@@ -224,7 +254,7 @@ describe('signing in', () => {
   });
 
   test('if the account check fails for another reason, it can be retried', async () => {
-    const me = vi.fn().mockRejectedValueOnce(new ApiError('Cannot reach the server. Is the API running?', 0)).mockResolvedValue({ userId: 'u1', username: 'cid' });
+    const me = vi.fn().mockRejectedValueOnce(new ApiError('Cannot reach the server. Is the API running?', 0)).mockResolvedValue(OFFICER);
     render(<App auth={fakeAuth()} api={api({ me })}><Routed /></App>);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not check your account: Cannot reach the server');

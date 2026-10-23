@@ -4,10 +4,11 @@ import { afterEach, vi } from 'vitest';
 import { navigate } from './navState';
 
 vi.mock('next/navigation', async () => {
-  const { useTestPath } = await import('./navState');
+  const { useTestPath, navigate } = await import('./navState');
   return {
     usePathname: () => useTestPath(),
     useParams: () => ({ id: decodeURIComponent(useTestPath().split('/')[2] ?? '') }),
+    useRouter: () => ({ replace: navigate, push: navigate }),
   };
 });
 

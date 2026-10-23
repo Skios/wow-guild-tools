@@ -16,9 +16,10 @@ const role = { name: 'Raid Assist', position: 25, capabilities: [] };
 beforeEach(() => resetPrismaMock());
 
 describe('roles', () => {
-  test('any signed-in user can see the roles', async () => {
+  test('seeing the roles needs accounts.manage', async () => {
     prismaMock.role.findMany.mockResolvedValue([]);
-    expect((await (await asRaider()).inject('/roles')).statusCode).toBe(200);
+    expect((await (await asOfficer()).inject('/roles')).statusCode).toBe(200);
+    expect((await (await asRaider()).inject('/roles')).statusCode).toBe(403);
   });
 
   test('the capabilities offered are the ones the routes registered', async () => {

@@ -123,6 +123,40 @@ describe('buildApp', () => {
   });
 });
 
+describe('POST /api/signup', () => {
+  const signup = vi.fn();
+  const withAccounts = () => realBuildApp({ verifyToken: supabaseTokenVerifier(SUPABASE_URL, signer.jwks), accounts: { signup } });
+  const body = { username: 'ulfgaar', password: 'Correct-horse1' };
+  beforeEach(() => signup.mockReset().mockResolvedValue({ name: 'ulfgaar' }));
+
+  test('needs no login and creates the account', async () => {
+    const res = await (await withAccounts()).inject({ method: 'POST', url: '/api/signup', payload: body });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toEqual({ name: 'ulfgaar' });
+    expect(signup).toHaveBeenCalledWith('ulfgaar', 'Correct-horse1');
+  });
+
+  test('a body that is not an object is a 400', async () => {
+    const res = await (await withAccounts()).inject({ method: 'POST', url: '/api/signup', payload: '"x"', headers: { 'content-type': 'application/json' } });
+    expect(res.statusCode).toBe(400);
+    expect(signup).not.toHaveBeenCalled();
+  });
+
+  test('is 503 when the API has no Supabase secret key', async () => {
+    const res = await (await buildApp()).inject({ method: 'POST', url: '/api/signup', payload: body });
+    expect(res.statusCode).toBe(503);
+  });
+
+  test('is rate-limited much harder than the rest (account spam)', async () => {
+    const app = await withAccounts();
+    const codes = [];
+    for (let i = 0; i < 11; i++) codes.push((await app.inject({ method: 'POST', url: '/api/signup', payload: body })).statusCode);
+    expect(codes.slice(0, 10).every(code => code === 201)).toBe(true);
+    expect(codes[10]).toBe(429);
+  });
+});
+
 describe('capabilities', () => {
   // Capabilities are registered by the routes that check them. A new or renamed one shows up here.
   test('the routes register exactly these', async () => {

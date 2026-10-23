@@ -3,18 +3,20 @@ import rateLimit from '@fastify/rate-limit';
 import { adminRoutes } from './controllers/admin.controller.js';
 import { eventRoutes } from './controllers/event.controller.js';
 import { groupRoutes } from './controllers/group.controller.js';
+import { signupRoutes, type Accounts } from './controllers/signup.controller.js';
 import { roleRoutes } from './controllers/role.controller.js';
 import { profileRoutes } from './controllers/profile.controller.js';
 import { rosterRoutes } from './controllers/roster.controller.js';
 import { telegramRoutes } from './controllers/telegram.controller.js';
 import { getEnv } from './config/env.js';
 import { sendError } from './lib/http-error.js';
+import { OfficerService, supabaseAuthAdmin } from './services/officer.service.js';
 import { requireCapability, requireSiteUser, supabaseTokenVerifier, type TokenVerifier } from './plugins/auth.js';
 
 const BODY_LIMIT_BYTES = 100 * 1024;
 const RATE_LIMIT_PER_MINUTE = 300;
 
-export async function buildApp(options: { logger?: FastifyServerOptions['logger']; verifyToken?: TokenVerifier } = {}) {
+export async function buildApp(options: { logger?: FastifyServerOptions['logger']; verifyToken?: TokenVerifier; accounts?: Accounts } = {}) {
   const app = Fastify({
     logger: options.logger ?? false,
     bodyLimit: BODY_LIMIT_BYTES,
@@ -33,13 +35,18 @@ export async function buildApp(options: { logger?: FastifyServerOptions['logger'
   await app.register(rateLimit, { max: RATE_LIMIT_PER_MINUTE, timeWindow: '1 minute' });
 
   // Everything lives under /api: on Vercel the same domain serves the admin site, and only /api reaches us.
-  const verifyToken = options.verifyToken ?? supabaseTokenVerifier(getEnv().SUPABASE_URL);
+  const env = getEnv();
+  const verifyToken = options.verifyToken ?? supabaseTokenVerifier(env.SUPABASE_URL);
+  // The secret key only creates and manages logins (OfficerService); it never leaves the API.
+  const accounts = options.accounts
+    ?? (env.SUPABASE_SECRET_KEY ? new OfficerService(supabaseAuthAdmin(env.SUPABASE_URL, env.SUPABASE_SECRET_KEY)) : null);
   await app.register(async (api) => {
     api.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
-    // The webhook has its own secret. Everything else needs a Supabase login with a site role,
+    // The webhook has its own secret and sign-up needs no login. Everything else needs a Supabase login with a site role,
     // and each group of routes the capability it needs (src/domain/roles.ts).
     await api.register(telegramRoutes);
+    await api.register(signupRoutes(accounts));
     await api.register(async (site) => {
       requireSiteUser(site, verifyToken);
       const guarded = (capability: string, routes: FastifyPluginAsync) => site.register(async (scope) => {

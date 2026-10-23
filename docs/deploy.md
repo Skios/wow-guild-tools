@@ -21,7 +21,9 @@ approval in the `prod` GitHub Environment.
 - Authentication → Sign In / Providers: **Allow new users to sign up: off**; anonymous sign-ins off.
 - Authentication → Sign In / Providers → **Email → "Enable Email provider": ON** (a different switch from
   "Allow new users to sign up"!). Officers type a nickname, but the login runs on the email provider: with it
-  off every login fails. Confirm email off; minimum password length 16.
+  off every login fails. Confirm email off; **minimum password length 12** (same as `MIN_LENGTH` in
+  `src/domain/password.ts`: Supabase refuses shorter passwords even from our API); password requirements: none
+  (the API checks 3 of lowercase / uppercase / digits / symbols).
 - Authentication → Rate Limits: as low as you can live with.
 - Connect: copy the **Transaction pooler** string (port 6543) and the **Session pooler** string (port 5432).
 
@@ -42,6 +44,7 @@ the custom branch **`develop`** (not "All Preview branches"). Mark secrets as Se
   | `SUPABASE_URL` | `https://<ref>.supabase.co` |
   | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID`, `TELEGRAM_WEBHOOK_SECRET` | that environment's bot |
   | `TRUST_PROXY` | `true` |
+  | `SUPABASE_SECRET_KEY` | that project's secret key, marked **Sensitive** (sign-up, password resets). Without it sign-up answers 503 |
 
   The old `VITE_SUPABASE_*` variables are no longer used here: delete them.
 - Deployment Protection: **off** (Vercel Authentication disabled). The site's proxy and Telegram must reach the
@@ -57,7 +60,8 @@ the custom branch **`develop`** (not "All Preview branches"). Mark secrets as Se
   | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | the project's publishable key (public) |
   | `API_ORIGIN` | the `wgt-api` URL of the same environment, e.g. `https://wgt-api-git-develop-<you>.vercel.app` (no trailing slash) |
 
-  **Never** set `SUPABASE_SECRET_KEY` (or a service_role key) in Vercel: only `npm run officer` uses it, from your machine.
+  **Never** put `SUPABASE_SECRET_KEY` (or a service_role key) in the **site** project: everything there can end up
+  in the browser. It belongs only to the API project (below).
 - In **each** project, Settings → Git → Deploy Hooks: one for branch `main`, one for `develop`.
 - Firewall: add a rate-limit rule on paths starting with `/api/` (e.g. 100 requests/min per IP). The API's own
   limit counts per instance only.

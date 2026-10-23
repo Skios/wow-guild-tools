@@ -67,6 +67,8 @@ publishable key.
   The same page lets anyone change their own password.
 
 ## 3. Telegram link
+- Sign-up refuses a nickname any User already has (no look-alikes of Telegram-only players). Signing up through the
+  bot's link must let that Telegram user take their own existing name.
 - One signed token (HMAC with a server secret, contains the id + expiry 15 min, no table), both directions:
   - bot -> site: `/start` replies with `/signup?link=<token>`; signing up or signing in with it attaches the
     Telegram identity to the account;
@@ -98,7 +100,7 @@ publishable key.
 
 ## Order (each: tests first, review agents, commit)
 1. [x] roles table + migration + capabilities from the code + rules + API (+ script creates only Owners)
-2. secret key decision -> signup API + password policy + /signup and /login (Chrome-friendly)
+2. [x] signup API + password policy + /signup and /login (Chrome-friendly), /characters closed to Raiders
 3. Users page: role assignment + password reset + mustChangePassword + /account/password
 4. Telegram link token (both directions) + removal of the bot registration flow
 5. /profile + Raider.IO autocomplete + claim

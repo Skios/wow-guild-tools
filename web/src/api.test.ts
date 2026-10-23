@@ -126,13 +126,13 @@ describe('errors', () => {
     await expect(api().listEvents()).rejects.toMatchObject({ status: 401 });
   });
 
-  test('a 403 says the account is not an officer, whatever the server wrote', async () => {
+  test('a 403 says the account has no access to this, whatever the server wrote', async () => {
     fetchMock.mockImplementation(async () => json({ error: 'Forbidden' }, 403));
     const onUnauthorized = vi.fn();
 
     const error = await createApi({ fetchImpl: fetchMock as unknown as typeof fetch, onUnauthorized }).publish('e1').catch(e => e);
 
-    expect(error).toMatchObject({ status: 403, message: 'This account is not an officer.' });
+    expect(error).toMatchObject({ status: 403, message: 'Your account does not have access to this.' });
     expect(onUnauthorized).not.toHaveBeenCalled();
   });
 

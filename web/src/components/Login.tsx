@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { useRef, useState, type FormEvent } from 'react';
 import { nicknameToEmail, type AuthClient } from '../auth';
 
@@ -44,9 +45,9 @@ export function Login({ auth }: { auth: AuthClient }) {
 
   return (
     <main className="page login">
-      <form className="card stack" onSubmit={submit} noValidate>
+      <form className="card stack" method="post" action="/login" onSubmit={submit} noValidate>
         <h1>Guild Raid Admin</h1>
-        <p className="muted">Officers only. Sign in with your nickname.</p>
+        <p className="muted">Sign in with your nickname.</p>
         <div>
           <label htmlFor="nickname">Nickname</label>
           <input
@@ -63,6 +64,7 @@ export function Login({ auth }: { auth: AuthClient }) {
         </div>
         {error && <p id="login-error" role="alert" className="error">{error.text}</p>}
         <button type="submit" className="primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+        <p className="muted">New here? <Link href="/signup">Create an account</Link></p>
       </form>
     </main>
   );

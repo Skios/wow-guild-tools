@@ -139,7 +139,10 @@ export interface MessageResult {
   error?: string;
 }
 
+/** The signed-in account (GET /auth/me). Pages and menu entries follow its capabilities. */
 export interface Officer {
   userId: string;
   username: string;
+  role: string;
+  capabilities: string[];
 }

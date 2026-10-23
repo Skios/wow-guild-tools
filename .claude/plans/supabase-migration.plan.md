@@ -14,7 +14,8 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 - Prisma stays (schema, migrations, transactions). Tables in `public`, RLS on every table (test-enforced), Data API off.
 - Hosting: Vercel Hobby (Fastify zero-config, one function, region fra1). Hobby cron is daily only -> reminders via Supabase pg_cron.
 - Officer login: nickname + password on Supabase Auth, mapped to `<name>@wgt.invalid`. No real emails, no personal data.
-  Signup closed; accounts created/reset/revoked only by `npm run officer` (secret key, scripts only). Last officer can't be revoked.
+  Supabase signup closed; sign-up goes through our API (POST /api/signup) with the secret key, which lives only in the
+  API project (user decision 2026-10-23: DATABASE_URL already gives the API full DB access). Never in the site.
 - API verifies Supabase JWTs (jose, ES256/RS256 pinned, issuer, audience, role, not anonymous) and reads the user's role per request (roles table: see accounts.plan.md).
 - Players are reached only via chat platforms (Telegram now, Discord bot later).
 - Repo public; secrets only in Vercel / GitHub settings. Prod migrations need manual approval (GitHub Environments).
@@ -46,8 +47,8 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 - [x] First real deploy (dev, 2026-10-22): /api routing and Prisma engine confirmed by a real Owner login
 - [x] TRUST_PROXY=true documented; Vercel Firewall rate rule in docs/deploy.md. Rate limiting on Vercel (security review HIGH): TRUST_PROXY=true behind Vercel; in-memory counters are per instance,
       so add a free layer (Vercel Firewall rule if Hobby allows, else accept + stricter limit on 401/403)
-- [ ] Hosted Supabase settings per project: signup off, anonymous sign-ins off, min password 16, email provider ON,
-      auth rate limits; never set SUPABASE_SECRET_KEY in Vercel
+- [ ] Hosted Supabase settings per project: signup off, anonymous sign-ins off, min password 12, email provider ON,
+      auth rate limits; SUPABASE_SECRET_KEY only in the API Vercel project (Sensitive)
 ### 0f Free pipeline (GitHub Actions) — done
 - [x] Push to develop/main: checks -> `prisma migrate deploy` -> Vercel Deploy Hook (Vercel never auto-deploys)
 - [x] Prod: GitHub Environment `prod` with required reviewer; actions pinned to commit SHAs

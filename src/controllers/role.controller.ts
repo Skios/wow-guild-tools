@@ -8,12 +8,12 @@ import { AssignRoleSchema } from '../validators/role.validator.js';
 
 const IdParamsSchema = z.object({ id: z.uuid() });
 
-// Configuring roles is for the Owner only; giving roles to people needs accounts.manage.
+// Configuring roles is for the Owner only; seeing and giving roles needs accounts.manage.
 export async function roleRoutes(fastify: FastifyInstance) {
   const roles = new RoleService();
   const owner = { onRequest: requireOwner };
 
-  fastify.get('/roles', async (request, reply) => {
+  fastify.get('/roles', { onRequest: requireCapability('accounts.manage') }, async (request, reply) => {
     try {
       return await roles.list();
     } catch (error) {

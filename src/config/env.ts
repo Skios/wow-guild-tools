@@ -9,6 +9,9 @@ const EnvSchema = z.object({
   TELEGRAM_WEBHOOK_SECRET: z.string().min(16).max(256).regex(/^[A-Za-z0-9_-]+$/),
   // The Supabase project whose logins the admin site uses (its JWKS verifies the access tokens).
   SUPABASE_URL: z.url({ protocol: /^https?$/ }).refine(isSecureOrLocal, 'must be https (http only for localhost)'),
+  // Supabase admin API key: sign-up and password resets. API only (Vercel: Sensitive), never the site.
+  // Without it the API runs, and sign-up answers 503.
+  SUPABASE_SECRET_KEY: z.string().min(1).optional(),
   HOST: z.string().min(1).default('0.0.0.0'),
   // Only behind a proxy that overwrites X-Forwarded-For (e.g. Fly); otherwise clients could spoof their IP.
   TRUST_PROXY: z.enum(['true', 'false']).transform(v => v === 'true').optional(),

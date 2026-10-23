@@ -31,6 +31,20 @@ async function errorFrom(response: Response): Promise<ApiError> {
   return new ApiError(message, response.status, issues);
 }
 
+/** Open sign-up (no login): POST /api/signup. Throws an ApiError with the server's reason. */
+export async function signupRequest(username: string, password: string, fetchImpl: typeof fetch = fetch): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetchImpl(`${BASE}/signup`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username, password }),
+    });
+  } catch {
+    throw new ApiError('Cannot reach the server. Try again in a moment.', 0);
+  }
+  if (response.status === 429) throw new ApiError('Too many sign-ups from here. Try again later.', 429);
+  if (!response.ok) throw await errorFrom(response);
+}
+
 interface ApiOptions {
   fetchImpl?: typeof fetch;
   /** The current access token, asked for on every request so a refreshed one is used. */
@@ -57,7 +71,7 @@ export function createApi({ fetchImpl = fetch, getToken = async () => null, onUn
       onUnauthorized?.();
       throw new ApiError('Your session has ended. Please sign in again.', 401);
     }
-    if (response.status === 403) throw new ApiError('This account is not an officer.', 403);
+    if (response.status === 403) throw new ApiError('Your account does not have access to this.', 403);
     if (!response.ok) throw await errorFrom(response);
 
     try {

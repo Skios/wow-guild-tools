@@ -3,7 +3,11 @@ import type { ReactElement } from 'react';
 import { vi } from 'vitest';
 import type { Api } from '../api';
 import { ApiContext, MetaContext } from '../context';
-import type { CharacterSummary, EventDetail, EventResponse, EventSummary, Meta, NoAnswerEntry } from '../types';
+import type { CharacterSummary, EventDetail, EventResponse, EventSummary, Meta, NoAnswerEntry, Officer } from '../types';
+
+export const OFFICER: Officer = {
+  userId: 'u1', username: 'cid', role: 'Officer', capabilities: ['accounts.manage', 'events.manage', 'messages.send', 'roster.manage'],
+};
 
 export const META: Meta = {
   classes: [
@@ -37,7 +41,7 @@ type Overrides = { [K in keyof Api]?: ReturnType<typeof vi.fn> };
 /** An Api whose every method is a vi.fn() resolving to something harmless. */
 export function fakeApi(overrides: Overrides = {}): Api {
   return {
-    me: vi.fn().mockResolvedValue({ userId: 'u1', username: 'cid' }),
+    me: vi.fn().mockResolvedValue(OFFICER),
     getMeta: vi.fn().mockResolvedValue(META),
     listEvents: vi.fn().mockResolvedValue([]),
     getEvent: vi.fn(),

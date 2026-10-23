@@ -55,7 +55,7 @@ describe('OfficerService.create', () => {
 
   test('without the Owner role (migrations not applied) nothing is created', async () => {
     prismaMock.role.findFirst.mockResolvedValue(null);
-    await expect(service.create('guildmaster')).rejects.toThrow(/Owner role/);
+    await expect(service.create('guildmaster')).rejects.toThrow(/roles missing/);
     expect(admin.createUser).not.toHaveBeenCalled();
   });
 
@@ -95,6 +95,61 @@ describe('OfficerService.create', () => {
   test('a bad name never reaches Supabase', async () => {
     await expect(service.create('raid lead')).rejects.toThrow(/name/i);
     expect(admin.createUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('OfficerService.signup', () => {
+  beforeEach(() => {
+    prismaMock.role.findFirst.mockResolvedValue({ id: 'raider-role' });
+    prismaMock.user.create.mockResolvedValue({ id: 'u1' });
+  });
+
+  test('creates the login with the chosen password and an account with the default role', async () => {
+    await expect(service.signup(' Ulfgaar ', 'Correct-horse1')).resolves.toEqual({ name: 'ulfgaar' });
+
+    expect(prismaMock.role.findFirst).toHaveBeenCalledWith({ where: { isDefault: true }, select: { id: true } });
+    expect(admin.createUser).toHaveBeenCalledWith('ulfgaar@wgt.invalid', 'Correct-horse1');
+    expect(prismaMock.user.create).toHaveBeenCalledWith({
+      data: { username: 'ulfgaar', roleId: 'raider-role', identities: { create: { platform: 'supabase', platformUserId: AUTH_ID } } },
+    });
+  });
+
+  test.each([
+    ['a weak password', 'ulfgaar', 'password', /12 characters/],
+    ['a password containing the nickname', 'ulfgaar', 'Ulfgaar-2026!x', /nickname/],
+    ['a bad nickname', 'u f', 'Correct-horse1', /name/i],
+    ['a missing password', 'ulfgaar', undefined, /password/i],
+  ])('refuses %s before touching Supabase', async (_label, name, password, reason) => {
+    await expect(service.signup(name, password)).rejects.toThrow(reason);
+    expect(admin.createUser).not.toHaveBeenCalled();
+  });
+
+  test('a nickname any player already uses (e.g. a Telegram-only one) is refused: no impersonation', async () => {
+    prismaMock.user.findFirst.mockResolvedValue({ id: 'someone' });
+
+    await expect(service.signup('brannock', 'Correct-horse1')).rejects.toBeInstanceOf(ConflictError);
+    expect(prismaMock.user.findFirst).toHaveBeenCalledWith({ where: { username: 'brannock' }, select: { id: true } });
+    expect(admin.createUser).not.toHaveBeenCalled();
+  });
+
+  test.each(['admin', 'owner', 'officer', 'guildmaster', 'raidleader', 'system'])('the reserved nickname %j is refused', async (name) => {
+    await expect(service.signup(name, 'Correct-horse1')).rejects.toThrow(/reserved/);
+    expect(admin.createUser).not.toHaveBeenCalled();
+  });
+
+  test('past a global hourly ceiling (all instances together) sign-up waits', async () => {
+    prismaMock.identity.count.mockResolvedValue(30);
+
+    await expect(service.signup('ulfgaar', 'Correct-horse1')).rejects.toMatchObject({ status: 429 });
+    expect(prismaMock.identity.count).toHaveBeenCalledWith({
+      where: { platform: 'supabase', createdAt: { gte: expect.any(Date) } },
+    });
+    expect(admin.createUser).not.toHaveBeenCalled();
+  });
+
+  test('a taken nickname is a conflict', async () => {
+    prismaMock.identity.findFirst.mockResolvedValue({ platformUserId: AUTH_ID });
+    await expect(service.signup('ulfgaar', 'Correct-horse1')).rejects.toBeInstanceOf(ConflictError);
   });
 });
 
@@ -200,6 +255,20 @@ describe('supabaseAuthAdmin', () => {
   test('an existing login is a conflict', async () => {
     const api = supabaseAuthAdmin('http://x', 'k', vi.fn().mockResolvedValue(fail(422, { error_code: 'email_exists' })));
     await expect(api.createUser('a@wgt.invalid', 'pw')).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  test('any other 422 is a server error, not "name taken"', async () => {
+    const api = supabaseAuthAdmin('http://x', 'k', vi.fn().mockResolvedValue(fail(422, { error_code: 'validation_failed' })));
+    const error = await api.createUser('a@wgt.invalid', 'pw').catch((e: Error) => e);
+    expect(error).not.toBeInstanceOf(ConflictError);
+    expect(error).toMatchObject({ message: 'Supabase Auth create user failed with HTTP 422' });
+  });
+
+  test('a password Supabase finds too weak is a 400, not "name taken"', async () => {
+    const api = supabaseAuthAdmin('http://x', 'k', vi.fn().mockResolvedValue(fail(422, { error_code: 'weak_password', msg: 'Password should be at least 16 characters.' })));
+    const error = await api.createUser('a@wgt.invalid', 'pw').catch((e: Error) => e);
+    expect(error).toMatchObject({ status: 400, message: expect.stringMatching(/password/i) });
+    expect(error).not.toBeInstanceOf(ConflictError);
   });
 
   test('other failures name the status, never the key', async () => {
