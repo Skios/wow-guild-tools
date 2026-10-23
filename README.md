@@ -44,7 +44,7 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
 Officers sign in with a **nickname and a password** (Supabase Auth). No email or personal data is stored:
 the nickname becomes `<name>@wgt.invalid`, an address that can never receive mail. Anyone can create an account
 on `/signup` (nickname + password: at least 12 characters, 3 of lowercase / uppercase / digits / symbols, not
-containing the nickname; a nickname any player already uses, or a staff-looking one like `admin`, is refused)
+containing the nickname; the form ticks each rule while you type; a nickname any player already uses, or a staff-looking one like `admin`, is refused)
 and starts as a Raider. Sign-up goes through our API (`POST /api/signup`, 10 per hour per
 IP and 30 per hour in total), which creates the login with `SUPABASE_SECRET_KEY`; Supabase's own sign-up stays closed. The key lives only in
 the API (never in the site). The Owner is bootstrapped with a script:

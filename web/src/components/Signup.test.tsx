@@ -34,7 +34,7 @@ describe('Signup', () => {
     expect(confirm).toHaveAttribute('autocomplete', 'new-password');
     expect(password).toHaveAttribute('type', 'password');
     expect(screen.queryByText(/e-?mail/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/12 characters/)).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Password rules' })).toBeInTheDocument();
   });
 
   test('creates the account, signs in with it and opens the site', async () => {

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useApi } from '../context';
+import { CharacterName } from './CharacterName';
 import type { Account, Officer, SiteRoleSummary } from '../types';
 import { errorMessage, useAsync } from '../useAsync';
 
@@ -48,6 +49,7 @@ export function UsersView({ me }: { me: Officer }) {
   return (
     <section className="stack">
       <h1>Users</h1>
+      <p className="muted">Give roles and reset passwords for the accounts below yours.</p>
       {error && <p role="alert" className="error">{error}</p>}
       {issued && (
         <p role="status" className="card">
@@ -55,14 +57,20 @@ export function UsersView({ me }: { me: Officer }) {
           it is shown only once, and they must choose their own when they sign in.
         </p>
       )}
-      <table>
-        <thead><tr><th>Nickname</th><th>Role</th><th>Characters</th><th /></tr></thead>
+      <div className="card">
+      <table className="table users-table">
+        <thead>
+          <tr>
+            <th scope="col">Account</th><th scope="col">Role</th><th scope="col">Characters</th>
+            <th scope="col"><span className="sr-only">Actions</span></th>
+          </tr>
+        </thead>
         <tbody>
           {users.map(user => {
             const manageable = canManage(me, user);
             return (
               <tr key={user.id}>
-                <td>{user.username}</td>
+                <td><strong>{user.username}</strong>{user.mustChangePassword && <span className="badge badge-open" title="Signed in with a temporary password"> temporary password</span>}</td>
                 <td>
                   {manageable ? (
                     <select aria-label={`Role of ${user.username}`} value={user.role?.id ?? ''} onChange={e => void changeRole(user, e.target.value)}>
@@ -70,24 +78,33 @@ export function UsersView({ me }: { me: Officer }) {
                       {user.role && !givable.some(r => r.id === user.role!.id) && <option value={user.role.id} disabled>{user.role.name}</option>}
                       {givable.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                     </select>
-                  ) : (user.role?.name ?? '(none)')}
+                  ) : <span className="badge">{user.role?.name ?? 'none'}</span>}
                 </td>
-                <td className="muted">{user.characters.map(c => c.name).join(', ')}</td>
                 <td>
-                  {manageable && (confirming === user.id ? (
-                    <>
-                      <button type="button" className="danger" onClick={() => void reset(user)}>Confirm reset</button>
-                      <button type="button" onClick={() => setConfirming(null)}>Cancel</button>
-                    </>
-                  ) : (
-                    <button type="button" onClick={() => setConfirming(user.id)}>Reset password</button>
-                  ))}
+                  {user.characters.length === 0
+                    ? <span className="muted">none yet</span>
+                    : <span className="chips">{user.characters.map(c => <CharacterName key={`${c.name}-${c.realm}`} name={c.name} classId={c.class} />)}</span>}
+                </td>
+                <td>
+                  {manageable && (
+                    <div className="actions compact">
+                      {confirming === user.id ? (
+                        <>
+                          <button type="button" className="danger" onClick={() => void reset(user)}>Confirm reset</button>
+                          <button type="button" onClick={() => setConfirming(null)}>Cancel</button>
+                        </>
+                      ) : (
+                        <button type="button" onClick={() => setConfirming(user.id)}>Reset password</button>
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      </div>
     </section>
   );
 }

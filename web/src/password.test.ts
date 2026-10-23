@@ -24,3 +24,16 @@ describe('passwordProblem', () => {
     expect(passwordProblem('Èèèèèèèèè-1a', 'ulfgaar')).toBeNull();
   });
 });
+
+describe('PASSWORD_RULES (the checklist the site ticks while typing)', () => {
+  test('lists each rule with whether this password passes it', async () => {
+    const { PASSWORD_RULES } = await import('./password.js');
+    const ticks = (password: string) => PASSWORD_RULES.map(rule => rule.ok(password, 'ulfgaar'));
+    expect(PASSWORD_RULES.map(rule => rule.label)).toEqual([
+      'At least 12 characters', '3 of: lowercase, uppercase, digits, symbols', 'Not containing your nickname',
+    ]);
+    expect(ticks('')).toEqual([false, false, true]);
+    expect(ticks('ulfgaar')).toEqual([false, false, false]);
+    expect(ticks('Correct-horse1')).toEqual([true, true, true]);
+  });
+});

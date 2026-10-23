@@ -118,7 +118,7 @@ publishable key.
 2. [x] signup API + password policy + /signup and /login (Chrome-friendly), /characters closed to Raiders
 3. [x] Users page: role assignment + password reset + mustChangePassword + account page
 4. [x] Telegram link token (both directions) + removal of the bot registration flow
-4b. password checklist + Users table polish
+4b. [x] password checklist + Users table polish
 5. nickname on the account + /profile (claim, add with Raider.IO autocomplete) + officer assigns characters
 6. roster approval + answers only for approved characters
 7. notes on every answer

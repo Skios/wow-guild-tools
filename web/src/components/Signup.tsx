@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { ApiError, signupRequest } from '../api';
 import { nicknameToEmail, type AuthClient } from '../auth';
-import { MIN_LENGTH, passwordProblem } from '../password';
+import { passwordProblem } from '../password';
+import { PasswordChecklist } from './PasswordChecklist';
 import { forgetLinkToken, pendingLinkToken } from '../telegramLink';
 
 const WRONG_NICKNAME = 'Nicknames are 3 to 24 characters: letters, numbers, dot, dash or underscore.';
@@ -54,10 +55,7 @@ export function Signup({ auth, signup = signupRequest }: { auth: AuthClient; sig
     <main className="page login">
       <form className="card stack" method="post" action="/signup" onSubmit={submit} noValidate>
         <h1>Create your account</h1>
-        <p className="muted">
-          Pick a nickname and a password. Nothing personal is asked or stored. Password: at least {MIN_LENGTH} characters,
-          with 3 of lowercase, uppercase, digits, symbols.
-        </p>
+        <p className="muted">Pick a nickname and a password. Nothing personal is asked or stored.</p>
         <div>
           <label htmlFor="nickname">Nickname</label>
           <input
@@ -66,6 +64,7 @@ export function Signup({ auth, signup = signupRequest }: { auth: AuthClient; sig
           />
           <label htmlFor="password">Password</label>
           <input id="password" name="password" type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" />
+          <PasswordChecklist password={password} nickname={nickname} />
           <label htmlFor="confirm">Repeat password</label>
           <input id="confirm" name="confirm" type="password" value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" />
         </div>
