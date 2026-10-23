@@ -1,29 +1,29 @@
-import { useMemo } from 'react';
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useMemo, type ReactNode } from 'react';
 import { ApiError, createApi, type Api } from './api';
 import { createSupabaseAuth, useSession, type AuthClient } from './auth';
 import { AppearancePicker } from './components/AppearancePicker';
-import { EventView } from './components/EventView';
-import { EventsView } from './components/EventsView';
 import { Login } from './components/Login';
-import { RosterView } from './components/RosterView';
 import { ApiContext, MetaContext, PrefsContext } from './context';
-import { useRoute } from './route';
 import { usePrefs } from './theme';
 import type { Officer } from './types';
 import { errorMessage, useAsync } from './useAsync';
 
-function Shell({ api, officer, onSignOut }: { api: Api; officer: Officer; onSignOut: () => void }) {
+function Shell({ api, officer, onSignOut, children }: { api: Api; officer: Officer; onSignOut: () => void; children: ReactNode }) {
   const meta = useAsync(() => api.getMeta(), [api]);
-  const route = useRoute();
+  const onRoster = usePathname().startsWith('/roster');
   const { prefs, setTheme, setIcons } = usePrefs();
 
   return (
     <PrefsContext.Provider value={prefs}>
       <header className="topbar">
-        <a href="#/events" className="brand">Guild Raid Admin</a>
+        <Link href="/events" className="brand">Guild Raid Admin</Link>
         <nav aria-label="Main">
-          <a href="#/events" aria-current={route.name !== 'roster' ? 'page' : undefined}>Events</a>
-          <a href="#/roster" aria-current={route.name === 'roster' ? 'page' : undefined}>Roster</a>
+          <Link href="/events" aria-current={onRoster ? undefined : 'page'}>Events</Link>
+          <Link href="/roster" aria-current={onRoster ? 'page' : undefined}>Roster</Link>
         </nav>
         <AppearancePicker prefs={prefs} onTheme={setTheme} onIcons={setIcons} />
         <span className="muted">{officer.username}</span>
@@ -38,7 +38,7 @@ function Shell({ api, officer, onSignOut }: { api: Api; officer: Officer; onSign
         {meta.loading && !meta.data && <p className="muted" role="status">Loading…</p>}
         {meta.data && (
           <MetaContext.Provider value={meta.data}>
-            {route.name === 'event' ? <EventView id={route.id} /> : route.name === 'roster' ? <RosterView /> : <EventsView />}
+            {children}
           </MetaContext.Provider>
         )}
       </main>
@@ -47,7 +47,7 @@ function Shell({ api, officer, onSignOut }: { api: Api; officer: Officer; onSign
 }
 
 /** Asks the server who this is; only officers get past, and they get the whole app. */
-function OfficerGate({ api, onSignOut }: { api: Api; onSignOut: () => void }) {
+function OfficerGate({ api, onSignOut, children }: { api: Api; onSignOut: () => void; children: ReactNode }) {
   const who = useAsync(
     () => api.me().then(
       officer => ({ officer }),
@@ -56,7 +56,7 @@ function OfficerGate({ api, onSignOut }: { api: Api; onSignOut: () => void }) {
     [api],
   );
 
-  if (who.data?.officer) return <Shell api={api} officer={who.data.officer} onSignOut={onSignOut} />;
+  if (who.data?.officer) return <Shell api={api} officer={who.data.officer} onSignOut={onSignOut}>{children}</Shell>;
   return (
     <main className="page login">
       <div className="card stack">
@@ -70,7 +70,7 @@ function OfficerGate({ api, onSignOut }: { api: Api; onSignOut: () => void }) {
   );
 }
 
-function SignedIn({ auth, api: injected, fetchImpl }: { auth: AuthClient; api?: Api; fetchImpl?: typeof fetch }) {
+function SignedIn({ auth, api: injected, fetchImpl, children }: { auth: AuthClient; api?: Api; fetchImpl?: typeof fetch; children: ReactNode }) {
   const session = useSession(auth);
   // Global sign-out revokes the refresh token; if that cannot be done (offline), at least end it here.
   const signOut = () => {
@@ -89,12 +89,12 @@ function SignedIn({ auth, api: injected, fetchImpl }: { auth: AuthClient; api?: 
   if (session === null) return <Login auth={auth} />;
   return (
     <ApiContext.Provider value={api}>
-      <OfficerGate key={session.user.id} api={api} onSignOut={signOut} />
+      <OfficerGate key={session.user.id} api={api} onSignOut={signOut}>{children}</OfficerGate>
     </ApiContext.Provider>
   );
 }
 
-export function App({ auth: injected, api, fetchImpl }: { auth?: AuthClient; api?: Api; fetchImpl?: typeof fetch }) {
+export function App({ auth: injected, api, fetchImpl, children }: { auth?: AuthClient; api?: Api; fetchImpl?: typeof fetch; children: ReactNode }) {
   const setup = useMemo(() => {
     try {
       return { auth: injected ?? createSupabaseAuth() };
@@ -104,5 +104,5 @@ export function App({ auth: injected, api, fetchImpl }: { auth?: AuthClient; api
   }, [injected]);
 
   if (!setup.auth) return <main className="page"><p role="alert" className="error">{setup.problem}</p></main>;
-  return <SignedIn auth={setup.auth} {...(api && { api })} {...(fetchImpl && { fetchImpl })} />;
+  return <SignedIn auth={setup.auth} {...(api && { api })} {...(fetchImpl && { fetchImpl })}>{children}</SignedIn>;
 }

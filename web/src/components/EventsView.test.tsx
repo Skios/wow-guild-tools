@@ -16,7 +16,7 @@ describe('events list', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Loading events');
     const link = await screen.findByRole('link', { name: 'Raid Night' });
-    expect(link).toHaveAttribute('href', '#/events/e1');
+    expect(link).toHaveAttribute('href', '/events/e1');
     const row = link.closest('tr')!;
     expect(within(row).getByText('Open')).toBeInTheDocument();
     expect(within(row).getByText('5 in')).toBeInTheDocument();

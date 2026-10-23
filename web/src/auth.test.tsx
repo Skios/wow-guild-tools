@@ -27,19 +27,19 @@ describe('nicknameToEmail', () => {
 
 describe('createSupabaseAuth', () => {
   test('explains which settings are missing', () => {
-    expect(() => createSupabaseAuth({})).toThrow(/VITE_SUPABASE_URL/);
-    expect(() => createSupabaseAuth({ VITE_SUPABASE_URL: 'http://x' })).toThrow(/VITE_SUPABASE_PUBLISHABLE_KEY/);
-    expect(() => createSupabaseAuth({ VITE_SUPABASE_URL: ' ', VITE_SUPABASE_PUBLISHABLE_KEY: 'k' })).toThrow(/VITE_SUPABASE_URL/);
+    expect(() => createSupabaseAuth({})).toThrow(/NEXT_PUBLIC_SUPABASE_URL/);
+    expect(() => createSupabaseAuth({ NEXT_PUBLIC_SUPABASE_URL: 'http://x' })).toThrow(/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
+    expect(() => createSupabaseAuth({ NEXT_PUBLIC_SUPABASE_URL: ' ', NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'k' })).toThrow(/NEXT_PUBLIC_SUPABASE_URL/);
   });
 
   test('never reads a session out of the URL', () => {
     const spy = vi.mocked(supabase.createClient);
-    createSupabaseAuth({ VITE_SUPABASE_URL: 'http://127.0.0.1:54321', VITE_SUPABASE_PUBLISHABLE_KEY: 'k' });
+    createSupabaseAuth({ NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321', NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'k' });
     expect(spy).toHaveBeenCalledWith('http://127.0.0.1:54321', 'k', { auth: { detectSessionInUrl: false } });
   });
 
   test('builds a client from the settings', () => {
-    const auth = createSupabaseAuth({ VITE_SUPABASE_URL: 'http://127.0.0.1:54321', VITE_SUPABASE_PUBLISHABLE_KEY: 'k' });
+    const auth = createSupabaseAuth({ NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321', NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'k' });
     expect(typeof auth.signInWithPassword).toBe('function');
   });
 });

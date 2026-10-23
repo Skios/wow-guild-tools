@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { applyPrefs, DEFAULT_PREFS, ICON_STYLES, loadPrefs, savePrefs, THEMES, usePrefs } from './theme';
+import { applyPrefs, DEFAULT_PREFS, ICON_STYLES, loadPrefs, savePrefs, THEME_BOOT_SCRIPT, THEMES, usePrefs } from './theme';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -104,5 +104,37 @@ describe('usePrefs', () => {
 
     expect(result.current.prefs).toEqual({ theme: 'parchment', icons: 'line' });
     expect(document.documentElement.dataset.icons).toBe('line');
+  });
+});
+
+describe('THEME_BOOT_SCRIPT', () => {
+  const boot = () => new Function(THEME_BOOT_SCRIPT)();
+  afterEach(() => {
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.removeAttribute('data-icons');
+    document.documentElement.style.colorScheme = '';
+  });
+
+  test('puts the saved look on <html> before React runs', () => {
+    localStorage.setItem('guild-admin-prefs', JSON.stringify({ theme: 'parchment', icons: 'line' }));
+    boot();
+    expect(document.documentElement.dataset).toMatchObject({ theme: 'parchment', icons: 'line' });
+    expect(document.documentElement.style.colorScheme).toBe('light');
+  });
+
+  test.each([null, '{bad json', '"str"', JSON.stringify({ theme: 'constructor', icons: 'x' })])(
+    'falls back to the defaults for %j',
+    (stored) => {
+      if (stored !== null) localStorage.setItem('guild-admin-prefs', stored);
+      boot();
+      expect(document.documentElement.dataset).toMatchObject({ theme: 'midnight', icons: 'game' });
+      expect(document.documentElement.style.colorScheme).toBe('dark');
+    },
+  );
+
+  test('never throws when storage is blocked', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    expect(boot).not.toThrow();
+    vi.restoreAllMocks();
   });
 });

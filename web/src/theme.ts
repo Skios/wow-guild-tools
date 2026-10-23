@@ -1,34 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { DEFAULT_PREFS, ICON_STYLES, STORAGE_KEY, THEMES, type IconStyle, type Option, type Prefs, type ThemeId } from './themes';
 
-export type ThemeId = 'midnight' | 'parchment' | 'void' | 'daylight';
-export type IconStyle = 'game' | 'line' | 'none';
-
-export interface Option<T extends string> {
-  id: T;
-  label: string;
-  description: string;
-}
-
-export const THEMES: (Option<ThemeId> & { scheme: 'dark' | 'light' })[] = [
-  { id: 'midnight', label: 'Midnight', description: 'Deep navy with gold accents. The classic raid-night look.', scheme: 'dark' },
-  { id: 'parchment', label: 'Parchment', description: 'Warm paper and bronze, like an old quest log.', scheme: 'light' },
-  { id: 'void', label: 'Void', description: 'Modern near-black with violet glow and soft glass panels.', scheme: 'dark' },
-  { id: 'daylight', label: 'Daylight', description: 'Clean, bright and neutral. Easy on a sunny screen.', scheme: 'light' },
-];
-
-export const ICON_STYLES: Option<IconStyle>[] = [
-  { id: 'game', label: 'Game icons', description: 'The real specialization and class icons.' },
-  { id: 'line', label: 'Line icons', description: 'Simple shield, cross, sword and bow by role.' },
-  { id: 'none', label: 'No icons', description: 'Names and colours only.' },
-];
-
-export interface Prefs {
-  theme: ThemeId;
-  icons: IconStyle;
-}
-
-export const DEFAULT_PREFS: Prefs = { theme: 'midnight', icons: 'game' };
-const STORAGE_KEY = 'guild-admin-prefs';
+export * from './themes';
 
 const pick = <T extends string>(options: Option<T>[], value: unknown, fallback: T): T =>
   options.find(o => o.id === value)?.id ?? fallback;
@@ -57,6 +30,8 @@ export function applyPrefs(prefs: Prefs, root: HTMLElement = document.documentEl
 }
 
 export function usePrefs() {
+  // Prerender has no localStorage (loadPrefs falls back to defaults); no prefs-dependent markup renders
+  // before the session resolves, so this cannot cause a hydration mismatch. Keep it that way.
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
 
   useEffect(() => {

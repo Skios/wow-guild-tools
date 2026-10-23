@@ -14,12 +14,18 @@ export function nicknameToEmail(nickname: string): string | null {
   return NICKNAME.test(name) ? `${name}@${LOGIN_DOMAIN}` : null;
 }
 
-export function createSupabaseAuth(env: Record<string, string | undefined> = import.meta.env): AuthClient {
-  const url = env.VITE_SUPABASE_URL?.trim();
-  const key = env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
-  const missing = [!url && 'VITE_SUPABASE_URL', !key && 'VITE_SUPABASE_PUBLISHABLE_KEY'].filter(Boolean);
+// Next only inlines literal `process.env.NEXT_PUBLIC_*` reads into the browser bundle.
+const buildEnv = () => ({
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+});
+
+export function createSupabaseAuth(env: Record<string, string | undefined> = buildEnv()): AuthClient {
+  const url = env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const key = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
+  const missing = [!url && 'NEXT_PUBLIC_SUPABASE_URL', !key && 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'].filter(Boolean);
   if (!url || !key) throw new Error(`Sign-in is not configured: set ${missing.join(' and ')} (see web/.env.development).`);
-  // Password login only: never pick a session out of the URL (hash routing lives there).
+  // Password login only: never pick a session out of the URL (the URL belongs to the router).
   return createClient(url, key, { auth: { detectSessionInUrl: false } }).auth;
 }
 

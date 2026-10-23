@@ -130,7 +130,7 @@ describe('the board', () => {
     renderWith(<EventView id="nope" />, api);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Event not found');
-    expect(screen.getByRole('link', { name: /Back to events/ })).toHaveAttribute('href', '#/events');
+    expect(screen.getByRole('link', { name: /Back to events/ })).toHaveAttribute('href', '/events');
   });
 
   test('shows a loading state first', () => {

@@ -1,8 +1,8 @@
+import Link from 'next/link';
 import { useMemo } from 'react';
 import { useApi } from '../context';
 import { orderEvents } from '../events';
 import { formatRange } from '../format';
-import { eventPath } from '../route';
 import { useAsync } from '../useAsync';
 import type { EventSummary } from '../types';
 import { NewEventForm } from './NewEventForm';
@@ -47,7 +47,7 @@ export function EventsView() {
             <tbody>
               {ordered.map(event => (
                 <tr key={event.id}>
-                  <td><a href={eventPath(event.id)}>{event.title}</a></td>
+                  <td><Link href={`/events/${encodeURIComponent(event.id)}`}>{event.title}</Link></td>
                   <td>{formatRange(event.startTime, event.endTime)}</td>
                   <td>
                     <span className={`badge ${event.isPublished ? 'badge-published' : 'badge-open'}`}>

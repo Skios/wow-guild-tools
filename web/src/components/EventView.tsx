@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useApi, useMeta } from '../context';
 import { formatDateTime, formatRange } from '../format';
@@ -106,7 +107,7 @@ export function EventView({ id }: { id: string }) {
     return (
       <div className="card" role="alert">
         <p className="error">{event.error}</p>
-        <a href="#/events">← Back to events</a>
+        <Link href="/events">← Back to events</Link>
       </div>
     );
   }
@@ -118,7 +119,7 @@ export function EventView({ id }: { id: string }) {
 
   return (
     <div className="stack">
-      <a href="#/events">← Events</a>
+      <Link href="/events">← Events</Link>
 
       <header className="card">
         <div className="row">
