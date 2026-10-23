@@ -56,7 +56,7 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 - [x] First Owner on dev (`npm run officer:dev -- create <name> --role owner`)
 
 ## After the first deploy + test
-### Migrate the admin site to Next.js — in progress (decided 2026-10-23)
+### Migrate the admin site to Next.js — done, live on dev (2026-10-23)
 - Why: the site opens to the whole guild later and will grow with many features.
 - **Two Vercel projects** (user choice): `wgt-api` = today's project (Fastify in api/index.ts, unchanged), root `./`;
   `wgt-web` = Next.js in web/, root `web`. Next rewrites `/api/:path*` to the API of its environment
@@ -72,8 +72,22 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 - API changes stay backward compatible (add fields, never remove): site and API deploy separately.
 - Tests: vitest + Testing Library kept (next/navigation mocked); coverage bar unchanged.
 - Phone app: PWA (installable, free) first; native app only if really needed (React Native/Expo, separate).
+- Done: Next 16.4.2 (16.4.0 had a critical advisory), wgt-web project (root web, Next.js, Node 22, protection off),
+  API project protection off, pipeline deploys only what changed, actions on Node 24.
+- Note: the very first deploy of a new Vercel project lands in Production even from develop (no env there -> fails);
+  re-run once, later deploys of develop are Preview.
+- [ ] Delete VITE_SUPABASE_* from the API project (no longer read).
+- [ ] Supabase dev: Site URL = https://wgt-web-git-develop-acme-c35a.vercel.app
+- [ ] Verify the API sees the real client IP through the site's rewrite (rate limiting).
+
+## Next: accounts, characters, contact channels (proposed 2026-10-23, waiting for go)
+See .claude/plans/accounts.plan.md.
+
+## Parked
+- Telegram on dev: webhook should now reach the API (protection off); re-test /start after the accounts work.
 
 ## Later
+- Prod environment: wgt-prod Supabase settings, Production env vars in both Vercel projects, prod bot, prod hooks.
 - M4 reminders: Supabase pg_cron -> protected endpoint
 - Discord bot for players who don't use Telegram (Identity already multi-platform)
 - Officer management page in the admin site (optional)
