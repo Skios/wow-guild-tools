@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMeta, useSpecInfo } from '../context';
 import { moveItem, validateRosterEntry, type RosterFormField, type RosterFormValues } from '../rosterForm';
-import type { RosterEntryInput } from '../types';
+import type { CharacterSuggestion, RosterEntryInput } from '../types';
 import { errorMessage } from '../useAsync';
 
 interface Props {
@@ -12,9 +12,16 @@ interface Props {
   onCancel?: () => void;
   /** Keep these fields after a successful save (adding many names to the same realm). */
   keepAfterSave?: RosterFormField[];
+  /** Name suggestions while typing; picking one fills name, realm and class as the game spells them. */
+  suggest?: (term: string) => Promise<CharacterSuggestion[]>;
+  /** Name, realm and class can't change (editing the specs of an existing character). */
+  lockIdentity?: boolean;
+  hideNickname?: boolean;
 }
 
-export function RosterForm({ initial, submitLabel, onSubmit, onCancel, keepAfterSave = [] }: Props) {
+const SUGGEST_DELAY_MS = 300;
+
+export function RosterForm({ initial, submitLabel, onSubmit, onCancel, keepAfterSave = [], suggest, lockIdentity, hideNickname }: Props) {
   const meta = useMeta();
   const [values, setValues] = useState(initial);
   const [errors, setErrors] = useState<Partial<Record<RosterFormField, string>>>({});
@@ -32,6 +39,23 @@ export function RosterForm({ initial, submitLabel, onSubmit, onCancel, keepAfter
       ...(field === 'spec' && { offSpecs: v.offSpecs.filter(id => id !== e.target.value) }),
     }));
   const setOffSpecs = (change: (list: string[]) => string[]) => setValues(v => ({ ...v, offSpecs: change(v.offSpecs) }));
+
+  const [suggestions, setSuggestions] = useState<CharacterSuggestion[]>([]);
+  const [picked, setPicked] = useState(false);
+  useEffect(() => {
+    const term = values.name.trim();
+    if (!suggest || lockIdentity || picked || term.length < 2) return setSuggestions([]);
+    let current = true;
+    const timer = setTimeout(() => {
+      suggest(term).then(found => { if (current) setSuggestions(found); }, () => { if (current) setSuggestions([]); });
+    }, SUGGEST_DELAY_MS);
+    return () => { current = false; clearTimeout(timer); };
+  }, [values.name, suggest, lockIdentity, picked]);
+  const pick = (s: CharacterSuggestion) => {
+    setValues(v => ({ ...v, name: s.name, realm: s.realm, ...(s.class && s.class !== v.class && { class: s.class, spec: '', offSpecs: [] }) }));
+    setPicked(true);
+    setSuggestions([]);
+  };
 
   // Announced to screen readers, and where focus goes once the list has re-rendered.
   const [announcement, setAnnouncement] = useState('');
@@ -94,17 +118,31 @@ export function RosterForm({ initial, submitLabel, onSubmit, onCancel, keepAfter
       <div className="grid four">
         <div>
           <label htmlFor="roster-name">Character</label>
-          <input id="roster-name" value={values.name} onChange={set('name')} autoComplete="off" {...field('name')} />
+          <input
+            id="roster-name" value={values.name} autoComplete="off" disabled={lockIdentity} {...field('name')}
+            onChange={e => { setPicked(false); set('name')(e); }}
+          />
+          {suggestions.length > 0 && (
+            <ul className="suggestions" aria-label="Suggestions">
+              {suggestions.map(s => (
+                <li key={`${s.name}|${s.realm}`}>
+                  <button type="button" onClick={() => pick(s)}>
+                    {s.name} <span className="muted">· {s.realm}{s.inGuild ? ' · guild' : ''}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           {fieldError('name')}
         </div>
         <div>
           <label htmlFor="roster-realm">Realm</label>
-          <input id="roster-realm" value={values.realm} onChange={set('realm')} autoComplete="off" {...field('realm')} />
+          <input id="roster-realm" value={values.realm} onChange={set('realm')} autoComplete="off" disabled={lockIdentity} {...field('realm')} />
           {fieldError('realm')}
         </div>
         <div>
           <label htmlFor="roster-class">Class</label>
-          <select id="roster-class" value={values.class} onChange={set('class')} {...field('class')}>
+          <select id="roster-class" value={values.class} onChange={set('class')} disabled={lockIdentity} {...field('class')}>
             <option value="">Choose…</option>
             {meta.classes.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
           </select>
@@ -120,11 +158,13 @@ export function RosterForm({ initial, submitLabel, onSubmit, onCancel, keepAfter
         </div>
       </div>
       <div className="grid">
-        <div>
-          <label htmlFor="roster-nickname">Nickname (optional)</label>
-          <input id="roster-nickname" value={values.nickname} onChange={set('nickname')} autoComplete="off" {...field('nickname')} />
-          {fieldError('nickname')}
-        </div>
+        {!hideNickname && (
+          <div>
+            <label htmlFor="roster-nickname">Nickname (optional)</label>
+            <input id="roster-nickname" value={values.nickname} onChange={set('nickname')} autoComplete="off" {...field('nickname')} />
+            {fieldError('nickname')}
+          </div>
+        )}
         <fieldset className="offspec-picker" aria-describedby={errors.offSpecs ? 'roster-offSpecs-error' : undefined}>
           <legend>Off-specs, in order of preference</legend>
           <ol className="offspec-list" aria-label="Off-specs in order">

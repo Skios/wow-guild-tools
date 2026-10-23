@@ -65,6 +65,7 @@ export function Login({ auth }: { auth: AuthClient }) {
         {error && <p id="login-error" role="alert" className="error">{error.text}</p>}
         <button type="submit" className="primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
         <p className="muted">New here? <Link href="/signup">Create an account</Link></p>
+        <p className="muted">Forgot your password? Send /reset to the guild&apos;s Telegram bot (once Telegram is linked).</p>
       </form>
     </main>
   );

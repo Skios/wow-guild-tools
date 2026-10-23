@@ -4,7 +4,7 @@ import { telegramConfig } from '../config/telegram.js';
 import { TelegramClient } from '../integrations/telegram/telegram.client.js';
 import { safeEqual } from '../lib/safe-equal.js';
 import { handleLateMessage } from '../services/late.service.js';
-import { handleStart, linkConfig, type Reply } from '../services/link.service.js';
+import { handleReset, handleStart, linkConfig, type Reply } from '../services/link.service.js';
 import { CallbackQuerySchema, handleCallbackQuery } from '../services/telegram-callback.service.js';
 
 const SenderSchema = z.object({
@@ -22,7 +22,7 @@ const UpdateSchema = z.object({
   }).optional(),
 });
 
-const HELP = 'Send /start to link this Telegram to your guild account. Raid invites arrive in the channel.';
+const HELP = 'Send /start to link this Telegram to your guild account, /reset for a password-reset link. Raid invites arrive in the channel.';
 const OLD_BUTTON = 'Registration moved to the guild site: send /start to get the link.';
 
 export async function telegramRoutes(fastify: FastifyInstance) {
@@ -52,8 +52,10 @@ export async function telegramRoutes(fastify: FastifyInstance) {
       const text = message.text.trim();
       const late = await handleLateMessage({ from: message.from, text });
       const start = /^\/start(?:@\w+)?(?:\s+(\S+))?$/.exec(text);
-      await reply(message.chat.id, late
-        ?? (start ? await handleStart(message.from, start[1] ?? '', linkConfig()) : { text: HELP }));
+      const answer = late
+        ?? (start ? await handleStart(message.from, start[1] ?? '', linkConfig())
+          : /^\/reset(?:@\w+)?$/.test(text) ? await handleReset(message.from, linkConfig()) : { text: HELP });
+      await reply(message.chat.id, answer);
     } else if (query?.data.startsWith('reg_')) {
       // Buttons of the old in-bot registration, still visible in old chats.
       await client.answerCallback(query.id, OLD_BUTTON).catch(err => request.log.warn({ err }, 'answerCallbackQuery failed'));

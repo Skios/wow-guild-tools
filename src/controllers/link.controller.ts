@@ -4,13 +4,16 @@ import { prisma } from '../config/db.js';
 import { signLinkToken, verifyLinkToken } from '../domain/link-token.js';
 import { AppError } from '../lib/errors.js';
 import { sendError } from '../lib/http-error.js';
-import { linkTelegram, unlinkTelegram, type LinkConfig } from '../services/link.service.js';
+import { ConflictError } from '../lib/errors.js';
+import { linkTelegram, resetLink, resetMessage, unlinkTelegram, type LinkConfig } from '../services/link.service.js';
 
 const TokenSchema = z.object({ token: z.string().max(64) });
 export const EXPIRED_BOT_LINK = 'This Telegram link has expired: send /start to the bot again.';
 
 /** Your account's Telegram link (any signed-in account). */
-export function linkRoutes(deps: { config: () => LinkConfig; botUsername: () => Promise<string | undefined> }) {
+export function linkRoutes(deps: {
+  config: () => LinkConfig; botUsername: () => Promise<string | undefined>; sendTelegram: (chatId: string, text: string) => Promise<unknown>;
+}) {
   return async (fastify: FastifyInstance) => {
     fastify.get('/me/telegram', async (request, reply) => {
       try {
@@ -28,6 +31,21 @@ export function linkRoutes(deps: { config: () => LinkConfig; botUsername: () => 
         const bot = key ? await deps.botUsername().catch(() => undefined) : undefined;
         if (!key || !bot) throw new AppError('Linking is not available right now', 503);
         return { url: `https://t.me/${bot}?start=l${signLinkToken({ kind: 'account', id: request.officer!.userId }, key)}` };
+      } catch (error) {
+        return sendError(request, reply, error);
+      }
+    });
+
+    // The bot sends a password-reset link to my Telegram (the preferred channel; the only one so far).
+    fastify.post('/me/password-reset-link', async (request, reply) => {
+      try {
+        const userId = request.officer!.userId;
+        const telegram = await prisma.identity.findFirst({ where: { userId, platform: 'telegram' }, select: { platformUserId: true } });
+        if (!telegram) throw new ConflictError('Link Telegram first: the reset link is sent there.');
+        const link = resetLink(userId, deps.config());
+        if (!link) throw new AppError('Password reset links are not available right now', 503);
+        await deps.sendTelegram(telegram.platformUserId, resetMessage(link));
+        return reply.code(204).send();
       } catch (error) {
         return sendError(request, reply, error);
       }

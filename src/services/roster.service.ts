@@ -3,15 +3,33 @@ import { prisma } from '../config/db.js';
 import { ConflictError, NotFoundError } from '../lib/errors.js';
 import type { RosterEntry } from '../validators/roster.validator.js';
 
-type RosterRow = Character & { user: { username: string } | null };
+type RosterRow = Character & { user: { username: string; nickname?: string | null } | null };
+
+/** The nickname to show: the account's (characters inherit it), else the unclaimed slot's own. */
+export const shownNickname = (character: { nickname: string | null; user?: { nickname?: string | null } | null }) =>
+  character.user?.nickname ?? character.nickname;
 
 export function toRosterDto(character: RosterRow) {
   const { user, userId, inRoster, isMain, ...rest } = character;
   void inRoster; void isMain;
-  return { ...rest, claimed: userId !== null, username: user?.username ?? null };
+  return { ...rest, nickname: shownNickname(character), claimed: userId !== null, username: user?.username ?? null };
 }
 
-const withOwner = { user: { select: { username: true } } } as const;
+const withOwner = { user: { select: { username: true, nickname: true } } } as const;
+
+/** A claimed character's nickname belongs to its account: write it there, not on the character. */
+async function splitNickname<T extends { nickname?: string | null | undefined }>(userId: string | null, entry: T) {
+  if (!userId || entry.nickname === undefined) return entry;
+  const { nickname, ...rest } = entry;
+  await prisma.user.update({ where: { id: userId }, data: { nickname } });
+  return rest;
+}
+
+/** After a player loses their main, their oldest other character becomes main. */
+export async function promoteNextMain(userId: string, removedId: string) {
+  const next = await prisma.character.findFirst({ where: { userId, id: { not: removedId } }, orderBy: { createdAt: 'asc' }, select: { id: true } });
+  if (next) await prisma.character.update({ where: { id: next.id }, data: { isMain: true } });
+}
 
 async function findInRoster(id: string) {
   const character = await prisma.character.findFirst({ where: { id, inRoster: true } });
@@ -37,11 +55,10 @@ export class RosterService {
     if (existing?.inRoster) throw new ConflictError('Character is already in the roster');
 
     if (existing) {
-      const promoted = await prisma.character.update({
-        where: { id: existing.id },
-        data: { inRoster: true, class: entry.class, spec: entry.spec, role: entry.role, offSpecs: entry.offSpecs, nickname: entry.nickname },
-        include: withOwner,
+      const data = await splitNickname(existing.userId, {
+        class: entry.class, spec: entry.spec, role: entry.role, offSpecs: entry.offSpecs, nickname: entry.nickname,
       });
+      const promoted = await prisma.character.update({ where: { id: existing.id }, data: { inRoster: true, ...data }, include: withOwner });
       return { created: false, character: toRosterDto(promoted) };
     }
 
@@ -53,8 +70,9 @@ export class RosterService {
   }
 
   async update(id: string, entry: RosterEntry) {
-    await findInRoster(id);
-    const updated = await prisma.character.update({ where: { id }, data: entry, include: withOwner });
+    const character = await findInRoster(id);
+    const data = await splitNickname(character.userId, entry);
+    const updated = await prisma.character.update({ where: { id }, data, include: withOwner });
     return toRosterDto(updated);
   }
 
@@ -77,19 +95,30 @@ export class RosterService {
   /** A player takes a roster name. Atomic: of two players racing for it, exactly one wins. */
   async claim(characterId: string, userId: string) {
     return prisma.$transaction(async (tx) => {
+      // It becomes the main only for a player who has none: claiming a second name keeps the current main.
+      const hasMain = (await tx.character.count({ where: { userId, isMain: true } })) > 0;
       const taken = await tx.character.updateMany({
         where: { id: characterId, inRoster: true, userId: null },
-        data: { userId, isMain: true },
+        data: { userId, isMain: !hasMain },
       });
       if (taken.count === 0) throw new ConflictError('That name has already been claimed');
-
-      // A player has one main character: the one they had before is demoted.
-      await tx.character.updateMany({
-        where: { userId, isMain: true, id: { not: characterId } },
-        data: { isMain: false },
-      });
       return tx.character.findUnique({ where: { id: characterId } });
     });
+  }
+
+  /**
+   * Officers give a character to an account (moving it from whoever had it; also one off the roster, e.g. a name
+   * someone else took); null frees it.
+   */
+  async assign(id: string, userId: string | null) {
+    if (userId === null) return this.release(id);
+    const character = await prisma.character.findUnique({ where: { id } });
+    if (!character) throw new NotFoundError('No such character');
+    if (!(await prisma.user.findUnique({ where: { id: userId }, select: { id: true } }))) throw new NotFoundError('No such account');
+    const hasMain = await prisma.character.findFirst({ where: { userId, isMain: true, id: { not: id } }, select: { id: true } });
+    const assigned = await prisma.character.update({ where: { id }, data: { userId, isMain: !hasMain }, include: withOwner });
+    if (character.userId && character.userId !== userId && character.isMain) await promoteNextMain(character.userId, id);
+    return toRosterDto(assigned);
   }
 
   async release(id: string) {

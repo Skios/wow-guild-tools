@@ -12,7 +12,8 @@ vi.mock('../services/telegram-callback.service.js', async (orig) => ({
   handleCallbackQuery: handle,
 }));
 vi.mock('../services/late.service.js', () => ({ handleLateMessage: lateMessage }));
-vi.mock('../services/link.service.js', () => ({ handleStart: start, linkConfig: () => ({ key: null, siteUrl: undefined }) }));
+const reset = vi.hoisted(() => vi.fn());
+vi.mock('../services/link.service.js', () => ({ handleStart: start, handleReset: reset, linkConfig: () => ({ key: null, siteUrl: undefined }) }));
 vi.mock('../integrations/telegram/telegram.client.js', () => ({
   TelegramClient: class {
     answerCallback = answer;
@@ -112,6 +113,17 @@ describe('POST /webhooks/telegram', () => {
       headers: { 'x-telegram-bot-api-secret-token': 's3cret_token_value' },
     });
     expect(start).toHaveBeenCalledWith({ id: 42 }, payload, expect.anything());
+  });
+
+  test('/reset asks for a password-reset link', async () => {
+    reset.mockResolvedValue({ text: 'Password reset: ...' });
+    await (await app()).inject({
+      method: 'POST', url: '/webhooks/telegram',
+      payload: { update_id: 10, message: { chat: { id: 42, type: 'private' }, from: { id: 42 }, text: '/reset' } },
+      headers: { 'x-telegram-bot-api-secret-token': 's3cret_token_value' },
+    });
+    expect(reset).toHaveBeenCalledWith({ id: 42 }, expect.anything());
+    expect(send).toHaveBeenCalledWith('42', 'Password reset: ...', expect.anything());
   });
 
   test('old registration buttons get a pointer to /start, not an error', async () => {

@@ -185,6 +185,19 @@ describe('EventService.getEventDetail', () => {
     });
   });
 
+  test("names show the account's nickname, for answers and for the missing", async () => {
+    prismaMock.event.findUnique.mockResolvedValue({
+      ...event,
+      responses: [{ status: 'IN', character: { name: 'Thrall', nickname: 'old', user: { username: 't', nickname: 'Matte' } } }],
+    });
+    prismaMock.character.findMany.mockResolvedValue([{ ...rosterRow('Jaina', { username: 'j', nickname: 'Jay', identities: [] }), nickname: null }]);
+
+    const detail = await new EventService().getEventDetail('e1');
+
+    expect(detail.responses[0]!.character.nickname).toBe('Matte');
+    expect(detail.noAnswer[0]!.nickname).toBe('Jay');
+  });
+
   test('404 for an unknown event, without querying the roster', async () => {
     prismaMock.event.findUnique.mockResolvedValue(null);
 

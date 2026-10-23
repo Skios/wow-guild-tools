@@ -65,6 +65,20 @@ export function fakeApi(overrides: Overrides = {}): Api {
     telegramBotLink: vi.fn().mockResolvedValue({ url: 'https://t.me/guild_bot?start=lTOKEN' }),
     linkTelegram: vi.fn().mockResolvedValue(undefined),
     unlinkTelegram: vi.fn().mockResolvedValue(undefined),
+    sendResetLink: vi.fn().mockResolvedValue(undefined),
+    profile: vi.fn().mockResolvedValue({
+      username: 'cid', nickname: null, role: 'Officer', preferredChannel: 'telegram', channels: { telegram: false }, characters: [],
+    }),
+    setNickname: vi.fn().mockResolvedValue(undefined),
+    claimable: vi.fn().mockResolvedValue([]),
+    claimCharacter: vi.fn().mockResolvedValue({}),
+    addMyCharacter: vi.fn().mockResolvedValue({}),
+    updateMyCharacter: vi.fn().mockResolvedValue(undefined),
+    setMainCharacter: vi.fn().mockResolvedValue(undefined),
+    removeMyCharacter: vi.fn().mockResolvedValue(undefined),
+    searchCharacters: vi.fn().mockResolvedValue([]),
+    rosterAccounts: vi.fn().mockResolvedValue([]),
+    assignRosterOwner: vi.fn().mockResolvedValue({}),
     ...overrides,
   } as unknown as Api;
 }

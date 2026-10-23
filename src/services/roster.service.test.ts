@@ -21,7 +21,8 @@ describe('RosterService.listUnclaimed', () => {
 });
 
 describe('RosterService.claim', () => {
-  test('gives the character to the player and makes it their main', async () => {
+  test('gives the character to the player; it becomes main only if they have none', async () => {
+    prismaMock.character.count.mockResolvedValue(0);
     prismaMock.character.updateMany.mockResolvedValue({ count: 1 });
     prismaMock.character.findUnique.mockResolvedValue({ id: 'c1', name: 'Brannock' });
 
@@ -34,16 +35,15 @@ describe('RosterService.claim', () => {
     });
   });
 
-  test('the player\'s previous main character is demoted, so they still have exactly one main', async () => {
+  test('claiming a second name keeps the current main', async () => {
+    prismaMock.character.count.mockResolvedValue(1);
     prismaMock.character.updateMany.mockResolvedValue({ count: 1 });
     prismaMock.character.findUnique.mockResolvedValue({ id: 'c1' });
 
     await new RosterService().claim('c1', 'u1');
 
-    expect(prismaMock.character.updateMany.mock.calls[1]![0]).toEqual({
-      where: { userId: 'u1', isMain: true, id: { not: 'c1' } },
-      data: { isMain: false },
-    });
+    expect(prismaMock.character.updateMany.mock.calls[0]![0].data).toEqual({ userId: 'u1', isMain: false });
+    expect(prismaMock.character.updateMany).toHaveBeenCalledTimes(1);
   });
 
   test('409 when somebody got there first, and nothing else is touched', async () => {
@@ -87,6 +87,12 @@ describe('toRosterDto', () => {
   test('an unclaimed slot has no owner', () => {
     expect(toRosterDto({ ...base, userId: null, user: null } as never)).toMatchObject({ claimed: false, username: null });
   });
+
+  test("a claimed character shows its account's nickname; an unclaimed one keeps its own", () => {
+    expect(toRosterDto({ ...base, nickname: 'old', userId: 'u1', user: { username: 'aure', nickname: 'Matte' } } as never).nickname).toBe('Matte');
+    expect(toRosterDto({ ...base, nickname: 'old', userId: 'u1', user: { username: 'aure', nickname: null } } as never).nickname).toBe('old');
+    expect(toRosterDto({ ...base, nickname: 'csv', userId: null, user: null } as never).nickname).toBe('csv');
+  });
 });
 
 describe('RosterService.add', () => {
@@ -104,14 +110,77 @@ describe('RosterService.add', () => {
     expect(prismaMock.character.create.mock.calls[0]![0].data).toMatchObject({ offSpecs: ['FURY', 'ARMS'], nickname: 'Matte', inRoster: true });
   });
 
-  test('promoting a character a player registered keeps its owner but takes the officers\' specs and nickname', async () => {
+  test("promoting a character a player owns keeps its owner, takes the officers' specs, and the nickname goes to the account", async () => {
     prismaMock.character.findUnique.mockResolvedValue({ id: 'c1', inRoster: false, userId: 'u1' });
-    prismaMock.character.update.mockResolvedValue({ id: 'c1', userId: 'u1', user: { username: 'thrall' }, ...entry });
+    prismaMock.character.update.mockResolvedValue({ id: 'c1', userId: 'u1', user: { username: 'thrall', nickname: 'Matte' }, ...entry });
 
     await new RosterService().add({ ...entry, offSpecs: [...entry.offSpecs] });
 
     const { data } = prismaMock.character.update.mock.calls[0]![0];
-    expect(data).toEqual({ inRoster: true, class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK', offSpecs: ['FURY', 'ARMS'], nickname: 'Matte' });
-    expect(data).not.toHaveProperty('userId');
+    expect(data).toEqual({ inRoster: true, class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK', offSpecs: ['FURY', 'ARMS'] });
+    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { nickname: 'Matte' } });
+  });
+
+  test('editing a claimed character writes the nickname to its account', async () => {
+    prismaMock.character.findFirst.mockResolvedValue({ id: 'c1', inRoster: true, userId: 'u1' });
+    prismaMock.character.update.mockResolvedValue({ id: 'c1', userId: 'u1', user: { username: 'thrall', nickname: 'Matte' }, ...entry });
+
+    await new RosterService().update('c1', { ...entry, offSpecs: [...entry.offSpecs] });
+
+    expect(prismaMock.character.update.mock.calls[0]![0].data).not.toHaveProperty('nickname');
+    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { nickname: 'Matte' } });
+  });
+
+  test('editing an unclaimed slot keeps the nickname on the character', async () => {
+    prismaMock.character.findFirst.mockResolvedValue({ id: 'c1', inRoster: true, userId: null });
+    prismaMock.character.update.mockResolvedValue({ id: 'c1', userId: null, user: null, ...entry });
+
+    await new RosterService().update('c1', { ...entry, offSpecs: [...entry.offSpecs] });
+
+    expect(prismaMock.character.update.mock.calls[0]![0].data).toMatchObject({ nickname: 'Matte' });
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('RosterService.assign (officers give a roster character to an account)', () => {
+  test('gives it to the account; it becomes main if they have none', async () => {
+    prismaMock.character.findUnique.mockResolvedValueOnce({ id: 'c1', inRoster: true, userId: null, isMain: false });
+    prismaMock.character.findFirst.mockResolvedValueOnce(null);
+    prismaMock.user.findUnique.mockResolvedValue({ id: 'u2' });
+    prismaMock.character.update.mockResolvedValue({ id: 'c1', userId: 'u2', user: { username: 'thrall', nickname: null }, nickname: null });
+
+    await new RosterService().assign('c1', 'u2');
+
+    expect(prismaMock.character.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'c1' }, data: { userId: 'u2', isMain: true } }));
+  });
+
+  test('not main when the account already has one', async () => {
+    prismaMock.character.findUnique.mockResolvedValueOnce({ id: 'c1', inRoster: true, userId: null, isMain: false });
+    prismaMock.character.findFirst.mockResolvedValueOnce({ id: 'main' });
+    prismaMock.user.findUnique.mockResolvedValue({ id: 'u2' });
+    prismaMock.character.update.mockResolvedValue({ id: 'c1', userId: 'u2', user: { username: 'thrall', nickname: null }, nickname: null });
+
+    await new RosterService().assign('c1', 'u2');
+
+    expect(prismaMock.character.update.mock.calls[0]![0].data).toEqual({ userId: 'u2', isMain: false });
+  });
+
+  test("moving someone's main to another account gives the previous owner a new main; works off the roster too", async () => {
+    prismaMock.character.findUnique.mockResolvedValueOnce({ id: 'c1', inRoster: false, userId: 'old', isMain: true });
+    prismaMock.user.findUnique.mockResolvedValue({ id: 'u2' });
+    prismaMock.character.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'old-alt' });
+    prismaMock.character.update.mockResolvedValue({ id: 'c1', userId: 'u2', user: { username: 'thrall', nickname: null }, nickname: null });
+
+    await new RosterService().assign('c1', 'u2');
+
+    expect(prismaMock.character.update).toHaveBeenLastCalledWith({ where: { id: 'old-alt' }, data: { isMain: true } });
+  });
+
+  test('an unknown character or account is a 404', async () => {
+    prismaMock.character.findUnique.mockResolvedValueOnce(null);
+    await expect(new RosterService().assign('nope', 'u2')).rejects.toThrow(/character/i);
+    prismaMock.character.findUnique.mockResolvedValue({ id: 'c1', inRoster: true, userId: null });
+    prismaMock.user.findUnique.mockResolvedValue(null);
+    await expect(new RosterService().assign('c1', 'ghost')).rejects.toThrow(/account/i);
   });
 });

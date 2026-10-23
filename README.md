@@ -28,8 +28,12 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
 `web/` is the officers' admin (Next.js App Router, client rendering). With the API running on :3000:
 `cd web && npm install && npm run dev`, then open http://127.0.0.1:5173 (`/api/*` is proxied to `API_ORIGIN`).
 
-- Pages: **Events** (list, create, board), **Roster** (add / edit / remove / release names), **Users** (roles,
-  password resets), and your account (change password). The menu shows what your role can open.
+- Pages: **Events** (list, create, board), **Roster** (add / edit / remove / release names, assign a free name to
+  an account), **Users** (roles, password resets), and your **Profile** (click your name). The menu shows what your
+  role can open.
+- **Profile**: nickname; your characters (main, specs and offspecs, remove); claim a free roster name or add a new
+  character with name suggestions (guild members first, then Raider.IO EU). New characters wait for an officer before
+  joining the roster. Channels (Telegram, the preferred one) and password (in a dialog, with a reset link on Telegram).
 - **Appearance** menu: four themes (Midnight, Parchment, Void, Daylight) and three icon styles (game, line, none).
 - Tests: `cd web && npm test`.
 - `npx tsx scripts/seed-dev.ts` loads a demo roster and raid into a local database.
@@ -37,7 +41,8 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
   `Nome;Classe;Spec;Offspec;Reame;Nickname` (or the English names, `;` or `,`); Offspec in order, e.g. `Fury/Arms`.
   A missing realm is taken from the guild (Blaze of Glory, Nemesis) on Raider.IO; ambiguous or unknown names are
   reported, never guessed. Characters already in the roster are skipped.
-- Characters have a main spec, ordered offspecs (2nd, 3rd...) and an optional nickname (groups a player's characters).
+- Characters have a main spec and ordered offspecs (2nd, 3rd...). The nickname belongs to the account and its characters
+  show it; an unclaimed roster name can carry its own (e.g. from the CSV) until someone claims it.
 - Class / spec icons live in `web/public/icons` (Blizzard assets); re-download with `scripts/fetch-icons.sh`.
 
 ## Authentication
@@ -73,6 +78,9 @@ bot with a link made on the click (valid 5 minutes). A link never replaces anoth
 The links are signed (key derived from `SUPABASE_SECRET_KEY`), so there is nothing to store. Event buttons only work
 for a linked Telegram whose account has a main character.
 
+**Forgot your password?** Send `/reset` to the bot (or use "Send me a reset link" in the profile's password dialog):
+it replies with `<SITE_URL>/reset?t=...` (15 minutes), where you choose a new password without the old one.
+
 ## Telegram (local)
 Telegram needs a public HTTPS URL for the webhook. Expose the port with a tunnel
 (`cloudflared tunnel --url http://localhost:3000`), then register it once:
@@ -87,7 +95,10 @@ Every route is under `/api` (the same domain serves the admin site on Vercel). M
 `GET/POST /events`, `GET /events/:id`, `PATCH /events/:id/roster`, `POST /events/:id/publish`,
 `POST /events/:id/message`, `GET /meta/wow`, `GET /auth/me`, `GET/POST /roles`, `PUT/DELETE /roles/:id`,
 `GET /roles/capabilities`, `PUT /users/:id/role`, `GET /users`, `POST /users/:id/password-reset`,
-`POST /auth/password`, `GET/POST/DELETE /me/telegram`, `POST /me/telegram/bot-link`, `POST /signup` (no login), `POST /webhooks/telegram` (own secret).
+`POST /auth/password`, `GET/POST/DELETE /me/telegram`, `POST /me/telegram/bot-link`, `POST /me/password-reset-link`, `GET/PUT /me/profile`,
+`GET /me/claimable`, `POST /me/characters`, `POST /me/characters/:id/claim`, `PUT/DELETE /me/characters/:id`,
+`PUT /me/characters/:id/main`, `GET /characters/search`, `GET /roster/accounts`, `PUT /roster/:id/owner`,
+`POST /auth/reset` (no login), `POST /signup` (no login), `POST /webhooks/telegram` (own secret).
 
 ## Deploy (Vercel + Supabase, free tiers)
 Two Vercel projects, each with Production (`main`) and Preview `develop` (the dev environment):
@@ -98,5 +109,6 @@ The pipeline deploys only what a push changed (site, API + migrations, or both).
 
 ## Status
 Milestones 1–3 (core, bot, admin site) are live on Vercel + Supabase (dev). Accounts are in progress: roles,
-sign-up, Users page and Telegram linking are done; profile and characters are next. Then reminders (M4).
+sign-up, Users page, Telegram linking, profile and characters are done; officer approval of new characters is next.
+Then reminders (M4).
 See `.claude/plans`.

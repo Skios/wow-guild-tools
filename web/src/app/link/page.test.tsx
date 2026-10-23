@@ -6,5 +6,5 @@ import LinkPage from './page';
 test("once signed in, the bot's link shows the account page", () => {
   navigate('/link');
   render(<LinkPage />);
-  expect(currentPath()).toBe('/account');
+  expect(currentPath()).toBe('/profile');
 });

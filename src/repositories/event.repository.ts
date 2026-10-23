@@ -19,7 +19,7 @@ export class EventRepository {
       where: { id },
       include: {
         responses: {
-          include: { character: { include: { user: { select: { username: true } } } } },
+          include: { character: { include: { user: { select: { username: true, nickname: true } } } } },
         },
       },
     });

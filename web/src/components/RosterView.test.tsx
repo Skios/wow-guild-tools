@@ -509,3 +509,25 @@ describe('the nickname and off-spec fields', () => {
     expect(within(form).getByRole('group', { name: /Off-specs, in order/ })).not.toHaveAttribute('aria-invalid');
   });
 });
+
+describe('assigning a roster name to an account', () => {
+  test('an officer gives a free name to an account', async () => {
+    const api = setup([member('Brannock')], {
+      rosterAccounts: vi.fn().mockResolvedValue([{ id: 'u7', username: 'mrcid', nickname: 'Matte' }]),
+    });
+    await screen.findByText('Brannock');
+
+    await userEvent.selectOptions(within(rowOf('Brannock')).getByRole('combobox', { name: 'Assign Brannock to an account' }), 'u7');
+
+    expect(api.assignRosterOwner).toHaveBeenCalledWith('c-Brannock', 'u7');
+    expect(await screen.findByRole('status')).toHaveTextContent('Brannock is now Matte’s.');
+  });
+
+  test('a claimed name has no assign menu (release it first)', async () => {
+    setup([member('Jaina', { claimed: true, username: 'jaina_player' })], {
+      rosterAccounts: vi.fn().mockResolvedValue([{ id: 'u7', username: 'mrcid', nickname: null }]),
+    });
+    await screen.findByText('Jaina');
+    expect(within(rowOf('Jaina')).queryByRole('combobox')).not.toBeInTheDocument();
+  });
+});

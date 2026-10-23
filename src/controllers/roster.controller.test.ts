@@ -177,3 +177,38 @@ describe('POST /roster/:id/release', () => {
     expect((await (await app()).inject({ method: 'POST', url: `/roster/${C}/release` })).statusCode).toBe(404);
   });
 });
+
+describe('PUT /roster/:id/owner', () => {
+  test('gives the character to an account (or frees it with null)', async () => {
+    const U = uuid(9);
+    prismaMock.character.findUnique.mockResolvedValueOnce(stored());
+    prismaMock.character.findFirst.mockResolvedValueOnce(null);
+    prismaMock.user.findUnique.mockResolvedValue({ id: U });
+    prismaMock.character.update.mockResolvedValue(stored({ userId: U, user: { username: 'thrall', nickname: null } }));
+
+    const res = await (await app()).inject({ method: 'PUT', url: `/roster/${C}/owner`, payload: { userId: U } });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ claimed: true, username: 'thrall' });
+  });
+
+  test('a bad user id is a 400', async () => {
+    const res = await (await app()).inject({ method: 'PUT', url: `/roster/${C}/owner`, payload: { userId: 'nope' } });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+describe('GET /roster/accounts', () => {
+  test('lists accounts that can sign in (name and nickname only), to pick an owner', async () => {
+    prismaMock.user.findMany.mockResolvedValue([{ id: 'u1', username: 'mrcid', nickname: 'Matte' }]);
+
+    const res = await (await app()).inject('/roster/accounts');
+
+    expect(res.json()).toEqual([{ id: 'u1', username: 'mrcid', nickname: 'Matte' }]);
+    expect(prismaMock.user.findMany).toHaveBeenCalledWith({
+      where: { identities: { some: { platform: 'supabase' } } },
+      select: { id: true, username: true, nickname: true },
+      orderBy: { username: 'asc' },
+    });
+  });
+});

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useApi, useMeta, useRoleLabel, useSpecLabel } from '../context';
 import { ROLES, ROLE_ORDER } from '../roster';
 import { errorMessage, useAsync } from '../useAsync';
-import type { RosterCharacter, RosterEntryInput } from '../types';
+import type { RosterAccount, RosterCharacter, RosterEntryInput } from '../types';
 import { CharacterName } from './CharacterName';
 import { OffSpecs } from './OffSpecs';
 import { RoleIcon } from './RoleIcon';
@@ -15,8 +15,10 @@ const rememberRealm = (realm: string) => { try { localStorage.setItem(LAST_REALM
 
 type Pending = { id: string; kind: 'remove' | 'release' };
 
-function Row({ person, editing, pending, busy, onEdit, onAsk, onConfirm, onCancel, onSave }: {
+function Row({ person, editing, pending, busy, accounts, onAssign, onEdit, onAsk, onConfirm, onCancel, onSave }: {
   person: RosterCharacter;
+  accounts: RosterAccount[];
+  onAssign: (account: RosterAccount) => void;
   editing: boolean;
   pending: Pending | null;
   busy: boolean;
@@ -54,7 +56,20 @@ function Row({ person, editing, pending, busy, onEdit, onAsk, onConfirm, onCance
       <td>
         {person.claimed
           ? <span>@{person.username}</span>
-          : <span className="badge badge-open" title="Nobody has linked this name yet">Waiting for a player</span>}
+          : (
+            <span className="role-cell">
+              <span className="badge badge-open" title="Nobody has linked this name yet">Waiting for a player</span>
+              {accounts.length > 0 && (
+                <select
+                  aria-label={`Assign ${person.name} to an account`} value="" disabled={busy}
+                  onChange={e => { const a = accounts.find(x => x.id === e.target.value); if (a) onAssign(a); }}
+                >
+                  <option value="">Assign to…</option>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.nickname ? `${a.nickname} (${a.username})` : a.username}</option>)}
+                </select>
+              )}
+            </span>
+          )}
       </td>
       <td>
         {mine ? (
@@ -81,6 +96,7 @@ export function RosterView() {
   const api = useApi();
   const meta = useMeta();
   const roster = useAsync(() => api.listRoster(), [api]);
+  const accounts = useAsync(() => api.rosterAccounts(), [api]);
   const [editing, setEditing] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState(false);
@@ -124,8 +140,8 @@ export function RosterView() {
       <section className="card">
         <h2>Raid roster</h2>
         <p className="muted">
-          The standing roster: everyone here is invited to every event. Players link themselves to a name when they start the bot,
-          as long as there are names waiting for a player.
+          The standing roster: everyone here is invited to every event. Players claim their name on their profile, or you
+          assign it to their account here.
         </p>
         <ul className="summary" aria-label="Roster totals">
           <li><strong>{people.length}</strong> characters</li>
@@ -157,6 +173,8 @@ export function RosterView() {
                   editing={editing === person.id}
                   pending={pending}
                   busy={busy}
+                  accounts={accounts.data ?? []}
+                  onAssign={account => act(() => api.assignRosterOwner(person.id, account.id), `${person.name} is now ${account.nickname ?? account.username}’s.`)}
                   onEdit={() => { setEditing(person.id); setPending(null); setNotice(null); }}
                   onAsk={kind => { setPending({ id: person.id, kind }); setEditing(null); }}
                   onCancel={() => { setPending(null); setEditing(null); }}

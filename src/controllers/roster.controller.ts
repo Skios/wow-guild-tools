@@ -1,7 +1,11 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { prisma } from '../config/db.js';
 import { sendError } from '../lib/http-error.js';
 import { RosterService } from '../services/roster.service.js';
 import { RosterEntrySchema, RosterIdParamsSchema } from '../validators/roster.validator.js';
+
+const OwnerSchema = z.object({ userId: z.uuid().nullable() });
 
 export async function rosterRoutes(fastify: FastifyInstance) {
   const roster = new RosterService();
@@ -37,6 +41,29 @@ export async function rosterRoutes(fastify: FastifyInstance) {
       const { id } = RosterIdParamsSchema.parse(request.params);
       await roster.remove(id);
       return reply.send({ success: true });
+    } catch (error) {
+      return sendError(request, reply, error);
+    }
+  });
+
+  // Who a roster character can be given to: accounts that can sign in (no roles or other details).
+  fastify.get('/roster/accounts', async (request, reply) => {
+    try {
+      return await prisma.user.findMany({
+        where: { identities: { some: { platform: 'supabase' } } },
+        select: { id: true, username: true, nickname: true },
+        orderBy: { username: 'asc' },
+      });
+    } catch (error) {
+      return sendError(request, reply, error);
+    }
+  });
+
+  fastify.put('/roster/:id/owner', async (request, reply) => {
+    try {
+      const { id } = RosterIdParamsSchema.parse(request.params);
+      const { userId } = OwnerSchema.parse(request.body);
+      return reply.send(await roster.assign(id, userId));
     } catch (error) {
       return sendError(request, reply, error);
     }

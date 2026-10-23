@@ -1,5 +1,5 @@
 import type {
-  Account, CharacterSummary, EventDetail, SiteRoleSummary, EventSummary, Meta, MessageResult, NewEvent, Officer, RosterCharacter, RosterEntryInput, RosterSelection,
+  Account, CharacterSuggestion, CharacterSummary, ClaimableCharacter, EventDetail, Profile, RosterAccount, SiteRoleSummary, EventSummary, Meta, MessageResult, NewEvent, Officer, RosterCharacter, RosterEntryInput, RosterSelection,
 } from './types';
 
 const BASE = '/api';
@@ -42,6 +42,20 @@ export async function signupRequest(username: string, password: string, link?: s
     throw new ApiError('Cannot reach the server. Try again in a moment.', 0);
   }
   if (response.status === 429) throw new ApiError('Too many sign-ups from here. Try again later.', 429);
+  if (!response.ok) throw await errorFrom(response);
+}
+
+/** The bot's password-reset link (no login): POST /api/auth/reset. */
+export async function resetWithLinkRequest(token: string, password: string, fetchImpl: typeof fetch = fetch): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetchImpl(`${BASE}/auth/reset`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, password }),
+    });
+  } catch {
+    throw new ApiError('Cannot reach the server. Try again in a moment.', 0);
+  }
+  if (response.status === 429) throw new ApiError('Too many attempts from here. Try again later.', 429);
   if (!response.ok) throw await errorFrom(response);
 }
 
@@ -116,6 +130,23 @@ export function createApi({ fetchImpl = fetch, getToken = async () => null, onUn
     telegramBotLink: () => request<{ url: string }>('/me/telegram/bot-link', send('POST')),
     linkTelegram: (token: string) => request<void>('/me/telegram', send('POST', { token })),
     unlinkTelegram: () => request<void>('/me/telegram', send('DELETE')),
+    sendResetLink: () => request<void>('/me/password-reset-link', send('POST')),
+
+    profile: () => request<Profile>('/me/profile'),
+    setNickname: (nickname: string | null) => request<void>('/me/profile', send('PUT', { nickname })),
+    claimable: () => request<ClaimableCharacter[]>('/me/claimable'),
+    claimCharacter: (characterId: string) => request<unknown>(`/me/characters/${id(characterId)}/claim`, send('POST')),
+    addMyCharacter: (entry: RosterEntryInput) => request<unknown>('/me/characters', send('POST', entry)),
+    updateMyCharacter: (characterId: string, specs: { spec: string; offSpecs: string[] }) =>
+      request<void>(`/me/characters/${id(characterId)}`, send('PUT', specs)),
+    setMainCharacter: (characterId: string) => request<void>(`/me/characters/${id(characterId)}/main`, send('PUT')),
+    removeMyCharacter: (characterId: string) => request<void>(`/me/characters/${id(characterId)}`, send('DELETE')),
+    searchCharacters: (term: string) => request<CharacterSuggestion[]>(`/characters/search?q=${encodeURIComponent(term)}`),
+
+    rosterAccounts: () => request<RosterAccount[]>('/roster/accounts'),
+    assignRosterOwner: (characterId: string, userId: string | null) =>
+      request<RosterCharacter>(`/roster/${id(characterId)}/owner`, send('PUT', { userId })),
+
     changePassword: (currentPassword: string, password: string) =>
       request<void>('/auth/password', send('POST', { currentPassword, password })),
   };

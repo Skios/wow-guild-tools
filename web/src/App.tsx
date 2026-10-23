@@ -7,11 +7,11 @@ import { ApiError, createApi, type Api } from './api';
 import { createSupabaseAuth, useSession, type AuthClient } from './auth';
 import { AppearancePicker } from './components/AppearancePicker';
 import { Login } from './components/Login';
+import { ResetPassword } from './components/ResetPassword';
 import { Signup } from './components/Signup';
 import { ChangePassword } from './components/ChangePassword';
-import { TelegramCard } from './components/TelegramCard';
 import { rememberLinkToken } from './telegramLink';
-import { ApiContext, MetaContext, OfficerContext, PrefsContext } from './context';
+import { ApiContext, AuthContext, MetaContext, OfficerContext, PrefsContext } from './context';
 import { usePrefs } from './theme';
 import type { Officer } from './types';
 import { errorMessage, useAsync } from './useAsync';
@@ -28,7 +28,7 @@ function Shell({ api, auth, officer, onSignOut, onAccountChanged, children }: {
   // ?? []: an API deployed before this site answers without capabilities; show the welcome, don't crash.
   const can = (capability: string) => (officer.capabilities ?? []).includes(capability);
   const hasPages = can('events.manage') || can('roster.manage') || can('accounts.manage');
-  const onAccount = forced || path.startsWith('/account');
+  const onProfile = path.startsWith('/profile');
 
   return (
     <PrefsContext.Provider value={prefs}>
@@ -40,26 +40,23 @@ function Shell({ api, auth, officer, onSignOut, onAccountChanged, children }: {
           {!forced && can('accounts.manage') && <Link href="/users" aria-current={path.startsWith('/users') ? 'page' : undefined}>Users</Link>}
         </nav>
         <AppearancePicker prefs={prefs} onTheme={setTheme} onIcons={setIcons} />
-        <Link href="/account" className="muted" title="Your account">{officer.username}</Link>
+        <Link href="/profile" className="muted" title="Your profile" aria-current={onProfile ? 'page' : undefined}>{officer.username}</Link>
         <button type="button" onClick={onSignOut}>Sign out</button>
       </header>
       <main className="page">
-        {/* Needs no game data, so it never waits on (or fails with) it. */}
-        {onAccount && (
-          <div className="stack">
-            {!forced && <TelegramCard username={officer.username} />}
-            <ChangePassword auth={auth} username={officer.username} forced={forced} onDone={onAccountChanged} />
-          </div>
-        )}
-        {!onAccount && meta.error && (
+        {/* The forced change needs no game data, so it never waits on (or fails with) it. */}
+        {forced && <ChangePassword auth={auth} username={officer.username} forced onDone={onAccountChanged} />}
+        {!forced && meta.error && (
           <p role="alert" className="error">
             Could not load game data: {meta.error} <button type="button" onClick={meta.reload}>Retry</button>
           </p>
         )}
-        {!onAccount && meta.loading && !meta.data && <p className="muted" role="status">Loading…</p>}
-        {!onAccount && meta.data && (
+        {!forced && meta.loading && !meta.data && <p className="muted" role="status">Loading…</p>}
+        {!forced && meta.data && (
           <MetaContext.Provider value={meta.data}>
-            <OfficerContext.Provider value={officer}>{hasPages ? children : <Welcome officer={officer} />}</OfficerContext.Provider>
+            <OfficerContext.Provider value={officer}>
+              <AuthContext.Provider value={auth}>{hasPages || onProfile ? children : <Welcome officer={officer} />}</AuthContext.Provider>
+            </OfficerContext.Provider>
           </MetaContext.Provider>
         )}
       </main>
@@ -73,7 +70,8 @@ function Welcome({ officer }: { officer: Officer }) {
     <section className="card stack">
       <h1>Welcome, {officer.username}</h1>
       <p>Your account is ready. Your role is <strong>{officer.role}</strong>.</p>
-      <p className="muted">Your profile (characters, Telegram) is coming soon. An officer can give you more access.</p>
+      <p>Add your characters and link Telegram on <Link href="/profile">your profile</Link>.</p>
+      <p className="muted">An officer can give you more access.</p>
     </section>
   );
 }
@@ -122,6 +120,7 @@ function SignedIn({ auth, api: injected, fetchImpl, children }: { auth: AuthClie
     [auth, injected, fetchImpl],
   );
 
+  if (path === '/reset') return <ResetPassword />; // the bot's reset link works signed in or not
   if (session === undefined) return <main className="page"><p className="muted" role="status">Loading…</p></main>;
   if (session === null) return onSignup ? <Signup auth={auth} /> : <Login auth={auth} />;
   return (

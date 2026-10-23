@@ -101,17 +101,17 @@ describe('account pages', () => {
     expect(screen.queryByText(/Could not load game data/)).not.toBeInTheDocument();
   });
 
-  test('your name in the top bar opens the change-password page, for every account', async () => {
+  test('your name in the top bar opens your profile, for every account (Raiders too)', async () => {
     const me = vi.fn().mockResolvedValue({ ...OFFICER, capabilities: [], role: 'Raider' });
     render(<App auth={fakeAuth()} api={api({ me })}><Routed /></App>);
 
     await userEvent.click(await screen.findByRole('link', { name: 'cid' }));
 
-    expect(await screen.findByRole('heading', { name: 'Change password' })).toBeInTheDocument();
-    expect(currentPath()).toBe('/account');
+    expect(await screen.findByRole('heading', { name: 'Characters' })).toBeInTheDocument();
+    expect(currentPath()).toBe('/profile');
   });
 
-  test("the bot's link (/link?t=...) is kept through sign-in and waits for a confirmation on the account page", async () => {
+  test("the bot's link (/link?t=...) is kept through sign-in and waits for a confirmation on the profile", async () => {
     window.history.replaceState({}, '', '/link?t=BOTTOKEN');
     navigate('/link');
     const injected = api();
@@ -119,13 +119,19 @@ describe('account pages', () => {
 
     await userEvent.type(await screen.findByLabelText('Nickname'), 'cid');
     await userEvent.type(screen.getByLabelText('Password'), 'pw{enter}');
-    navigate('/account'); // what app/link/page.tsx does once signed in
+    navigate('/profile'); // what app/link/page.tsx does once signed in
 
     expect(await screen.findByText(/link from the Telegram bot is waiting/i)).toBeInTheDocument();
     expect(injected.linkTelegram).not.toHaveBeenCalled(); // never automatic: a crafted link must not swap your Telegram
     await userEvent.click(screen.getByRole('button', { name: 'Link it' }));
     expect(injected.linkTelegram).toHaveBeenCalledWith('BOTTOKEN');
     window.history.replaceState({}, '', '/');
+  });
+
+  test('the reset link page opens without signing in', async () => {
+    navigate('/reset');
+    render(<App auth={fakeAuth(null)} api={api()}><Routed /></App>);
+    expect(await screen.findByRole('heading', { name: 'Choose a new password' })).toBeInTheDocument();
   });
 
   test('accounts.manage shows the Users page in the menu', async () => {

@@ -10,12 +10,22 @@ describe('link tokens', () => {
     const token = signLinkToken({ kind: 'account', id: ACCOUNT }, KEY, NOW);
     expect(`l${token}`.length).toBeLessThanOrEqual(64);
     expect(token).toMatch(/^[A-Za-z0-9_-]+$/);
-    expect(verifyLinkToken(token, KEY, NOW + 60_000)).toEqual({ kind: 'account', id: ACCOUNT });
+    expect(verifyLinkToken(token, KEY, NOW + 60_000)).toMatchObject({ kind: 'account', id: ACCOUNT });
+  });
+
+  test('a reset token carries the account id and is not an account (linking) token', () => {
+    const token = signLinkToken({ kind: 'reset', id: ACCOUNT }, KEY, NOW);
+    expect(verifyLinkToken(token, KEY, NOW)).toMatchObject({ kind: 'reset', id: ACCOUNT });
+  });
+
+  test('says when the token was made (to refuse a reset link made before the last password change)', () => {
+    const token = signLinkToken({ kind: 'reset', id: ACCOUNT }, KEY, NOW);
+    expect(verifyLinkToken(token, KEY, NOW)!.issuedAt).toBe(Math.floor(NOW / 1000) * 1000);
   });
 
   test('a Telegram token carries the numeric user id', () => {
     const token = signLinkToken({ kind: 'telegram', id: '7781234567' }, KEY, NOW);
-    expect(verifyLinkToken(token, KEY, NOW)).toEqual({ kind: 'telegram', id: '7781234567' });
+    expect(verifyLinkToken(token, KEY, NOW)).toMatchObject({ kind: 'telegram', id: '7781234567' });
   });
 
   test.each([['telegram', '42', 15], ['account', ACCOUNT, 5]] as const)('a %s link expires after %i minutes', (kind, id, minutes) => {

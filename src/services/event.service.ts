@@ -1,5 +1,6 @@
 import type { Event, ResponseStatus } from '@prisma/client';
 import { prisma } from '../config/db.js';
+import { shownNickname } from './roster.service.js';
 import { ROLE_ORDER } from '../domain/wow.js';
 import { TelegramAdapter } from '../integrations/telegram/telegram.adapter.js';
 import { AppError, ConflictError, NotFoundError } from '../lib/errors.js';
@@ -162,14 +163,18 @@ export class EventService {
     const event = await this.getEvent(id);
     const missing = await prisma.character.findMany({
       where: { inRoster: true, responses: { none: { eventId: id } } },
-      include: { user: { select: { username: true, identities: { where: { platform: 'telegram' }, select: { id: true } } } } },
+      include: { user: { select: { username: true, nickname: true, identities: { where: { platform: 'telegram' }, select: { id: true } } } } },
       orderBy: { name: 'asc' },
     });
     const noAnswer = missing.map(({ user, userId, inRoster, isMain, createdAt, updatedAt, ...character }) => {
       void userId; void inRoster; void isMain; void createdAt; void updatedAt;
-      return { ...character, username: user?.username ?? null, reachable: (user?.identities.length ?? 0) > 0 };
+      return {
+        ...character, nickname: shownNickname({ ...character, user }),
+        username: user?.username ?? null, reachable: (user?.identities.length ?? 0) > 0,
+      };
     });
-    return { ...event, noAnswer };
+    const responses = event.responses.map(r => ({ ...r, character: { ...r.character, nickname: shownNickname(r.character) } }));
+    return { ...event, responses, noAnswer };
   }
 
   async listEvents(limit: number = 20, offset: number = 0) {

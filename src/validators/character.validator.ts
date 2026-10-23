@@ -1,6 +1,4 @@
-import { WoWClass, WoWRole } from '@prisma/client';
 import { z } from 'zod';
-import { isValidRole, CLASS_INFO, ROLE_LABEL } from '../domain/wow.js';
 
 // WoW character names: 2-12 letters (accents allowed), no digits, spaces or symbols.
 const capitalise = (name: string) => name.charAt(0).toLocaleUpperCase() + name.slice(1).toLocaleLowerCase();
@@ -16,25 +14,3 @@ export const RealmSchema = z
   .string()
   .trim()
   .regex(/^[\p{L}\p{N} '’()-]{2,40}$/u, 'Invalid realm name');
-
-export const SetMainSchema = z.object({ userId: z.string().uuid('Invalid user ID') });
-
-export const CharacterSchema = z
-  .object({
-    userId: z.string().uuid('Invalid user ID'),
-    name: CharacterNameSchema,
-    realm: RealmSchema,
-    class: z.enum(WoWClass),
-    role: z.enum(WoWRole),
-  })
-  .superRefine((c, ctx) => {
-    if (!isValidRole(c.class, c.role)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['role'],
-        message: `${CLASS_INFO[c.class].label} cannot play ${ROLE_LABEL[c.role]}`,
-      });
-    }
-  });
-
-export type CharacterInput = z.infer<typeof CharacterSchema>;

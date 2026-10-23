@@ -206,7 +206,7 @@ describe('OfficerService.resetPasswordFor', () => {
     expect(password).toMatch(/^[A-Za-z0-9_-]{24}$/);
     expect(prismaMock.identity.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { platform: 'supabase', userId: 'them' } }));
     expect(admin.setPassword).toHaveBeenCalledWith(AUTH_ID, password);
-    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'them' }, data: { mustChangePassword: true } });
+    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'them' }, data: { mustChangePassword: true, passwordChangedAt: expect.any(Date) } });
   });
 
   test.each([
@@ -239,7 +239,7 @@ describe('OfficerService.changeOwnPassword', () => {
 
     expect(admin.verifyPassword).toHaveBeenCalledWith('ulfgaar@wgt.invalid', 'Temp-password-123');
     expect(admin.setPassword).toHaveBeenCalledWith(AUTH_ID, 'Correct-horse1');
-    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'me' }, data: { mustChangePassword: false } });
+    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'me' }, data: { mustChangePassword: false, passwordChangedAt: expect.any(Date) } });
   });
 
   test('a wrong current password changes nothing (a stolen session alone is not enough)', async () => {
@@ -274,6 +274,35 @@ describe('supabaseAuthAdmin.verifyPassword', () => {
   });
 });
 
+describe('OfficerService.resetWithLink', () => {
+  const ISSUED = new Date('2026-10-23T10:00:00Z');
+
+  test('sets the new password (no current one needed) and lifts the temporary-password lock', async () => {
+    prismaMock.identity.findFirst.mockResolvedValue({ platformUserId: AUTH_ID, user: { username: 'ulfgaar', passwordChangedAt: null } });
+
+    await service.resetWithLink('me', 'Correct-horse1', ISSUED);
+
+    expect(admin.setPassword).toHaveBeenCalledWith(AUTH_ID, 'Correct-horse1');
+    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'me' }, data: { mustChangePassword: false, passwordChangedAt: expect.any(Date) } });
+  });
+
+  test('a link made before the last password change is used up (no reuse)', async () => {
+    prismaMock.identity.findFirst.mockResolvedValue({
+      platformUserId: AUTH_ID, user: { username: 'ulfgaar', passwordChangedAt: new Date('2026-10-23T10:05:00Z') },
+    });
+    await expect(service.resetWithLink('me', 'Correct-horse1', ISSUED)).rejects.toThrow(/already used/);
+    expect(admin.setPassword).not.toHaveBeenCalled();
+  });
+
+  test('same password rules; an account without a login is a 404', async () => {
+    prismaMock.identity.findFirst.mockResolvedValue({ platformUserId: AUTH_ID, user: { username: 'ulfgaar', passwordChangedAt: null } });
+    await expect(service.resetWithLink('me', 'Ulfgaar-2026!x', ISSUED)).rejects.toThrow(/nickname/);
+    prismaMock.identity.findFirst.mockResolvedValue(null);
+    await expect(service.resetWithLink('me', 'Correct-horse1', ISSUED)).rejects.toBeInstanceOf(NotFoundError);
+    expect(admin.setPassword).not.toHaveBeenCalled();
+  });
+});
+
 describe('OfficerService.resetPassword', () => {
   test('sets a fresh password on the login and returns it', async () => {
     prismaMock.identity.findFirst.mockResolvedValue({ platformUserId: AUTH_ID, userId: 'u1' });
@@ -282,7 +311,7 @@ describe('OfficerService.resetPassword', () => {
 
     expect(password).toMatch(/^[A-Za-z0-9_-]{24}$/);
     expect(admin.setPassword).toHaveBeenCalledWith(AUTH_ID, password);
-    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { mustChangePassword: true } });
+    expect(prismaMock.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { mustChangePassword: true, passwordChangedAt: expect.any(Date) } });
   });
 
   test('404 for an unknown officer', async () => {

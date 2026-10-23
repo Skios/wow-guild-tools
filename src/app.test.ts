@@ -58,9 +58,12 @@ describe('buildApp', () => {
     ['DELETE', `/api/groups/${ID}`],
     ['POST', `/api/groups/${ID}/members`],
     ['DELETE', `/api/groups/${ID}/members/${ID}`],
-    ['POST', '/api/profiles/characters'],
-    ['PUT', `/api/profiles/main-character/${ID}`],
-    ['GET', `/api/profiles/me/${ID}`],
+    ['GET', '/api/me/profile'],
+    ['PUT', '/api/me/profile'],
+    ['POST', '/api/me/characters'],
+    ['POST', `/api/me/characters/${ID}/claim`],
+    ['DELETE', `/api/me/characters/${ID}`],
+    ['GET', '/api/characters/search?q=ulf'],
     ['GET', '/api/characters'],
     ['GET', '/api/roster'],
     ['POST', '/api/roster'],
@@ -80,6 +83,7 @@ describe('buildApp', () => {
     ['POST', '/api/me/telegram'],
     ['DELETE', '/api/me/telegram'],
     ['POST', '/api/me/telegram/bot-link'],
+    ['POST', '/api/me/password-reset-link'],
   ] as const)('%s %s needs an officer login', async (method, url) => {
     const app = await buildApp();
 
@@ -180,6 +184,18 @@ describe('POST /api/signup', () => {
     for (let i = 0; i < 11; i++) codes.push((await app.inject({ method: 'POST', url: '/api/signup', payload: body })).statusCode);
     expect(codes.slice(0, 10).every(code => code === 201)).toBe(true);
     expect(codes[10]).toBe(429);
+  });
+});
+
+describe('POST /api/auth/reset (the link from the bot)', () => {
+  const resetWithLink = vi.fn();
+  const withAccounts = () => realBuildApp({ verifyToken: supabaseTokenVerifier(SUPABASE_URL, signer.jwks), accounts: { resetWithLink } as never });
+
+  test('needs no login, and an invalid or expired link changes nothing', async () => {
+    const res = await (await withAccounts()).inject({ method: 'POST', url: '/api/auth/reset', payload: { token: 'A'.repeat(50), password: 'Correct-horse1' } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/expired/);
+    expect(resetWithLink).not.toHaveBeenCalled();
   });
 });
 

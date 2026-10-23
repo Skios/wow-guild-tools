@@ -4,7 +4,7 @@ import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 
 import { linkKey, signLinkToken, verifyLinkToken } from '../domain/link-token.js';
-import { handleStart, linkTelegram, unlinkTelegram } from './link.service.js';
+import { handleReset, handleStart, linkTelegram, unlinkTelegram } from './link.service.js';
 
 const KEY = linkKey('k');
 const ACCOUNT = '3f2b8c1e-8a4d-4c55-9d7e-000000000001';
@@ -62,7 +62,7 @@ describe('handleStart (the bot\'s /start)', () => {
 
     const url = /https:\/\/guild\.example\/link\?t=([A-Za-z0-9_-]+)/.exec(reply.text);
     expect(url).not.toBeNull();
-    expect(verifyLinkToken(url![1]!, KEY)).toEqual({ kind: 'telegram', id: '42' });
+    expect(verifyLinkToken(url![1]!, KEY)).toMatchObject({ kind: 'telegram', id: '42' });
   });
 
   test('a site link for an account that already has a Telegram is refused with the reason', async () => {
@@ -108,5 +108,26 @@ describe('handleStart (the bot\'s /start)', () => {
   test('without the API key or the site address, it says so instead of sending a broken link', async () => {
     expect((await handleStart({ id: 42 }, '', { key: null, siteUrl: 'https://guild.example' })).text).toMatch(/not set up/i);
     expect((await handleStart({ id: 42 }, '', { key: KEY, siteUrl: undefined })).text).toMatch(/not set up/i);
+  });
+});
+
+describe('handleReset (the bot\'s /reset)', () => {
+  test('sends a password-reset link for the account this Telegram belongs to', async () => {
+    prismaMock.identity.findUnique.mockResolvedValue({ userId: ACCOUNT });
+
+    const reply = await handleReset({ id: 42 }, config);
+
+    const token = /https:\/\/guild\.example\/reset\?t=([A-Za-z0-9_-]+)/.exec(reply.text)?.[1];
+    expect(verifyLinkToken(token!, KEY)).toMatchObject({ kind: 'reset', id: ACCOUNT });
+  });
+
+  test('an unlinked Telegram is told to link first', async () => {
+    prismaMock.identity.findUnique.mockResolvedValue(null);
+    expect((await handleReset({ id: 42 }, config)).text).toMatch(/\/start/);
+  });
+
+  test('without the key or the site address it says so', async () => {
+    prismaMock.identity.findUnique.mockResolvedValue({ userId: ACCOUNT });
+    expect((await handleReset({ id: 42 }, { key: null, siteUrl: 'https://guild.example' })).text).toMatch(/not set up/i);
   });
 });

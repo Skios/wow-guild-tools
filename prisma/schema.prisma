@@ -43,11 +43,13 @@ enum WoWRole {
 
 model User {
   id           String      @id @default(uuid())
-  username     String
+  username     String      // sign-in name (private)
+  nickname     String?     // what the guild calls the player; their characters show it
   preferredChannel String?    @default("telegram")
   // Site role; null = no site access. Capabilities: src/domain/roles.ts.
   roleId       String?
   role         Role?       @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  passwordChangedAt  DateTime? // a reset link made before this is used up
   mustChangePassword Boolean @default(false) // signed in with a temporary password: only the change-password route works
   identities   Identity[]
   characters   Character[]
@@ -99,7 +101,7 @@ model Character {
   role      WoWRole    @default(DPS)
   spec      String?    // validated against the class in src/domain/wow.ts
   offSpecs  String[]   @default([]) // other specs it can play, in order of preference
-  nickname  String?    // what the guild calls the player; the same nickname groups someone's characters
+  nickname  String?    // only for roster slots nobody claimed yet; a claimed character shows its account's nickname
   isMain    Boolean    @default(true)
   inRoster  Boolean    @default(false) // part of the raid roster officers maintain
   responses Response[]

@@ -197,14 +197,31 @@ export class OfficerService {
     const login = await prisma.identity.findFirst({ where: { platform: 'supabase', userId }, select: { platformUserId: true } });
     if (!login) throw new NotFoundError('No account with a login');
     await this.admin.setPassword(login.platformUserId, rawPassword);
-    await prisma.user.update({ where: { id: userId }, data: { mustChangePassword: false } });
+    await prisma.user.update({ where: { id: userId }, data: { mustChangePassword: false, passwordChangedAt: new Date() } });
+  }
+
+  /** The bot's reset link (it proves the account's own Telegram): a new password, no current one needed. */
+  async resetWithLink(userId: string, rawPassword: unknown, issuedAt: Date) {
+    if (typeof rawPassword !== 'string') throw new AppError('Password: required', 400);
+    const login = await prisma.identity.findFirst({
+      where: { platform: 'supabase', userId }, select: { platformUserId: true, user: { select: { username: true, passwordChangedAt: true } } },
+    });
+    if (!login) throw new NotFoundError('No account with a login');
+    // One use: once the password changed after the link was made, the link is spent.
+    if (login.user.passwordChangedAt && login.user.passwordChangedAt >= issuedAt) {
+      throw new AppError('This reset link was already used: ask for a new one (send /reset to the bot).', 400);
+    }
+    const problem = passwordProblem(rawPassword, login.user.username);
+    if (problem) throw new AppError(problem, 400);
+    await this.admin.setPassword(login.platformUserId, rawPassword);
+    await prisma.user.update({ where: { id: userId }, data: { mustChangePassword: false, passwordChangedAt: new Date() } });
   }
 
   // Supabase also revokes the user's refresh tokens; an access token already issued lives until it expires (1h).
   private async setTemporaryPassword(login: { platformUserId: string; userId: string }) {
     const password = generatePassword();
     await this.admin.setPassword(login.platformUserId, password);
-    await prisma.user.update({ where: { id: login.userId }, data: { mustChangePassword: true } });
+    await prisma.user.update({ where: { id: login.userId }, data: { mustChangePassword: true, passwordChangedAt: new Date() } });
     return password;
   }
 

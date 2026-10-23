@@ -98,7 +98,10 @@ publishable key.
 - preferredChannel stays Telegram; a channel picker comes with the second channel (Discord).
 
 ## 5. Roster approval and event answers
-- Roster page: "Pending" list (characters with inRoster = false and an owner) with Approve / Reject.
+- Roster page: "Pending" list (characters with inRoster = false and an owner) with Approve / Reject, and the officer's
+  assign menu (fixes a name someone took that isn't theirs: the API already lets officers reassign off-roster characters).
+- To discuss: should claiming a free roster name also wait for approval? Today a claim is immediate (officers can
+  reassign afterwards).
 - Event answers only for characters with inRoster = true, enforced in ResponseService for every path.
 
 ## 6. Notes on every answer
@@ -110,7 +113,7 @@ publishable key.
   `Response.note` (max 200 chars). Changing the answer clears the note. The board shows it next to the name.
 
 ## UI polish (user feedback 2026-10-23)
-- The account page becomes "Profile" (your name in the top bar): characters first; Telegram on one line (status +
+- Done: the account page became "Profile" (your name in the top bar): characters first; Telegram on one line (status +
   Link/Unlink); "Change password" closed behind a button, the form opens only on click (forced change stays open).
 - Password fields show the rules as a checklist that ticks while typing (sign-up and change password).
 - Users table: aligned columns, nicer look.
@@ -121,8 +124,8 @@ publishable key.
 3. [x] Users page: role assignment + password reset + mustChangePassword + account page
 4. [x] Telegram link token (both directions) + removal of the bot registration flow
 4b. [x] password checklist + Users table polish
-5. nickname on the account + Profile page (claim, add with Raider.IO autocomplete; Telegram line; password behind a
-   button) + officer assigns characters
+5. [x] nickname on the account + Profile page (claim, add with Raider.IO autocomplete; Telegram line; password in a
+   dialog + reset link on Telegram, bot /reset, /reset page) + officer assigns characters (Roster page)
 6. roster approval + answers only for approved characters
 7. notes on every answer
 8. Roles page (Owner)

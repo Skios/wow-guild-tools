@@ -8,7 +8,7 @@ import { prisma } from '../src/config/db.js';
 import { RosterService } from '../src/services/roster.service.js';
 import { applyImport, parseRosterCsv, planImport, raiderIoGuild, type GuildMember } from '../src/services/roster-import.service.js';
 
-const GUILD = { region: 'eu', realm: 'Nemesis', name: 'Blaze of Glory' };
+import { GUILD } from '../src/config/guild.js';
 const [file, flag] = process.argv.slice(2);
 const host = (url: string | undefined) => (url && URL.canParse(url) ? new URL(url).host : '(not set)');
 

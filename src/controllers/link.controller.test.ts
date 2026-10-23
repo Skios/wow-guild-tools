@@ -10,12 +10,14 @@ import { linkRoutes } from './link.controller.js';
 const KEY = linkKey('k');
 const ME = uuid(1);
 const botUsername = vi.fn();
+const sendTelegram = vi.fn();
 const app = (key: Buffer | null = KEY) =>
-  buildRouteAppFor({ role: 'Raider', position: 40 }, linkRoutes({ config: () => ({ key, siteUrl: 'https://guild.example' }), botUsername }));
+  buildRouteAppFor({ role: 'Raider', position: 40 }, linkRoutes({ config: () => ({ key, siteUrl: 'https://guild.example' }), botUsername, sendTelegram }));
 
 beforeEach(() => {
   resetPrismaMock();
   botUsername.mockReset().mockResolvedValue('guild_bot');
+  sendTelegram.mockReset().mockResolvedValue(undefined);
 });
 
 describe('GET /me/telegram', () => {
@@ -33,7 +35,7 @@ describe('POST /me/telegram/bot-link', () => {
     const body = (await (await app()).inject({ method: 'POST', url: '/me/telegram/bot-link' })).json();
 
     const token = /^https:\/\/t\.me\/guild_bot\?start=l([A-Za-z0-9_-]+)$/.exec(body.url)?.[1];
-    expect(verifyLinkToken(token!, KEY)).toEqual({ kind: 'account', id: ME });
+    expect(verifyLinkToken(token!, KEY)).toMatchObject({ kind: 'account', id: ME });
   });
 
   test('is 503 when the bot or the key is unavailable', async () => {
@@ -82,5 +84,26 @@ describe('POST /me/telegram', () => {
   test('is 503 without the key', async () => {
     const res = await (await app(null)).inject({ method: 'POST', url: '/me/telegram', payload: { token: 'x' } });
     expect(res.statusCode).toBe(503);
+  });
+});
+
+describe('POST /me/password-reset-link', () => {
+  test('the bot sends a reset link to my Telegram', async () => {
+    prismaMock.identity.findFirst.mockResolvedValue({ platformUserId: '42' });
+
+    const res = await (await app()).inject({ method: 'POST', url: '/me/password-reset-link' });
+
+    expect(res.statusCode).toBe(204);
+    const [chatId, text] = sendTelegram.mock.calls[0]!;
+    expect(chatId).toBe('42');
+    const token = /https:\/\/guild\.example\/reset\?t=([A-Za-z0-9_-]+)/.exec(text)?.[1];
+    expect(verifyLinkToken(token!, KEY)).toMatchObject({ kind: 'reset', id: ME });
+  });
+
+  test('without a linked Telegram it is a 409 that says so', async () => {
+    prismaMock.identity.findFirst.mockResolvedValue(null);
+    const res = await (await app()).inject({ method: 'POST', url: '/me/password-reset-link' });
+    expect(res.statusCode).toBe(409);
+    expect(sendTelegram).not.toHaveBeenCalled();
   });
 });

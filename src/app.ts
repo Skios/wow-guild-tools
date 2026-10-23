@@ -9,7 +9,7 @@ import { TelegramClient } from './integrations/telegram/telegram.client.js';
 import { linkConfig } from './services/link.service.js';
 import { signupRoutes } from './controllers/signup.controller.js';
 import { roleRoutes } from './controllers/role.controller.js';
-import { profileRoutes } from './controllers/profile.controller.js';
+import { meRoutes } from './controllers/me.controller.js';
 import { rosterRoutes } from './controllers/roster.controller.js';
 import { telegramRoutes } from './controllers/telegram.controller.js';
 import { getEnv } from './config/env.js';
@@ -18,7 +18,7 @@ import { OfficerService, supabaseAuthAdmin } from './services/officer.service.js
 import { requireCapability, requireSiteUser, supabaseTokenVerifier, type TokenVerifier } from './plugins/auth.js';
 
 // What the routes use from OfficerService (tests pass a stand-in).
-type AccountService = Pick<OfficerService, 'signup' | 'listAccounts' | 'resetPasswordFor' | 'changeOwnPassword'>;
+type AccountService = Pick<OfficerService, 'signup' | 'listAccounts' | 'resetPasswordFor' | 'changeOwnPassword' | 'resetWithLink'>;
 
 const BODY_LIMIT_BYTES = 100 * 1024;
 const RATE_LIMIT_PER_MINUTE = 300;
@@ -63,11 +63,13 @@ export async function buildApp(options: { logger?: FastifyServerOptions['logger'
       await site.register(adminRoutes); // who am I, game data: any site user
       await site.register(roleRoutes); // each route checks Owner / accounts.manage itself
       await site.register(accountRoutes(accounts)); // Users page (accounts.manage) and your own password
+      await site.register(meRoutes); // your profile and characters
       const bot = new TelegramClient();
-      await site.register(linkRoutes({ config: linkConfig, botUsername: () => bot.getBotUsername() })); // your Telegram link
+      await site.register(linkRoutes({
+        config: linkConfig, botUsername: () => bot.getBotUsername(), sendTelegram: (chatId, text) => bot.sendMessage(chatId, text),
+      })); // your Telegram link and reset link
       await guarded('events.manage', eventRoutes);
       await guarded('roster.manage', rosterRoutes);
-      await guarded('roster.manage', profileRoutes);
       await guarded('roster.manage', groupRoutes);
     });
   }, { prefix: '/api' });

@@ -71,10 +71,32 @@ export async function handleStart(from: { id: number }, param: string, config: L
   });
   if (linked) return { text: `This Telegram is linked to ${linked.user.username}. You can answer raid invites here.` };
 
-  if (!config.key || !config.siteUrl) return { text: 'Accounts are not set up yet. Ask an officer.' };
+  if (!config.key || !config.siteUrl) return { text: NOT_SET_UP };
   const token = signLinkToken({ kind: 'telegram', id: String(from.id) }, config.key);
   return {
     text: `Welcome! Open this link to create your guild account (or sign in): your Telegram will be linked to it.\n`
       + `${config.siteUrl.replace(/\/+$/, '')}/link?t=${token}\nThe link works for 15 minutes.`,
   };
+}
+
+const NOT_SET_UP = 'Accounts are not set up yet. Ask an officer.';
+
+/** A password-reset link for this account (15 minutes): opened on the site, it sets a new password. */
+export function resetLink(userId: string, config: LinkConfig): string | null {
+  if (!config.key || !config.siteUrl) return null;
+  return `${config.siteUrl.replace(/\/+$/, '')}/reset?t=${signLinkToken({ kind: 'reset', id: userId }, config.key)}`;
+}
+
+export const resetMessage = (link: string) =>
+  `Password reset: open this link to choose a new password (it works for 15 minutes).\n${link}\nIgnore it if you didn't ask.`;
+
+/** /reset in the private chat: only the account's own Telegram gets its reset link. */
+export async function handleReset(from: { id: number }, config: LinkConfig): Promise<Reply> {
+  const identity = await prisma.identity.findUnique({
+    where: { platform_platformUserId: { platform: 'telegram', platformUserId: String(from.id) } },
+    select: { userId: true },
+  });
+  if (!identity) return { text: 'This Telegram is not linked to an account yet: send /start.' };
+  const link = resetLink(identity.userId, config);
+  return { text: link ? resetMessage(link) : NOT_SET_UP };
 }

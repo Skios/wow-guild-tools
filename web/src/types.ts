@@ -168,3 +168,47 @@ export interface Account {
   role: { id: string; name: string; position: number; isOwner: boolean } | null;
   characters: { name: string; realm: string; class: string }[];
 }
+
+/** One of my characters (GET /me/profile). inRoster false = waiting for an officer's approval. */
+export interface MyCharacter {
+  id: string;
+  name: string;
+  realm: string;
+  class: string;
+  spec: string | null;
+  role: RoleId;
+  offSpecs: string[];
+  isMain: boolean;
+  inRoster: boolean;
+}
+
+export interface Profile {
+  username: string;
+  nickname: string | null;
+  role: string | null;
+  preferredChannel: string | null;
+  channels: { telegram: boolean };
+  characters: MyCharacter[];
+}
+
+export interface ClaimableCharacter {
+  id: string;
+  name: string;
+  realm: string;
+  class: string;
+  spec: string | null;
+}
+
+/** A name suggestion while typing (guild members first, then Raider.IO). */
+export interface CharacterSuggestion {
+  name: string;
+  realm: string;
+  class: string | null;
+  inGuild: boolean;
+}
+
+export interface RosterAccount {
+  id: string;
+  username: string;
+  nickname: string | null;
+}

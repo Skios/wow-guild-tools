@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import type { Api } from './api';
+import type { AuthClient } from './auth';
 import { DEFAULT_PREFS, type Prefs } from './theme';
 import type { Meta, Officer, RoleId } from './types';
 
@@ -7,6 +8,14 @@ export const ApiContext = createContext<Api | null>(null);
 export const MetaContext = createContext<Meta | null>(null);
 export const PrefsContext = createContext<Prefs>(DEFAULT_PREFS);
 export const OfficerContext = createContext<Officer | null>(null);
+export const AuthContext = createContext<AuthClient | null>(null);
+
+/** The sign-in client (provided by the app shell): pages that sign in again after a password change. */
+export function useAuth(): AuthClient {
+  const auth = useContext(AuthContext);
+  if (!auth) throw new Error('AuthContext is missing');
+  return auth;
+}
 
 /** The signed-in account (provided by the app shell). */
 export function useOfficer(): Officer {
