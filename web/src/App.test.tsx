@@ -69,6 +69,16 @@ describe('accounts', () => {
     expect(screen.queryByRole('link', { name: 'Roster' })).not.toBeInTheDocument();
   });
 
+  test('only the Owner sees Roles', async () => {
+    const { unmount } = render(<App auth={fakeAuth()} api={api({ me: vi.fn().mockResolvedValue({ ...OFFICER, isOwner: true, role: 'Owner' }) })}><Routed /></App>);
+    expect(await screen.findByRole('link', { name: 'Roles' })).toBeInTheDocument();
+    unmount();
+
+    render(<App auth={fakeAuth()} api={api()}><Routed /></App>);
+    expect(await screen.findByRole('link', { name: 'Users' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Roles' })).not.toBeInTheDocument();
+  });
+
   test('approving characters (raid leaders) opens the Roster page too', async () => {
     const me = vi.fn().mockResolvedValue({ userId: 'u3', username: 'rl', role: 'Raidleader', capabilities: ['roster.approve'] });
     render(<App auth={fakeAuth()} api={api({ me })}><Routed /></App>);

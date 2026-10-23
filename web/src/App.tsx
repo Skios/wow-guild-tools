@@ -39,6 +39,7 @@ function Shell({ api, auth, officer, onSignOut, onAccountChanged, children }: {
           {!forced && can('events.manage') && <Link href="/events" aria-current={path.startsWith('/events') ? 'page' : undefined}>Events</Link>}
           {!forced && seesRoster && <Link href="/roster" aria-current={onRoster ? 'page' : undefined}>Roster</Link>}
           {!forced && can('accounts.manage') && <Link href="/users" aria-current={path.startsWith('/users') ? 'page' : undefined}>Users</Link>}
+          {!forced && officer.isOwner && <Link href="/roles" aria-current={path.startsWith('/roles') ? 'page' : undefined}>Roles</Link>}
         </nav>
         <AppearancePicker prefs={prefs} onTheme={setTheme} onIcons={setIcons} />
         <Link href="/profile" className="muted" title="Your profile" aria-current={onProfile ? 'page' : undefined}>{officer.username}</Link>

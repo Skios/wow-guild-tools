@@ -30,7 +30,8 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
 
 - Pages: **Events** (list, create, board), **Roster** (each player's characters together, alts under the main;
   add / edit / remove / release names, assign a name to an account; approve, reject or revoke characters players
-  added; **New season** empties the roster after typing NEW SEASON), **Users** (roles, password resets), and your
+  added; **New season** empties the roster after typing NEW SEASON), **Users** (roles, password resets), **Roles**
+  (Owner only: create, edit and delete roles, ticking capabilities from the list the code registers), and your
   **Profile** (click your name). The menu shows what your role can open: raid leaders (`roster.approve`) see the
   Roster to approve and revoke, without editing it.
 - **Profile**: nickname; your characters (pencil: specs and "Make main" in a dialog; x: remove); claim a free roster
@@ -116,6 +117,6 @@ The pipeline deploys only what a push changed (site, API + migrations, or both).
 
 ## Status
 Milestones 1–3 (core, bot, admin site) are live on Vercel + Supabase (dev). Accounts are in progress: roles,
-sign-up, Users page, Telegram linking, profile and characters, roster approval, new season and notes on every answer
-are done; the Roles page is next. Then an alpha with testers, reminders (M4) and production.
+sign-up, Users page, Telegram linking, profile and characters, roster approval, new season, notes on every answer and
+the Roles page are done. Then an alpha with testers, reminders (M4) and production.
 See `.claude/plans`.

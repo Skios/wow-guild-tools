@@ -105,6 +105,19 @@ describe('requests', () => {
     expect(call(3).headers.has('content-type')).toBe(false);
   });
 
+  test('configures roles (Owner)', async () => {
+    const role = { name: 'Raid assist', position: 35, capabilities: ['roster.approve'] };
+    await api().roleCapabilities();
+    await api().createRole(role);
+    await api().updateRole('r 1', role);
+    await api().deleteRole('r 1');
+
+    expect([0, 1, 2, 3].map(n => `${call(n).method} ${call(n).url}`)).toEqual([
+      'GET /api/roles/capabilities', 'POST /api/roles', 'PUT /api/roles/r%201', 'DELETE /api/roles/r%201',
+    ]);
+    expect(call(1).body).toEqual(role);
+  });
+
   test('approves, revokes and rejects characters, and starts a new season', async () => {
     await api().listPendingRoster();
     await api().approveRoster('c 1');

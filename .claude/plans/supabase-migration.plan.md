@@ -81,9 +81,9 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 - [ ] Supabase dev: Site URL = https://wgt-web-git-develop-acme-c35a.vercel.app
 - [ ] Verify the API sees the real client IP through the site's rewrite (rate limiting).
 
-## In progress: accounts, characters, contact channels (2026-10-23)
-See .claude/plans/accounts.plan.md (steps 1-6 done: roles, sign-up, Users page + password resets, Telegram link,
-profile and characters, roster approval + new season, notes on answers; next: Roles page).
+## Done: accounts, characters, contact channels (2026-10-23)
+See .claude/plans/accounts.plan.md (all 8 steps: roles, sign-up, Users page + password resets, Telegram link,
+profile and characters, roster approval + new season, notes on answers, Roles page).
 
 ## Parked
 - [x] Telegram on dev works (2026-10-23): the webhook had never been set; `npm run telegram:webhook:dev` fixed it,

@@ -138,6 +138,13 @@ export interface Officer {
   mustChangePassword: boolean; // signed in with a temporary password
 }
 
+/** What the Owner sets on a role (POST/PUT /roles). */
+export interface RoleInput {
+  name: string;
+  position: number;
+  capabilities: string[];
+}
+
 export interface SiteRoleSummary {
   id: string;
   name: string;

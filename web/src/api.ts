@@ -1,5 +1,5 @@
 import type {
-  Account, CharacterSuggestion, ClaimableCharacter, EventDetail, Profile, RosterAccount, SiteRoleSummary, EventSummary, Meta, MessageResult, NewEvent, Officer, RosterCharacter, RosterEntryInput, RosterSelection,
+  Account, CharacterSuggestion, ClaimableCharacter, EventDetail, Profile, RosterAccount, SiteRoleSummary, EventSummary, Meta, MessageResult, NewEvent, Officer, RosterCharacter, RosterEntryInput, RosterSelection, RoleInput,
 } from './types';
 
 const BASE = '/api';
@@ -129,6 +129,10 @@ export function createApi({ fetchImpl = fetch, getToken = async () => null, onUn
     listUsers: () => request<Account[]>('/users'),
     listRoles: () => request<SiteRoleSummary[]>('/roles'),
     setUserRole: (userId: string, roleId: string) => request<void>(`/users/${id(userId)}/role`, send('PUT', { roleId })),
+    roleCapabilities: () => request<string[]>('/roles/capabilities'),
+    createRole: (role: RoleInput) => request<unknown>('/roles', send('POST', role)),
+    updateRole: (roleId: string, role: RoleInput) => request<unknown>(`/roles/${id(roleId)}`, send('PUT', role)),
+    deleteRole: (roleId: string) => request<void>(`/roles/${id(roleId)}`, send('DELETE')),
     resetUserPassword: (userId: string) => request<{ password: string }>(`/users/${id(userId)}/password-reset`, send('POST')),
     telegramStatus: () => request<{ linked: boolean }>('/me/telegram'),
     telegramBotLink: () => request<{ url: string }>('/me/telegram/bot-link', send('POST')),
