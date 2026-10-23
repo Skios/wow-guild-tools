@@ -6,8 +6,8 @@ vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 import { DRAFT_TTL_MS, draftStore } from './draft.repository.js';
 
 const NOW = new Date('2026-10-21T20:00:00Z');
-const store = draftStore<{ step: string }>('registration');
-const key = { kind_platform_platformUserId: { kind: 'registration', platform: 'telegram', platformUserId: '42' } };
+const store = draftStore<{ step: string }>('late');
+const key = { kind_platform_platformUserId: { kind: 'late', platform: 'telegram', platformUserId: '42' } };
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -40,7 +40,7 @@ describe('draftStore', () => {
     const expiresAt = new Date(NOW.getTime() + DRAFT_TTL_MS);
     expect(prismaMock.chatDraft.upsert).toHaveBeenCalledWith({
       where: key,
-      create: { kind: 'registration', platform: 'telegram', platformUserId: '42', data: { step: 'class' }, expiresAt },
+      create: { kind: 'late', platform: 'telegram', platformUserId: '42', data: { step: 'class' }, expiresAt },
       update: { data: { step: 'class' }, expiresAt },
     });
   });
@@ -49,14 +49,7 @@ describe('draftStore', () => {
     prismaMock.chatDraft.deleteMany.mockResolvedValue({ count: 0 });
 
     await expect(store.delete(42)).resolves.toBeUndefined();
-    expect(prismaMock.chatDraft.deleteMany).toHaveBeenCalledWith({ where: { kind: 'registration', platform: 'telegram', platformUserId: '42' } });
-  });
-
-  test('kinds do not see each other: a late question is not a registration draft', async () => {
-    await draftStore('late').get(42);
-    expect(prismaMock.chatDraft.findUnique).toHaveBeenCalledWith({
-      where: { kind_platform_platformUserId: { kind: 'late', platform: 'telegram', platformUserId: '42' } },
-    });
+    expect(prismaMock.chatDraft.deleteMany).toHaveBeenCalledWith({ where: { kind: 'late', platform: 'telegram', platformUserId: '42' } });
   });
 
   test('drafts last 30 minutes', () => {

@@ -2,13 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { ApiError, createApi, type Api } from './api';
 import { createSupabaseAuth, useSession, type AuthClient } from './auth';
 import { AppearancePicker } from './components/AppearancePicker';
 import { Login } from './components/Login';
 import { Signup } from './components/Signup';
 import { ChangePassword } from './components/ChangePassword';
+import { TelegramCard } from './components/TelegramCard';
+import { rememberLinkToken } from './telegramLink';
 import { ApiContext, MetaContext, OfficerContext, PrefsContext } from './context';
 import { usePrefs } from './theme';
 import type { Officer } from './types';
@@ -26,7 +28,7 @@ function Shell({ api, auth, officer, onSignOut, onAccountChanged, children }: {
   // ?? []: an API deployed before this site answers without capabilities; show the welcome, don't crash.
   const can = (capability: string) => (officer.capabilities ?? []).includes(capability);
   const hasPages = can('events.manage') || can('roster.manage') || can('accounts.manage');
-  const changePassword = forced || path === '/account/password';
+  const onAccount = forced || path.startsWith('/account');
 
   return (
     <PrefsContext.Provider value={prefs}>
@@ -38,19 +40,24 @@ function Shell({ api, auth, officer, onSignOut, onAccountChanged, children }: {
           {!forced && can('accounts.manage') && <Link href="/users" aria-current={path.startsWith('/users') ? 'page' : undefined}>Users</Link>}
         </nav>
         <AppearancePicker prefs={prefs} onTheme={setTheme} onIcons={setIcons} />
-        <Link href="/account/password" className="muted" title="Your account">{officer.username}</Link>
+        <Link href="/account" className="muted" title="Your account">{officer.username}</Link>
         <button type="button" onClick={onSignOut}>Sign out</button>
       </header>
       <main className="page">
         {/* Needs no game data, so it never waits on (or fails with) it. */}
-        {changePassword && <ChangePassword auth={auth} username={officer.username} forced={forced} onDone={onAccountChanged} />}
-        {!changePassword && meta.error && (
+        {onAccount && (
+          <div className="stack">
+            {!forced && <TelegramCard username={officer.username} />}
+            <ChangePassword auth={auth} username={officer.username} forced={forced} onDone={onAccountChanged} />
+          </div>
+        )}
+        {!onAccount && meta.error && (
           <p role="alert" className="error">
             Could not load game data: {meta.error} <button type="button" onClick={meta.reload}>Retry</button>
           </p>
         )}
-        {!changePassword && meta.loading && !meta.data && <p className="muted" role="status">Loading…</p>}
-        {!changePassword && meta.data && (
+        {!onAccount && meta.loading && !meta.data && <p className="muted" role="status">Loading…</p>}
+        {!onAccount && meta.data && (
           <MetaContext.Provider value={meta.data}>
             <OfficerContext.Provider value={officer}>{hasPages ? children : <Welcome officer={officer} />}</OfficerContext.Provider>
           </MetaContext.Provider>
@@ -99,7 +106,9 @@ function OfficerGate({ api, auth, onSignOut, children }: { api: Api; auth: AuthC
 
 function SignedIn({ auth, api: injected, fetchImpl, children }: { auth: AuthClient; api?: Api; fetchImpl?: typeof fetch; children: ReactNode }) {
   const session = useSession(auth);
-  const onSignup = usePathname() === '/signup';
+  const path = usePathname();
+  const onSignup = path === '/signup';
+  useEffect(() => { if (path === '/link') rememberLinkToken(); }, [path]);
   // Global sign-out revokes the refresh token; if that cannot be done (offline), at least end it here.
   const signOut = () => {
     auth.signOut().then(({ error }) => error && auth.signOut({ scope: 'local' }), () => auth.signOut({ scope: 'local' }));

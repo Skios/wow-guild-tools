@@ -76,6 +76,10 @@ describe('buildApp', () => {
     ['GET', '/api/users'],
     ['POST', `/api/users/${ID}/password-reset`],
     ['POST', '/api/auth/password'],
+    ['GET', '/api/me/telegram'],
+    ['POST', '/api/me/telegram'],
+    ['DELETE', '/api/me/telegram'],
+    ['POST', '/api/me/telegram/bot-link'],
   ] as const)('%s %s needs an officer login', async (method, url) => {
     const app = await buildApp();
 
@@ -150,7 +154,13 @@ describe('POST /api/signup', () => {
 
     expect(res.statusCode).toBe(201);
     expect(res.json()).toEqual({ name: 'ulfgaar' });
-    expect(signup).toHaveBeenCalledWith('ulfgaar', 'Correct-horse1');
+    expect(signup).toHaveBeenCalledWith('ulfgaar', 'Correct-horse1', undefined);
+  });
+
+  test('an expired Telegram link is refused before creating anything', async () => {
+    const res = await (await withAccounts()).inject({ method: 'POST', url: '/api/signup', payload: { ...body, link: 'A'.repeat(50) } });
+    expect(res.statusCode).toBe(400);
+    expect(signup).not.toHaveBeenCalled();
   });
 
   test('a body that is not an object is a 400', async () => {

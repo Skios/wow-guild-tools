@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../config/db.js';
 
-export type DraftKind = 'registration' | 'late';
+export type DraftKind = 'late';
 export const DRAFT_TTL_MS = 30 * 60_000;
 
 // ponytail: expired rows are ignored, not purged; they are tiny and overwritten on the next chat.

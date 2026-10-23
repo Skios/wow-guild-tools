@@ -63,21 +63,32 @@ publishable key.
 - Password reset (needs `accounts.manage`, only for users below you): "Users" page lists accounts (name, role,
   characters) with "Reset password". It shows a temporary password once and sets `users.mustChangePassword`.
 - While `mustChangePassword` is set, the API refuses every route except /auth/me and POST /api/auth/password;
-  the site sends the user to /account/password (new password + confirm, `autocomplete="new-password"`).
-  The same page lets anyone change their own password.
+  the site shows only the change-password form (current/temporary password + new + repeat).
+  The account page (/account, your name in the top bar) lets anyone change their own password.
+- Changing a password needs the current one (checked with Supabase) and a different new one; 5 tries / 15 min.
 
 ## 3. Telegram link
 - Sign-up refuses a nickname any User already has (no look-alikes of Telegram-only players). Signing up through the
   bot's link must let that Telegram user take their own existing name.
-- One signed token (HMAC with a server secret, contains the id + expiry 15 min, no table), both directions:
-  - bot -> site: `/start` replies with `/signup?link=<token>`; signing up or signing in with it attaches the
-    Telegram identity to the account;
-  - site -> bot: Profile "Link Telegram" opens `t.me/<bot>?start=link_<token>`; the bot attaches it.
+- One signed token, no table: [kind][id][expiry 15 min] + HMAC, 50 chars (fits Telegram's 64-char start
+  parameter). Key derived from SUPABASE_SECRET_KEY. Both directions:
+  - bot -> site: `/start` replies with `<SITE_URL>/link?t=<token>` (15 min); sign-up from it links the new account;
+    after sign-in the account page asks to confirm (never automatic: a crafted link can't swap your Telegram);
+  - site -> bot: account page "Link Telegram" makes `t.me/<bot>?start=l<token>` on the click (5 min); the bot links it.
+- A link never replaces another: an account with a Telegram, or a Telegram owned by another account, is refused;
+  unlink first (account page). Links are logged.
 - The bot's old registration flow (name, realm, class, spec) is removed: characters are added in the site.
-  The bot keeps `/start`, event answers and the LATE / TENTATIVE follow-up.
+  Event buttons only read (never create users or rename an account); unlinked Telegram -> "link first".
 - No merge of old bot users: dev data is test data, prod has none.
+- Needs SITE_URL on the API project.
 
-## 4. Profile
+## 4. Profile and characters
+- Username (login, private) and nickname (what the guild calls you) are separate: `users.nickname`, set on the
+  profile, editable by officers. Characters inherit it in roster and attendance (Character.nickname goes away;
+  the CSV import's Nickname column sets the account's nickname when the character has an owner).
+- Two ways a character gets an owner, both needed:
+  - the player, on /profile: claim a free roster name, or add a new character (below);
+  - an officer (roster.manage), on the Roster or Users page: assign a character to an account (or release it).
 - /profile: my characters, my linked channels, my next events and my answer (read-only; answers stay in the bot).
 - Add a character: autocomplete while typing. Our API searches the guild members first (raiderIoGuild),
   then Raider.IO search (`raider.io/api/search?term=`), filtered to EU characters: name, realm and class come
@@ -98,12 +109,17 @@ publishable key.
 - Same chat_drafts follow-up as today's late question (one draft kind for all answers), stored in
   `Response.note` (max 200 chars). Changing the answer clears the note. The board shows it next to the name.
 
+## UI polish (user feedback 2026-10-23)
+- Password fields show the rules as a checklist that ticks while typing (sign-up and change password).
+- Users table: aligned columns, nicer look.
+
 ## Order (each: tests first, review agents, commit)
 1. [x] roles table + migration + capabilities from the code + rules + API (+ script creates only Owners)
 2. [x] signup API + password policy + /signup and /login (Chrome-friendly), /characters closed to Raiders
-3. [x] Users page: role assignment + password reset + mustChangePassword + /account/password
-4. Telegram link token (both directions) + removal of the bot registration flow
-5. /profile + Raider.IO autocomplete + claim
+3. [x] Users page: role assignment + password reset + mustChangePassword + account page
+4. [x] Telegram link token (both directions) + removal of the bot registration flow
+4b. password checklist + Users table polish
+5. nickname on the account + /profile (claim, add with Raider.IO autocomplete) + officer assigns characters
 6. roster approval + answers only for approved characters
 7. notes on every answer
 8. Roles page (Owner)

@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { prisma } from '../config/db.js';
-import { UserRepository } from '../repositories/user.repository.js';
 import { EventIdSchema } from '../validators/event.validator.js';
 import { NotFoundError } from '../lib/errors.js';
 import { expectLateMinutes } from './late.service.js';
@@ -20,12 +19,11 @@ export type CallbackQuery = z.infer<typeof CallbackQuerySchema>;
 const STATUS_BY_ACTION = { in: 'IN', out: 'OUT', tent: 'TENTATIVE', late: 'LATE' } as const;
 const CALLBACK_DATA = /^raid_(in|out|tent|late)_(.+)$/;
 
-const userRepo = new UserRepository();
 const responseService = new ResponseService();
 
 export interface CallbackResult {
   text: string;
-  /** True when the user must register before answering. */
+  /** True when the user must link Telegram (or add a character) before answering: the bot sends the way. */
   register?: true;
   /** A follow-up to send privately to the user (e.g. asking for the minutes of delay). */
   dm?: string;
@@ -37,11 +35,15 @@ export async function handleCallbackQuery(query: CallbackQuery): Promise<Callbac
   const eventId = EventIdSchema.safeParse(match?.[2]);
   if (!match || !eventId.success) return { text: 'Invalid action' };
 
-  const platformUserId = String(query.from.id);
-  const user = await userRepo.upsertFromIdentity('telegram', platformUserId, query.from.username ?? query.from.first_name ?? platformUserId);
+  // Read only: a button press must never create users or rename an account after its Telegram name.
+  const identity = await prisma.identity.findUnique({
+    where: { platform_platformUserId: { platform: 'telegram', platformUserId: String(query.from.id) } },
+    select: { userId: true },
+  });
+  if (!identity) return { text: 'Link your Telegram to your guild account first.', register: true };
 
-  const character = await prisma.character.findFirst({ where: { userId: user.id, isMain: true } });
-  if (!character) return { text: 'Register your main character with the bot first.', register: true };
+  const character = await prisma.character.findFirst({ where: { userId: identity.userId, isMain: true } });
+  if (!character) return { text: 'Add your main character on the guild site first.', register: true };
 
   const status = STATUS_BY_ACTION[match[1] as keyof typeof STATUS_BY_ACTION];
   try {

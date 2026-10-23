@@ -6,10 +6,11 @@ import { useState, type FormEvent } from 'react';
 import { ApiError, signupRequest } from '../api';
 import { nicknameToEmail, type AuthClient } from '../auth';
 import { MIN_LENGTH, passwordProblem } from '../password';
+import { forgetLinkToken, pendingLinkToken } from '../telegramLink';
 
 const WRONG_NICKNAME = 'Nicknames are 3 to 24 characters: letters, numbers, dot, dash or underscore.';
 
-type Signup = (username: string, password: string) => Promise<unknown>;
+type Signup = (username: string, password: string, link?: string) => Promise<unknown>;
 
 // A real <form method="post"> with username + new-password fields, then a page change on success:
 // that is what makes Chrome offer to save the credentials. The submit itself is handled in JS.
@@ -31,10 +32,14 @@ export function Signup({ auth, signup = signupRequest }: { auth: AuthClient; sig
 
     setError(null);
     setBusy(true);
+    const link = pendingLinkToken() ?? undefined;
     try {
-      await signup(name, password);
+      await signup(name, password, link);
+      forgetLinkToken(); // the server linked it with the account
     } catch (failure) {
       setBusy(false);
+      // An expired or refused bot link: drop it, so the next try is a plain sign-up.
+      if (link && failure instanceof ApiError && /Telegram/.test(failure.message)) forgetLinkToken();
       return setError(failure instanceof ApiError ? failure.message : 'Could not create the account. Try again.');
     }
     const signedIn = await auth.signInWithPassword({ email, password }).then(({ error: e }) => !e, () => false);

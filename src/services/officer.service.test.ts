@@ -147,6 +147,29 @@ describe('OfficerService.signup', () => {
     expect(admin.createUser).not.toHaveBeenCalled();
   });
 
+  test('signing up from the bot link attaches that Telegram, and may take the name that Telegram user already had', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(null);
+    prismaMock.user.create.mockResolvedValue({ id: 'new-user' });
+
+    await service.signup('brannock', 'Correct-horse1', '42');
+
+    expect(prismaMock.user.findFirst).toHaveBeenCalledWith({
+      where: { username: 'brannock', NOT: { identities: { some: { platform: 'telegram', platformUserId: '42' } } } },
+      select: { id: true },
+    });
+    expect(prismaMock.identity.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: { platform: 'telegram', platformUserId: '42', userId: 'new-user' },
+    }));
+  });
+
+  test('a bot link for a Telegram that another account already has is refused before creating anything', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(null);
+    prismaMock.identity.findFirst.mockResolvedValueOnce({ id: 'their-telegram' });
+
+    await expect(service.signup('brannock', 'Correct-horse1', '42')).rejects.toThrow(/another account/);
+    expect(admin.createUser).not.toHaveBeenCalled();
+  });
+
   test('a taken nickname is a conflict', async () => {
     prismaMock.identity.findFirst.mockResolvedValue({ platformUserId: AUTH_ID });
     await expect(service.signup('ulfgaar', 'Correct-horse1')).rejects.toBeInstanceOf(ConflictError);

@@ -108,7 +108,24 @@ describe('account pages', () => {
     await userEvent.click(await screen.findByRole('link', { name: 'cid' }));
 
     expect(await screen.findByRole('heading', { name: 'Change password' })).toBeInTheDocument();
-    expect(currentPath()).toBe('/account/password');
+    expect(currentPath()).toBe('/account');
+  });
+
+  test("the bot's link (/link?t=...) is kept through sign-in and waits for a confirmation on the account page", async () => {
+    window.history.replaceState({}, '', '/link?t=BOTTOKEN');
+    navigate('/link');
+    const injected = api();
+    render(<App auth={fakeAuth(null)} api={injected}><Routed /></App>);
+
+    await userEvent.type(await screen.findByLabelText('Nickname'), 'cid');
+    await userEvent.type(screen.getByLabelText('Password'), 'pw{enter}');
+    navigate('/account'); // what app/link/page.tsx does once signed in
+
+    expect(await screen.findByText(/link from the Telegram bot is waiting/i)).toBeInTheDocument();
+    expect(injected.linkTelegram).not.toHaveBeenCalled(); // never automatic: a crafted link must not swap your Telegram
+    await userEvent.click(screen.getByRole('button', { name: 'Link it' }));
+    expect(injected.linkTelegram).toHaveBeenCalledWith('BOTTOKEN');
+    window.history.replaceState({}, '', '/');
   });
 
   test('accounts.manage shows the Users page in the menu', async () => {

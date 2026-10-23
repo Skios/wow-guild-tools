@@ -32,11 +32,11 @@ async function errorFrom(response: Response): Promise<ApiError> {
 }
 
 /** Open sign-up (no login): POST /api/signup. Throws an ApiError with the server's reason. */
-export async function signupRequest(username: string, password: string, fetchImpl: typeof fetch = fetch): Promise<void> {
+export async function signupRequest(username: string, password: string, link?: string, fetchImpl: typeof fetch = fetch): Promise<void> {
   let response: Response;
   try {
     response = await fetchImpl(`${BASE}/signup`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username, password }),
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username, password, ...(link && { link }) }),
     });
   } catch {
     throw new ApiError('Cannot reach the server. Try again in a moment.', 0);
@@ -112,6 +112,10 @@ export function createApi({ fetchImpl = fetch, getToken = async () => null, onUn
     listRoles: () => request<SiteRoleSummary[]>('/roles'),
     setUserRole: (userId: string, roleId: string) => request<void>(`/users/${id(userId)}/role`, send('PUT', { roleId })),
     resetUserPassword: (userId: string) => request<{ password: string }>(`/users/${id(userId)}/password-reset`, send('POST')),
+    telegramStatus: () => request<{ linked: boolean }>('/me/telegram'),
+    telegramBotLink: () => request<{ url: string }>('/me/telegram/bot-link', send('POST')),
+    linkTelegram: (token: string) => request<void>('/me/telegram', send('POST', { token })),
+    unlinkTelegram: () => request<void>('/me/telegram', send('DELETE')),
     changePassword: (currentPassword: string, password: string) =>
       request<void>('/auth/password', send('POST', { currentPassword, password })),
   };

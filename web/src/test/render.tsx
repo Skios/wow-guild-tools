@@ -61,6 +61,10 @@ export function fakeApi(overrides: Overrides = {}): Api {
     setUserRole: vi.fn().mockResolvedValue(undefined),
     resetUserPassword: vi.fn().mockResolvedValue({ password: 'Temp-password-123' }),
     changePassword: vi.fn().mockResolvedValue(undefined),
+    telegramStatus: vi.fn().mockResolvedValue({ linked: false }),
+    telegramBotLink: vi.fn().mockResolvedValue({ url: 'https://t.me/guild_bot?start=lTOKEN' }),
+    linkTelegram: vi.fn().mockResolvedValue(undefined),
+    unlinkTelegram: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as Api;
 }

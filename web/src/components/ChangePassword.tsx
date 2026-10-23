@@ -44,7 +44,7 @@ export function ChangePassword({ auth, username, forced, onDone }: {
     <section className="card stack">
       <h1>Change password</h1>
       {forced && <p>You signed in with a temporary password. Choose your own to continue.</p>}
-      <form className="stack" method="post" action="/account/password" onSubmit={submit} noValidate>
+      <form className="stack" method="post" action="/account" onSubmit={submit} noValidate>
         <p className="muted">At least {MIN_LENGTH} characters, with 3 of lowercase, uppercase, digits, symbols; not your nickname.</p>
         <div>
           <label htmlFor="cp-username">Nickname</label>

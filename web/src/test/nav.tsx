@@ -12,6 +12,6 @@ export function Routed(): ReactNode {
   const p = useTestPath();
   if (p.startsWith('/roster')) return <RosterPage />;
   if (p.startsWith('/users')) return <UsersPage />;
-  if (p.startsWith('/account')) return null;
+  if (p.startsWith('/account') || p.startsWith('/link')) return null;
   return p.startsWith('/events/') ? <EventPage /> : <EventsPage />;
 }

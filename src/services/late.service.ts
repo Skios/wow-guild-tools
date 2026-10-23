@@ -1,6 +1,6 @@
 import { NotFoundError } from '../lib/errors.js';
 import { draftStore } from '../repositories/draft.repository.js';
-import type { Reply } from './registration.service.js';
+import type { Reply } from './link.service.js';
 import { EventLockedError, ResponseService } from './response.service.js';
 
 export const MAX_LATE_MINUTES = 720;

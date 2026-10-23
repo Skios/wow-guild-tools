@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 
 describe('late follow-up', () => {
-  test('ignores people who were not asked for minutes, so registration can handle them', async () => {
+  test('ignores people who were not asked for minutes, so other handlers can answer them', async () => {
     expect(await say(player(), '15')).toBeNull();
     expect(prismaMock.response.upsert).not.toHaveBeenCalled();
   });
@@ -63,7 +63,7 @@ describe('late follow-up', () => {
     expect(await say(me, '20')).toBeNull();
   });
 
-  test('a command abandons the question and is left for the registration flow', async () => {
+  test('a command abandons the question and is left for the other handlers', async () => {
     const me = player();
     expectLateMinutes(me.id, 'e1', 'c1');
 

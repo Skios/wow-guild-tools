@@ -4,8 +4,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 const handle = vi.hoisted(() => vi.fn());
 const answer = vi.hoisted(() => vi.fn());
 const send = vi.hoisted(() => vi.fn());
-const regMessage = vi.hoisted(() => vi.fn());
-const regCallback = vi.hoisted(() => vi.fn());
+const start = vi.hoisted(() => vi.fn());
 const botUsername = vi.hoisted(() => vi.fn());
 const lateMessage = vi.hoisted(() => vi.fn());
 vi.mock('../services/telegram-callback.service.js', async (orig) => ({
@@ -13,10 +12,7 @@ vi.mock('../services/telegram-callback.service.js', async (orig) => ({
   handleCallbackQuery: handle,
 }));
 vi.mock('../services/late.service.js', () => ({ handleLateMessage: lateMessage }));
-vi.mock('../services/registration.service.js', () => ({
-  handleRegistrationMessage: regMessage,
-  handleRegistrationCallback: regCallback,
-}));
+vi.mock('../services/link.service.js', () => ({ handleStart: start, linkConfig: () => ({ key: null, siteUrl: undefined }) }));
 vi.mock('../integrations/telegram/telegram.client.js', () => ({
   TelegramClient: class {
     answerCallback = answer;
@@ -84,7 +80,7 @@ describe('POST /webhooks/telegram', () => {
     expect(handle).not.toHaveBeenCalled();
   });
 
-  test('opens the bot registration chat for users without a character', async () => {
+  test('opens the bot chat (which sends the site link) for users who are not linked yet', async () => {
     handle.mockResolvedValue({ text: 'Register first', register: true });
 
     await (await app()).inject({
@@ -95,8 +91,30 @@ describe('POST /webhooks/telegram', () => {
     expect(answer).toHaveBeenCalledWith('q1', 'Register first', 'https://t.me/guild_bot?start=register');
   });
 
-  test('routes registration buttons to the registration flow and replies in private', async () => {
-    regCallback.mockResolvedValue({ text: 'Pick a role' });
+  test('/start (with its deep-link payload) goes to the linking flow', async () => {
+    start.mockResolvedValue({ text: 'Open this link' });
+    const payload = { update_id: 4, message: { chat: { id: 42, type: 'private' }, from: { id: 42 }, text: '/start lABC' } };
+
+    await (await app()).inject({
+      method: 'POST', url: '/webhooks/telegram', payload,
+      headers: { 'x-telegram-bot-api-secret-token': 's3cret_token_value' },
+    });
+
+    expect(start).toHaveBeenCalledWith({ id: 42 }, 'lABC', { key: null, siteUrl: undefined });
+    expect(send).toHaveBeenCalledWith('42', 'Open this link', expect.anything());
+  });
+
+  test.each([['/start', ''], ['/start@guild_bot lXYZ', 'lXYZ'], ['/start register', 'register']])('%j reaches the linking flow with payload %j', async (text, payload) => {
+    start.mockResolvedValue({ text: 'ok' });
+    await (await app()).inject({
+      method: 'POST', url: '/webhooks/telegram',
+      payload: { update_id: 9, message: { chat: { id: 42, type: 'private' }, from: { id: 42 }, text } },
+      headers: { 'x-telegram-bot-api-secret-token': 's3cret_token_value' },
+    });
+    expect(start).toHaveBeenCalledWith({ id: 42 }, payload, expect.anything());
+  });
+
+  test('old registration buttons get a pointer to /start, not an error', async () => {
     const payload = { update_id: 3, callback_query: { id: 'q2', data: 'reg_class_SHAMAN', from: { id: 42 } } };
 
     await (await app()).inject({
@@ -105,19 +123,7 @@ describe('POST /webhooks/telegram', () => {
     });
 
     expect(handle).not.toHaveBeenCalled();
-    expect(send).toHaveBeenCalledWith('42', 'Pick a role', expect.anything());
-  });
-
-  test('routes private text messages to the registration flow', async () => {
-    regMessage.mockResolvedValue({ text: 'Send your name' });
-    const payload = { update_id: 4, message: { chat: { id: 42, type: 'private' }, from: { id: 42 }, text: '/start register' } };
-
-    await (await app()).inject({
-      method: 'POST', url: '/webhooks/telegram', payload,
-      headers: { 'x-telegram-bot-api-secret-token': 's3cret_token_value' },
-    });
-
-    expect(send).toHaveBeenCalledWith('42', 'Send your name', expect.anything());
+    expect(answer).toHaveBeenCalledWith('q2', expect.stringMatching(/start/i));
   });
 
   test('ignores messages from group chats', async () => {
@@ -128,11 +134,11 @@ describe('POST /webhooks/telegram', () => {
       headers: { 'x-telegram-bot-api-secret-token': 's3cret_token_value' },
     });
 
-    expect(regMessage).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
   });
 
   test('still answers 200 when Telegram rejects our reply, so Telegram does not retry forever', async () => {
-    regMessage.mockResolvedValue({ text: 'Send your name' });
+    start.mockResolvedValue({ text: 'Open this link' });
     send.mockRejectedValue(new Error('403 bot was blocked by the user'));
     const payload = { update_id: 6, message: { chat: { id: 42, type: 'private' }, from: { id: 42 }, text: '/start' } };
 
@@ -157,7 +163,7 @@ describe('POST /webhooks/telegram', () => {
     expect(answer).toHaveBeenCalledWith('q1', 'Register first', undefined);
   });
 
-  test('a private message that answers the late question never reaches registration', async () => {
+  test('a private message that answers the late question is not treated as anything else', async () => {
     lateMessage.mockResolvedValue({ text: 'Noted: late by 15 min.' });
     const payload = { update_id: 7, message: { chat: { id: 42, type: 'private' }, from: { id: 42 }, text: '15' } };
 
@@ -167,11 +173,10 @@ describe('POST /webhooks/telegram', () => {
     });
 
     expect(send).toHaveBeenCalledWith('42', 'Noted: late by 15 min.', {});
-    expect(regMessage).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
   });
 
-  test('any other private message goes to registration', async () => {
-    regMessage.mockResolvedValue({ text: 'Send /start' });
+  test('any other private message gets the help text', async () => {
     const payload = { update_id: 8, message: { chat: { id: 42, type: 'private' }, from: { id: 42 }, text: 'hello' } };
 
     await (await app()).inject({
@@ -180,7 +185,8 @@ describe('POST /webhooks/telegram', () => {
     });
 
     expect(lateMessage).toHaveBeenCalledWith({ from: { id: 42 }, text: 'hello' });
-    expect(regMessage).toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith('42', expect.stringMatching(/\/start/), expect.anything());
   });
 
   test('a LATE press answers the button and asks for the minutes privately', async () => {

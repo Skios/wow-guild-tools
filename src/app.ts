@@ -4,6 +4,9 @@ import { adminRoutes } from './controllers/admin.controller.js';
 import { eventRoutes } from './controllers/event.controller.js';
 import { groupRoutes } from './controllers/group.controller.js';
 import { accountRoutes } from './controllers/account.controller.js';
+import { linkRoutes } from './controllers/link.controller.js';
+import { TelegramClient } from './integrations/telegram/telegram.client.js';
+import { linkConfig } from './services/link.service.js';
 import { signupRoutes } from './controllers/signup.controller.js';
 import { roleRoutes } from './controllers/role.controller.js';
 import { profileRoutes } from './controllers/profile.controller.js';
@@ -60,6 +63,8 @@ export async function buildApp(options: { logger?: FastifyServerOptions['logger'
       await site.register(adminRoutes); // who am I, game data: any site user
       await site.register(roleRoutes); // each route checks Owner / accounts.manage itself
       await site.register(accountRoutes(accounts)); // Users page (accounts.manage) and your own password
+      const bot = new TelegramClient();
+      await site.register(linkRoutes({ config: linkConfig, botUsername: () => bot.getBotUsername() })); // your Telegram link
       await guarded('events.manage', eventRoutes);
       await guarded('roster.manage', rosterRoutes);
       await guarded('roster.manage', profileRoutes);

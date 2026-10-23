@@ -3,6 +3,7 @@ import { prisma } from '../config/db.js';
 import { passwordProblem } from '../domain/password.js';
 import { AppError, ConflictError, NotFoundError } from '../lib/errors.js';
 import type { Officer } from '../plugins/auth.js';
+import { linkTelegram } from './link.service.js';
 
 // Officers sign in with a nickname and a password. Supabase Auth needs an email, so the nickname is
 // mapped to an address on the reserved .invalid domain: no real email (or person) is ever stored,
@@ -97,33 +98,44 @@ export class OfficerService {
     return { name, password };
   }
 
-  /** Open sign-up from the site: the player picks the password, the account gets the default role. */
-  async signup(rawName: unknown, rawPassword: unknown) {
+  /**
+   * Open sign-up from the site: the player picks the password, the account gets the default role.
+   * `telegramId` (from the bot's signed link) gets attached; that Telegram user may reuse their own name.
+   */
+  async signup(rawName: unknown, rawPassword: unknown, telegramId?: string) {
     const name = parseOfficerName(rawName);
     if (typeof rawPassword !== 'string') throw new AppError('Password: required', 400);
     if (RESERVED.has(name)) throw new AppError('That nickname is reserved', 400);
     const problem = passwordProblem(rawPassword, name);
     if (problem) throw new AppError(problem, 400);
     // Any player, not only accounts: a Telegram-only "brannock" must not get a look-alike account.
-    if (await prisma.user.findFirst({ where: { username: name }, select: { id: true } })) {
+    const others = telegramId ? { NOT: { identities: { some: { platform: 'telegram', platformUserId: telegramId } } } } : {};
+    if (await prisma.user.findFirst({ where: { username: name, ...others }, select: { id: true } })) {
       throw new ConflictError('That nickname is already taken');
     }
+    // Checked before creating anything, so a refused link never leaves an account behind.
+    if (telegramId && await prisma.identity.findFirst({
+      where: { platform: 'telegram', platformUserId: telegramId, user: { identities: { some: { platform: 'supabase' } } } },
+      select: { id: true },
+    })) throw new ConflictError('This Telegram is linked to another account.');
     const recent = await prisma.identity.count({ where: { platform: 'supabase', createdAt: { gte: new Date(Date.now() - HOUR_MS) } } });
     if (recent >= SIGNUPS_PER_HOUR_TOTAL) throw new AppError('Too many new accounts right now. Try again in an hour.', 429);
-    await this.createAccount(name, rawPassword, { isDefault: true });
+    const userId = await this.createAccount(name, rawPassword, { isDefault: true });
+    if (telegramId) await linkTelegram(userId, telegramId);
     return { name };
   }
 
-  private async createAccount(name: string, password: string, role: { isOwner: true } | { isDefault: true }) {
+  private async createAccount(name: string, password: string, role: { isOwner: true } | { isDefault: true }): Promise<string> {
     const found = await prisma.role.findFirst({ where: role, select: { id: true } });
     if (!found) throw new Error('Base roles missing in this database: apply the migrations first');
     if (await this.findLogin(name)) throw new ConflictError('That nickname is already taken');
 
     const authId = await this.admin.createUser(officerEmail(name), password);
     try {
-      await prisma.user.create({
+      const user = await prisma.user.create({
         data: { username: name, roleId: found.id, identities: { create: { platform: 'supabase', platformUserId: authId } } },
       });
+      return user.id;
     } catch (error) {
       // A login without an account row would be a dead account. If even the clean-up fails, the
       // original error matters more; the orphan login only blocks this name until removed by hand.

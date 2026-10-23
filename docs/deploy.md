@@ -44,6 +44,7 @@ the custom branch **`develop`** (not "All Preview branches"). Mark secrets as Se
   | `SUPABASE_URL` | `https://<ref>.supabase.co` |
   | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID`, `TELEGRAM_WEBHOOK_SECRET` | that environment's bot |
   | `TRUST_PROXY` | `true` |
+  | `SITE_URL` | the site of the same environment, e.g. `https://wgt-web-git-develop-<you>.vercel.app` (the bot links to it) |
   | `SUPABASE_SECRET_KEY` | that project's secret key, marked **Sensitive** (sign-up, password resets). Without it sign-up answers 503 |
 
   The old `VITE_SUPABASE_*` variables are no longer used here: delete them.

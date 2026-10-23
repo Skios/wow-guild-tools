@@ -81,11 +81,12 @@ failing tests -> minimal code -> ecc:code-reviewer + ecc:security-reviewer -> fi
 - [ ] Supabase dev: Site URL = https://wgt-web-git-develop-acme-c35a.vercel.app
 - [ ] Verify the API sees the real client IP through the site's rewrite (rate limiting).
 
-## Next: accounts, characters, contact channels (proposed 2026-10-23, waiting for go)
-See .claude/plans/accounts.plan.md.
+## In progress: accounts, characters, contact channels (2026-10-23)
+See .claude/plans/accounts.plan.md (steps 1-4 done: roles, sign-up, Users page + password resets, Telegram link).
 
 ## Parked
-- Telegram on dev: webhook should now reach the API (protection off); re-test /start after the accounts work.
+- Telegram on dev: webhook should now reach the API (protection off); re-test /start now that it sends the
+  site link (needs SITE_URL on the API project).
 
 ## Later
 - Prod environment: wgt-prod Supabase settings, Production env vars in both Vercel projects, prod bot, prod hooks.

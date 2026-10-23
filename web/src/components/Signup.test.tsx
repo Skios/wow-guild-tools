@@ -41,7 +41,7 @@ describe('Signup', () => {
     const f = setup();
     await fill(f, ' Ulfgaar ', 'Correct-horse1');
 
-    expect(f.signup).toHaveBeenCalledWith('ulfgaar', 'Correct-horse1');
+    expect(f.signup).toHaveBeenCalledWith('ulfgaar', 'Correct-horse1', undefined);
     expect(f.auth.mocks.signInWithPassword).toHaveBeenCalledWith({ email: 'ulfgaar@wgt.invalid', password: 'Correct-horse1' });
     expect(currentPath()).toBe('/events');
   });
@@ -76,6 +76,27 @@ describe('Signup', () => {
     await fill(f, 'ulfgaar', 'Correct-horse1');
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/account was created.*sign in/i);
+  });
+
+  test("opened from the bot's link, the account gets that Telegram, and the link is used up", async () => {
+    sessionStorage.setItem('wgt-telegram-link', 'BOTTOKEN');
+    const f = setup();
+    await fill(f, 'ulfgaar', 'Correct-horse1');
+
+    expect(f.signup).toHaveBeenCalledWith('ulfgaar', 'Correct-horse1', 'BOTTOKEN');
+    expect(sessionStorage.getItem('wgt-telegram-link')).toBeNull();
+  });
+
+  test('an expired bot link is dropped, so the next try signs up without it', async () => {
+    sessionStorage.setItem('wgt-telegram-link', 'OLDTOKEN');
+    const signup = vi.fn().mockRejectedValueOnce(new ApiError('This Telegram link has expired: send /start to the bot again.', 400)).mockResolvedValue({});
+    const f = setup(signup);
+    await fill(f, 'ulfgaar', 'Correct-horse1');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/expired/);
+    expect(sessionStorage.getItem('wgt-telegram-link')).toBeNull();
+    await userEvent.click(f.submit);
+    expect(signup).toHaveBeenLastCalledWith('ulfgaar', 'Correct-horse1', undefined);
   });
 
   test('links back to sign-in', () => {

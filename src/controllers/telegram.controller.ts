@@ -4,7 +4,7 @@ import { telegramConfig } from '../config/telegram.js';
 import { TelegramClient } from '../integrations/telegram/telegram.client.js';
 import { safeEqual } from '../lib/safe-equal.js';
 import { handleLateMessage } from '../services/late.service.js';
-import { handleRegistrationCallback, handleRegistrationMessage, type Reply } from '../services/registration.service.js';
+import { handleStart, linkConfig, type Reply } from '../services/link.service.js';
 import { CallbackQuerySchema, handleCallbackQuery } from '../services/telegram-callback.service.js';
 
 const SenderSchema = z.object({
@@ -22,6 +22,9 @@ const UpdateSchema = z.object({
   }).optional(),
 });
 
+const HELP = 'Send /start to link this Telegram to your guild account. Raid invites arrive in the channel.';
+const OLD_BUTTON = 'Registration moved to the guild site: send /start to get the link.';
+
 export async function telegramRoutes(fastify: FastifyInstance) {
   const client = new TelegramClient();
 
@@ -32,7 +35,7 @@ export async function telegramRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Registration happens in the private chat with the bot, which also lets the bot DM the user later.
+  // Linking starts in the private chat with the bot (/start), which also lets the bot DM the user later.
   // Not rate limited: Telegram calls from a handful of addresses, and the secret already gates it.
   fastify.post('/webhooks/telegram', { config: { rateLimit: false } }, async (request, response) => {
     // Telegram retries on non-2xx, so a failed send (e.g. user blocked the bot) is logged, not thrown.
@@ -45,12 +48,15 @@ export async function telegramRoutes(fastify: FastifyInstance) {
     const { callback_query: query, message } = update.data;
 
     if (message?.text && message.chat.type === 'private') {
-      // A player who just pressed LATE is answering "how many minutes?"; everything else is registration.
-      const late = await handleLateMessage({ from: message.from, text: message.text });
-      await reply(message.chat.id, late ?? await handleRegistrationMessage({ from: message.from, text: message.text }));
+      // A player who just pressed LATE is answering "how many minutes?"; /start links accounts.
+      const text = message.text.trim();
+      const late = await handleLateMessage({ from: message.from, text });
+      const start = /^\/start(?:@\w+)?(?:\s+(\S+))?$/.exec(text);
+      await reply(message.chat.id, late
+        ?? (start ? await handleStart(message.from, start[1] ?? '', linkConfig()) : { text: HELP }));
     } else if (query?.data.startsWith('reg_')) {
-      await reply(query.from.id, await handleRegistrationCallback(query));
-      await client.answerCallback(query.id, '').catch(err => request.log.warn({ err }, 'answerCallbackQuery failed'));
+      // Buttons of the old in-bot registration, still visible in old chats.
+      await client.answerCallback(query.id, OLD_BUTTON).catch(err => request.log.warn({ err }, 'answerCallbackQuery failed'));
     } else if (query) {
       const result = await handleCallbackQuery(query);
       // Without the username we still answer; the user just doesn't get the auto-open link.

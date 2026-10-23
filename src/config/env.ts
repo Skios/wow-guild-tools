@@ -12,6 +12,8 @@ const EnvSchema = z.object({
   // Supabase admin API key: sign-up and password resets. API only (Vercel: Sensitive), never the site.
   // Without it the API runs, and sign-up answers 503.
   SUPABASE_SECRET_KEY: z.string().min(1).optional(),
+  // The site's address (e.g. https://wgt-web-....vercel.app): the bot links to it for sign-up and linking.
+  SITE_URL: z.url({ protocol: /^https?$/ }).refine(isSecureOrLocal, 'must be https (http only for localhost)').optional(),
   HOST: z.string().min(1).default('0.0.0.0'),
   // Only behind a proxy that overwrites X-Forwarded-For (e.g. Fly); otherwise clients could spoof their IP.
   TRUST_PROXY: z.enum(['true', 'false']).transform(v => v === 'true').optional(),

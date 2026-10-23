@@ -3,7 +3,7 @@
 Raid coordination for a WoW guild: a Telegram bot, a Fastify API and an admin site for officers.
 
 - Officers keep **one standing raid roster** in the admin site (name, realm, class, spec). Names can be unclaimed.
-- Players press **/start** in the bot and pick a free roster name (or register a new character).
+- Players create an account on the site (or from the bot: **/start** sends a link) and link their Telegram.
 - Every event invites the whole roster. The event board splits answers like a Raid-Helper embed:
   accepted by role (Tank / Healer / Melee / Ranged), Late (with arrival time), Bench, Tentative, Out, and **No answer**.
 - From the board officers can message people who haven't answered (and tentative ones), with a default or custom text.
@@ -65,6 +65,14 @@ the API (never in the site). The Owner is bootstrapped with a script:
 Every route needs `Authorization: Bearer <Supabase access token>` of a user with a role, and the capability
 its route group asks for. The role is read on every request, so a revoke or demotion takes effect immediately.
 
+## Telegram link
+`/start` in the bot replies with a site link (`<SITE_URL>/link?t=...`, valid 15 minutes). Signing up from it creates
+the account already linked; signing in keeps the link, and the account page asks to confirm it (never automatic, so
+a link someone else made can't swap your Telegram). From the site, the account page's **Link Telegram** opens the
+bot with a link made on the click (valid 5 minutes). A link never replaces another one: unlink first (account page).
+The links are signed (key derived from `SUPABASE_SECRET_KEY`), so there is nothing to store. Event buttons only work
+for a linked Telegram whose account has a main character.
+
 ## Telegram (local)
 Telegram needs a public HTTPS URL for the webhook. Expose the port with a tunnel
 (`cloudflared tunnel --url http://localhost:3000`), then register it once:
@@ -72,13 +80,14 @@ Telegram needs a public HTTPS URL for the webhook. Expose the port with a tunnel
 
 The webhook is checked with `TELEGRAM_WEBHOOK_SECRET` (header `x-telegram-bot-api-secret-token`).
 Players answer with the IN / LATE / TENTATIVE / OUT buttons; LATE asks for the minutes in a private chat.
+Set `SITE_URL` (the site's address) so `/start` can send the sign-up link.
 
 ## API
 Every route is under `/api` (the same domain serves the admin site on Vercel). Main routes: `GET/POST /roster`, `PUT/DELETE /roster/:id`, `POST /roster/:id/release`,
 `GET/POST /events`, `GET /events/:id`, `PATCH /events/:id/roster`, `POST /events/:id/publish`,
 `POST /events/:id/message`, `GET /meta/wow`, `GET /auth/me`, `GET/POST /roles`, `PUT/DELETE /roles/:id`,
 `GET /roles/capabilities`, `PUT /users/:id/role`, `GET /users`, `POST /users/:id/password-reset`,
-`POST /auth/password`, `POST /signup` (no login), `POST /webhooks/telegram` (own secret).
+`POST /auth/password`, `GET/POST/DELETE /me/telegram`, `POST /me/telegram/bot-link`, `POST /signup` (no login), `POST /webhooks/telegram` (own secret).
 
 ## Deploy (Vercel + Supabase, free tiers)
 Two Vercel projects, each with Production (`main`) and Preview `develop` (the dev environment):
@@ -88,5 +97,6 @@ Two Vercel projects, each with Production (`main`) and Preview `develop` (the de
 The pipeline deploys only what a push changed (site, API + migrations, or both). Details: `docs/deploy.md`.
 
 ## Status
-Milestones 1–3 (core, bot, admin site) are in place; reminders/nudges (M4), account linking across
-platforms and a member-facing login are next. Hosting is undecided. See `.claude/prds` and `.claude/plans`.
+Milestones 1–3 (core, bot, admin site) are live on Vercel + Supabase (dev). Accounts are in progress: roles,
+sign-up, Users page and Telegram linking are done; profile and characters are next. Then reminders (M4).
+See `.claude/plans`.
