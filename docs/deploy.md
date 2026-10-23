@@ -49,8 +49,7 @@ the custom branch **`develop`** (not "All Preview branches"). Mark secrets as Se
 
 ### `wgt-web` (new)
 - Add New → Project → the same repository → **Root Directory `web`**, framework **Next.js**.
-- Settings → Git: the pipeline deploys it, so turn off automatic deployments from Git (Ignored Build Step:
-  "Don't build anything", or disconnect auto-deploys) and create the Deploy Hooks below.
+- `web/vercel.json` already turns off deploys on every push (the pipeline uses the Deploy Hooks) and sets region fra1.
 
   | Variable | Value |
   |---|---|
