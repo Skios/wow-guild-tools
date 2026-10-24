@@ -228,7 +228,9 @@ button.icon-button, .actions.compact button.icon-button { display: inline-grid; 
 :root[data-theme='parchment'] .character-name,
 :root[data-theme='daylight'] .character-name,
 :root[data-theme='parchment'] .class-select,
-:root[data-theme='daylight'] .class-select { background: var(--chip); padding: 0.05rem 0.45rem; border-radius: 6px; text-shadow: none; }
+:root[data-theme='daylight'] .class-select,
+:root[data-theme='parchment'] .class-select option,
+:root[data-theme='daylight'] .class-select option { background: var(--chip); padding: 0.05rem 0.45rem; border-radius: 6px; text-shadow: none; }
 
 .summary { list-style: none; display: flex; flex-wrap: wrap; gap: 0.35rem 1.25rem; padding: 0; margin: 0.75rem 0 0; align-items: center; }
 .summary li { display: inline-flex; align-items: center; gap: 0.35rem; }

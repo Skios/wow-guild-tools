@@ -22,6 +22,8 @@ Collected as reported; fixed in one pass later, not mixed into feature rounds.
 - [x] **Times in bot messages are the server's (2026-10-24).** Invite, reminder, cancel, "back on" and assignment
   texts use `toLocaleString()` on the server (UTC, no zone shown). One shared formatter with the guild's time zone
   (setting or env) and the zone in the text.
+- [x] **Home: the character menu didn't colour each character (2026-10-24).** Each option now has its class colour
+  (dark chip on light themes); the closed menu shows the picked one's.
 
 ## Polish (to do later, not now)
 - [x] **Roster: role distribution at the top (2026-10-24).** Count characters by main role (shield, sword, bow, cross),

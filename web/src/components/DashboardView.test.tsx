@@ -48,6 +48,9 @@ describe('my next events', () => {
 
     expect(yours).toHaveTextContent('InUlfgaar');
     expect(within(raid).getByLabelText('Answer with')).toHaveStyle({ color: 'rgb(199, 156, 110)' }); // warrior
+    // Each character in its own class colour.
+    expect(within(raid).getByRole('option', { name: 'Ulfgaar' })).toHaveStyle({ color: 'rgb(199, 156, 110)' });
+    expect(within(raid).getByRole('option', { name: 'Kerlink' })).toHaveStyle({ color: 'rgb(64, 199, 235)' }); // mage
   });
 
   test('LATE asks for the minutes and a note in a dialog', async () => {

@@ -111,7 +111,7 @@ function EventRow({ event, characters, busy, onAnswer }: {
                 if (status && status !== 'BENCH') void send({ status: status as QuickStatus }, e.target.value);
                 else setChoice(e.target.value);
               }}>
-                {characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {characters.map(c => <option key={c.id} value={c.id} style={{ color: colour(c.class) }}>{c.name}</option>)}
               </select>
             )}
             <div className="actions compact" role="group" aria-label={`Your answer for ${event.title}`}>
