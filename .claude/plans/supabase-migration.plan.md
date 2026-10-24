@@ -136,3 +136,20 @@ sections the caller may see (ponytail: one endpoint, not one per widget; no char
    published, players with approved characters but no Telegram linked.
 4. Officers - attendance: per player over the last 10 published events, IN / LATE / BENCH / OUT / no answer
    (bench included to track rotations). Computed in JS (about 60 players x 10 events), shown as a table.
+
+## Next: event states (user decisions 2026-10-24)
+States shown everywhere (events list, event page, dashboard). Stored: OPEN | CLOSED | CANCELED (`Event.status`
+replaces `isPublished`; published events become CLOSED). Derived from the clock: STARTED (start <= now < end) and
+ENDED (now >= end). CANCELED stays CANCELED. No cron: the API and the site compute it.
+1. Players answer only while OPEN and not started (bot, site, dashboard). Officers keep editing the board after
+   start and after publish.
+2. CLOSED = published. Officers can change the board and publish again: the channel gets an "updated roster" post.
+3. Cancel (OPEN or CLOSED, before the start): channel post "<title> on <date> is cancelled", a DM to everyone who
+   answered IN / LATE / TENTATIVE, unsent reminders stop. Un-cancel back to OPEN until it starts (reminders resume
+   only those still ahead).
+4. At publish, an informative DM to each confirmed player who plays a different character than the one they
+   answered with (an officer switched it) or an off-spec: "you're in with Ulfgaar (not Kerlink), as Protection".
+   Sent once per change: a later publish only DMs what changed since (stored per answer).
+Ponytail: started/ended derived, not stored; one status column, not booleans; reuse publish, messageCharacters'
+DM path and the reminder table (cancel = mark unsent ones used); "switched by an officer" = one nullable column on
+the answer (the character it was moved from), "already told" = one nullable text column.
