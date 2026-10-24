@@ -674,21 +674,21 @@ describe('nickname and off-specs on the board', () => {
   test("the player's note shows under the name", async () => {
     setup(eventDetail({ responses: [{ ...response('Tom', 'TANK', 'IN', true, 'WARRIOR'), note: 'leaving 30 min early' }], noAnswer: [] }));
     await ready();
-    expect(within(screen.getByText('Tom').closest('li')!).getByText('leaving 30 min early')).toHaveClass('person-note');
+    expect(within(region('Tank (1)').querySelector('li')!).getByText('leaving 30 min early')).toHaveClass('person-note');
   });
 
   test('with a nickname the username is not shown; without one it is', async () => {
     const tom = { ...response('Tom', 'TANK', 'IN', true, 'WARRIOR'), character: { ...response('Tom', 'TANK', 'IN').character, nickname: 'Tommy' } };
     setup(eventDetail({ responses: [tom, response('Zed', 'RANGED_DPS', 'IN', true)], noAnswer: [] }));
     await ready();
-    expect(within(screen.getByText('Tom').closest('li')!).queryByText(/@tom_player/)).not.toBeInTheDocument();
-    expect(within(screen.getByText('Zed').closest('li')!).getByText(/@zed_player/)).toBeInTheDocument();
+    expect(within(region('Tank (1)').querySelector('li')!).queryByText(/@tom_player/)).not.toBeInTheDocument();
+    expect(within(region('Ranged DPS (1)').querySelector('li')!).getByText(/@zed_player/)).toBeInTheDocument();
   });
 
   test('a player without them looks as before', async () => {
     setup(eventDetail({ responses: [response('Zed', 'RANGED_DPS', 'IN', true)], noAnswer: [] }));
     await ready();
-    expect(within(screen.getByText('Zed').closest('li')!).queryByText(/·/)).not.toBeInTheDocument();
+    expect(within(region('Ranged DPS (1)').querySelector('li')!).queryByText(/·/)).not.toBeInTheDocument();
   });
 
   test('the no-answer panel shows them too, and an unknown spec does not crash', async () => {
