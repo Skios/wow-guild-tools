@@ -118,3 +118,8 @@ profile and characters, roster approval + new season, notes on answers, Roles pa
    The summary shows each count with the target in brackets; on a gap, characters whose offspec fills it are
    highlighted.
 6. Then: a Dashboard (contents to agree).
+Ponytail review (2026-10-24): invites reuse InviteMacros on the board rows; publish dialog reuses PATCH roster +
+publish (no new route); character switch reuses moveResponse; spec override = nullable `Response.spec` sent in the
+bulk selections; target = zod-checked JSON (`Event.roleTarget`, guild default in a one-row `settings` table), all
+maths and offspec highlights as pure site functions; slider = native range + two number inputs; buttons = CSS fix +
+existing `.icon-button`.
