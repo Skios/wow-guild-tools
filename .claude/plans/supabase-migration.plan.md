@@ -97,7 +97,7 @@ profile and characters, roster approval + new season, notes on answers, Roles pa
   Postgres and only when one is due calls POST /api/reminders/run via pg_net (secrets in Vault). Defaults 1 day and
   8 h; event page edits them. [ ] Per environment: REMINDERS_SECRET on the API project + the two Vault secrets.
 - [x] In-game invite macros (2026-10-24), on the event page for confirmed IN/LATE characters.
-- Homepage for everyone: next events with quick answers and a note dialog.
+- [x] Homepage for everyone: next events with quick answers and a note dialog (the Dashboard, 2026-10-24).
 - Discord bot for players who don't use Telegram (Identity already multi-platform)
 - Officer management page in the admin site (optional)
 - Tests: DB integration tests on a real Postgres in CI (migrate deploy, then services without mocks) and a few
@@ -117,14 +117,14 @@ profile and characters, roster approval + new season, notes on answers, Roles pa
      right, both editable, always summing to the DPS total and never over the raid size.
    The summary shows each count with the target in brackets; on a gap, characters whose offspec fills it are
    highlighted.
-6. Then: a Dashboard (contents to agree).
+6. [x] Then: a Dashboard (see below).
 Ponytail review (2026-10-24): invites reuse InviteMacros on the board rows; publish dialog reuses PATCH roster +
 publish (no new route); character switch reuses moveResponse; spec override = nullable `Response.spec` sent in the
 bulk selections; target = zod-checked JSON (`Event.roleTarget`, guild default in a one-row `settings` table), all
 maths and offspec highlights as pure site functions; slider = native range + two number inputs; buttons = CSS fix +
 existing `.icon-button`.
 
-## Next: Dashboard (user decisions 2026-10-24)
+## Done: Dashboard (user decisions 2026-10-24; attendance span: last 5/10/20 events or the whole season)
 The home page (`/`) for everyone, with officer sections by capability. One `GET /dashboard` returns only the
 sections the caller may see (ponytail: one endpoint, not one per widget; no chart library).
 1. Everyone - my next events: each open upcoming event with my answer and the character answering; quick

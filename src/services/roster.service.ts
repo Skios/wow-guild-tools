@@ -1,5 +1,6 @@
 import type { Character } from '@prisma/client';
 import { prisma } from '../config/db.js';
+import { SEASON_START_KEY } from './settings.service.js';
 import { ConflictError, NotFoundError } from '../lib/errors.js';
 import type { RosterEntry } from '../validators/roster.validator.js';
 
@@ -170,10 +171,13 @@ export class RosterService {
 
   /** Starts the roster over: players' characters go back to pending, empty unclaimed slots disappear, history stays. */
   async newSeason() {
+    const now = new Date().toISOString();
     const [, deleted, removed] = await prisma.$transaction([
       prisma.response.deleteMany({ where: { character: { inRoster: true }, event: coming() } }),
       prisma.character.deleteMany({ where: { inRoster: true, userId: null, responses: { none: {} } } }),
       prisma.character.updateMany({ where: { inRoster: true }, data: { inRoster: false } }),
+      // The dashboard's "whole season" attendance counts from here.
+      prisma.setting.upsert({ where: { key: SEASON_START_KEY }, create: { key: SEASON_START_KEY, value: now }, update: { value: now } }),
     ]);
     return { deleted: deleted.count, removed: removed.count };
   }

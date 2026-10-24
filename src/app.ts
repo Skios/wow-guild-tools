@@ -9,6 +9,7 @@ import { TelegramClient } from './integrations/telegram/telegram.client.js';
 import { linkConfig } from './services/link.service.js';
 import { signupRoutes } from './controllers/signup.controller.js';
 import { reminderRoutes } from './controllers/reminder.controller.js';
+import { dashboardRoutes } from './controllers/dashboard.controller.js';
 import { roleRoutes } from './controllers/role.controller.js';
 import { meRoutes } from './controllers/me.controller.js';
 import { rosterApprovalRoutes, rosterRoutes } from './controllers/roster.controller.js';
@@ -66,6 +67,7 @@ export async function buildApp(options: { logger?: FastifyServerOptions['logger'
       await site.register(roleRoutes); // each route checks Owner / accounts.manage itself
       await site.register(accountRoutes(accounts)); // Users page (accounts.manage) and your own password
       await site.register(meRoutes); // your profile and characters
+      await site.register(dashboardRoutes); // the home page; officer sections by capability
       const bot = new TelegramClient();
       await site.register(linkRoutes({
         config: linkConfig, botUsername: () => bot.getBotUsername(), sendTelegram: (chatId, text) => bot.sendMessage(chatId, text),

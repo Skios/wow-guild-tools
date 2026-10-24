@@ -30,12 +30,14 @@ function Shell({ api, auth, officer, onSignOut, onAccountChanged, children }: {
   const seesRoster = can('roster.manage') || can('roster.approve');
   const hasPages = can('events.manage') || seesRoster || can('accounts.manage');
   const onProfile = path.startsWith('/profile');
+  const onHome = path === '/'; // the dashboard is for everyone; the other pages need their capability
 
   return (
     <PrefsContext.Provider value={prefs}>
       <header className="topbar">
-        <Link href="/events" className="brand">Guild Raid Admin</Link>
+        <Link href="/" className="brand">Guild Raid Admin</Link>
         <nav aria-label="Main">
+          {!forced && <Link href="/" aria-current={onHome ? 'page' : undefined}>Home</Link>}
           {!forced && can('events.manage') && <Link href="/events" aria-current={path.startsWith('/events') ? 'page' : undefined}>Events</Link>}
           {!forced && seesRoster && <Link href="/roster" aria-current={onRoster ? 'page' : undefined}>Roster</Link>}
           {!forced && can('accounts.manage') && <Link href="/users" aria-current={path.startsWith('/users') ? 'page' : undefined}>Users</Link>}
@@ -57,7 +59,7 @@ function Shell({ api, auth, officer, onSignOut, onAccountChanged, children }: {
         {!forced && meta.data && (
           <MetaContext.Provider value={meta.data}>
             <OfficerContext.Provider value={officer}>
-              <AuthContext.Provider value={auth}>{hasPages || onProfile ? children : <Welcome officer={officer} />}</AuthContext.Provider>
+              <AuthContext.Provider value={auth}>{hasPages || onProfile || onHome ? children : <Welcome officer={officer} />}</AuthContext.Provider>
             </OfficerContext.Provider>
           </MetaContext.Provider>
         )}

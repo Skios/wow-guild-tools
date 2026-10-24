@@ -234,3 +234,30 @@ export interface RosterAccount {
   username: string;
   nickname: string | null;
 }
+
+// ---------- Dashboard (GET /dashboard) ----------
+export type QuickStatus = 'IN' | 'LATE' | 'TENTATIVE' | 'OUT';
+export type Span = number | 'season';
+
+export interface MyCharacterChoice { id: string; name: string; class: string; spec: string | null; role: RoleId }
+export interface MyAnswer {
+  eventId: string; characterId: string; status: ResponseStatus; isConfirmed: boolean; arrivalTime: string | null; note: string | null;
+}
+export interface MyEvent { id: string; title: string; startTime: string; endTime: string; isPublished: boolean; answer: MyAnswer | null }
+export interface CompositionRow {
+  id: string; title: string; startTime: string; confirmed: number; noAnswer: number; nextReminder: string | null;
+  byRole: Record<RoleId, number>; roleTarget: RoleTarget;
+}
+export interface DashboardTodo {
+  pendingApprovals?: number;
+  toPublish?: { id: string; title: string; startTime: string }[];
+  noTelegram?: { id: string; name: string }[];
+}
+export interface AttendanceRow { id: string; name: string; in: number; late: number; bench: number; out: number; tentative: number; noAnswer: number }
+export interface Dashboard {
+  me: { characters: MyCharacterChoice[]; events: MyEvent[] };
+  composition?: CompositionRow[];
+  todo?: DashboardTodo;
+  attendance?: { span: Span; events: number; players: AttendanceRow[] };
+}
+export interface QuickAnswer { characterId: string; status: QuickStatus; lateMinutes?: number; note?: string }

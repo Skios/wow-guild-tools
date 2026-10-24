@@ -294,6 +294,8 @@ describe('POST /roster/new-season', () => {
     expect(res.json()).toEqual({ deleted: 2, removed: 5 });
     expect(prismaMock.character.deleteMany).toHaveBeenCalledWith({ where: { inRoster: true, userId: null, responses: { none: {} } } });
     expect(prismaMock.character.updateMany).toHaveBeenCalledWith({ where: { inRoster: true }, data: { inRoster: false } });
+    // The dashboard's "whole season" attendance starts here.
+    expect(prismaMock.setting.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { key: 'seasonStart' } }));
     expect(prismaMock.response.deleteMany.mock.calls[0]![0].where).toEqual({
       character: { inRoster: true }, event: { isPublished: false, startTime: { gt: expect.any(Date) } },
     });

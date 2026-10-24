@@ -28,6 +28,11 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
 `web/` is the officers' admin (Next.js App Router, client rendering). With the API running on :3000:
 `cd web && npm install && npm run dev`, then open http://127.0.0.1:5173 (`/api/*` is proxied to `API_ORIGIN`).
 
+- **Home** (`/`, every account): your next events with In / Late / Tentative / Out, a note dialog (Late asks the
+  minutes) and which approved character answers; published events say where you are. Officers (`events.manage`)
+  also see the open events against their role target, a to-do list (approvals, events to publish within a day,
+  players without Telegram) and attendance per player (played / late / bench / out / tentative / no answer) over the
+  last 5, 10 or 20 published events or the whole season (since the last New season).
 - Pages: **Events** (list, create, board; a **role target** per event (guild default, or the event's own): flex =
   tanks + healers per 5 + a melee/ranged slider, growing with the confirmed players; fixed = raid size, tanks, healers
   and a melee/ranged split that always adds up. The summary shows each count with the target in brackets, and on a
@@ -130,7 +135,7 @@ Every route is under `/api` (the same domain serves the admin site on Vercel). M
 `GET /me/claimable`, `POST /me/characters`, `POST /me/characters/:id/claim`, `PUT/DELETE /me/characters/:id`,
 `PUT /me/characters/:id/main`, `GET /characters/search`, `GET /roster/accounts`, `PUT /roster/:id/owner`,
 `POST /auth/reset` (no login), `POST /signup` (no login), `POST /webhooks/telegram` (own secret),
-`POST /reminders/run` (pg_cron, own secret).
+`POST /reminders/run` (pg_cron, own secret), `GET /dashboard?span=10|season`, `PUT /me/events/:id/answer`.
 
 ## Deploy (Vercel + Supabase, free tiers)
 Two Vercel projects, each with Production (`main`) and Preview `develop` (the dev environment):
@@ -142,5 +147,5 @@ The pipeline deploys only what a push changed (site, API + migrations, or both).
 ## Status
 Milestones 1–3 (core, bot, admin site) are live on Vercel + Supabase (dev). Accounts are in progress: roles,
 sign-up, Users page, Telegram linking, profile and characters, roster approval, new season, notes on every answer and
-the Roles page, in-game invite macros and reminders (M4) are done. Then an alpha with testers and production.
+the Roles page, in-game invite macros, reminders (M4), the event composition round and the Home dashboard are done. Then an alpha with testers and production.
 See `.claude/plans`.

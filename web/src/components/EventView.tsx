@@ -144,7 +144,7 @@ export function EventView({ id }: { id: string }) {
           {meta.roles.map(r => (
             <li key={r.id} title={r.label}>
               <RoleIcon role={r.id} /> {summary.byRole[r.id]}{' '}
-              <span className={`target${summary.byRole[r.id] < target[r.id] ? ' short' : ''}`}>({target[r.id]})</span>
+              <span className={`target${summary.byRole[r.id] < target[r.id] ? ' short' : ''}`}>({target[r.id]}){summary.byRole[r.id] < target[r.id] && <span className="sr-only"> short</span>}</span>
             </li>
           ))}
           <li className="muted">

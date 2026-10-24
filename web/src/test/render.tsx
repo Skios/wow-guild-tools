@@ -48,6 +48,8 @@ export function fakeApi(overrides: Overrides = {}): Api {
     getEvent: vi.fn(),
     createEvent: vi.fn().mockResolvedValue({}),
     setReminders: vi.fn().mockResolvedValue([]),
+    dashboard: vi.fn().mockResolvedValue({ me: { characters: [], events: [] } }),
+    answerEvent: vi.fn().mockResolvedValue(undefined),
     switchCharacter: vi.fn().mockResolvedValue(undefined),
     setEventRoleTarget: vi.fn().mockResolvedValue(undefined),
     setDefaultRoleTarget: vi.fn().mockResolvedValue(undefined),

@@ -1,5 +1,5 @@
 import type {
-  Account, CharacterSuggestion, ClaimableCharacter, EventDetail, Profile, RosterAccount, SiteRoleSummary, EventSummary, Meta, MessageResult, NewEvent, Officer, Reminder, RosterCharacter, RosterEntryInput, RosterSelection, RoleInput,
+  Account, CharacterSuggestion, ClaimableCharacter, EventDetail, Profile, RosterAccount, SiteRoleSummary, EventSummary, Meta, MessageResult, NewEvent, Officer, Reminder, Dashboard, QuickAnswer, Span, RosterCharacter, RosterEntryInput, RosterSelection, RoleInput,
 } from './types';
 import type { RoleTarget } from './roleTarget';
 
@@ -114,6 +114,8 @@ export function createApi({ fetchImpl = fetch, getToken = async () => null, onUn
     setEventRoleTarget: (eventId: string, target: RoleTarget | null) =>
       request<void>(`/events/${id(eventId)}/role-target`, send('PUT', { target })),
     setDefaultRoleTarget: (target: RoleTarget) => request<void>('/role-target/default', send('PUT', { target })),
+    dashboard: (span: Span = 10) => request<Dashboard>(`/dashboard?span=${encodeURIComponent(String(span))}`),
+    answerEvent: (eventId: string, answer: QuickAnswer) => request<void>(`/me/events/${id(eventId)}/answer`, send('PUT', answer)),
     setReminders: (eventId: string, minutesBefore: number[]) =>
       request<Reminder[]>(`/events/${id(eventId)}/reminders`, send('PUT', { minutesBefore })),
     saveRoster: (eventId: string, selections: RosterSelection[]) =>

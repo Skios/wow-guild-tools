@@ -24,7 +24,6 @@ const csp = [
 const config: NextConfig = {
   // web/ is its own app inside the repo (the root holds the API): don't let Turbopack pick the root lockfile.
   turbopack: { root: fileURLToPath(new URL('.', import.meta.url)) },
-  redirects: async () => [{ source: '/', destination: '/events', permanent: false }],
   // The API lives elsewhere; the browser only ever sees one origin (no CORS).
   rewrites: async () => [{ source: '/api/:path*', destination: `${API_ORIGIN}/api/:path*` }],
   headers: async () => [

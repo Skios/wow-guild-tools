@@ -301,11 +301,17 @@ button.icon-button, .actions.compact button.icon-button { display: inline-grid; 
 }
 
 /* ---------- Role target ---------- */
-.summary .target { color: var(--muted); font-size: 0.85em; }
-.summary .target.short { color: var(--danger); font-weight: 600; }
+.target { color: var(--muted); font-size: 0.85em; }
+.target.short { color: var(--danger); font-weight: 600; }
+.table-wrap { overflow-x: auto; }
 .target-line { font-size: 0.85rem; }
 button.link { background: none; border: none; padding: 0; min-height: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: inherit; }
 .dps-split { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .dps-split input[type='range'] { flex: 1 1 8rem; }
 .dps-split input[type='number'] { width: 4.5rem; }
 .cover { display: block; font-size: 0.78rem; color: var(--accent); }
+
+/* ---------- Dashboard ---------- */
+.dashboard h2 { margin: 0; }
+.my-event h3 { margin: 0; }
+.block { display: block; font-weight: normal; font-size: 0.8rem; }

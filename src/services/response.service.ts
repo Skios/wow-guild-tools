@@ -100,7 +100,7 @@ export class ResponseService {
   }
 
   /** The player's note on their answer (e.g. "IN, but leaving 30 min early"). */
-  async setNote(eventId: string, characterId: string, note: string) {
+  async setNote(eventId: string, characterId: string, note: string | null) {
     await this.openEvent(eventId);
     await requireApproved([characterId]);
     const { count } = await prisma.response.updateMany({ where: { eventId, characterId }, data: { note } });

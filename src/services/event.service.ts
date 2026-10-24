@@ -6,7 +6,8 @@ import { TelegramAdapter } from '../integrations/telegram/telegram.adapter.js';
 import { AppError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { EventRepository } from '../repositories/event.repository.js';
 import type { CreateEventInput } from '../validators/event.validator.js';
-import { DEFAULT_ROLE_TARGET, RoleTargetSchema, type RoleTarget } from '../validators/role-target.validator.js';
+import type { RoleTarget } from '../validators/role-target.validator.js';
+import { ROLE_TARGET_KEY, defaultRoleTarget, readTarget } from './settings.service.js';
 import { NotificationService } from './notification.service.js';
 import { ResponseService } from './response.service.js';
 
@@ -61,13 +62,7 @@ function buildRoster(rows: RosterRow[]) {
 }
 
 const MINUTE_MS = 60_000;
-const ROLE_TARGET_KEY = 'roleTarget';
 
-/** A stored target, or the fallback if it's missing or no longer valid. */
-const readTarget = (value: unknown, fallback: RoleTarget) => {
-  const parsed = RoleTargetSchema.safeParse(value);
-  return parsed.success ? parsed.data : fallback;
-};
 
 /** Reminders still ahead of now; one already due would go out at once, on top of the invite. */
 const stillAhead = (startTime: Date, minutesBefore: number[] | undefined) =>
@@ -146,8 +141,7 @@ export class EventService {
   }
 
   async defaultRoleTarget(): Promise<RoleTarget> {
-    const row = await prisma.setting.findUnique({ where: { key: ROLE_TARGET_KEY } });
-    return readTarget(row?.value, DEFAULT_ROLE_TARGET);
+    return defaultRoleTarget();
   }
 
   async setDefaultRoleTarget(target: RoleTarget) {
@@ -283,7 +277,7 @@ export class EventService {
     const responses = event.responses.map(r => ({
       ...r, character: { ...r.character, nickname: shownNickname(r.character) }, alternatives: alternativesOf(r.character.userId),
     }));
-    const own = event.roleTarget === null || event.roleTarget === undefined ? null : readTarget(event.roleTarget, DEFAULT_ROLE_TARGET);
+    const own = event.roleTarget === null || event.roleTarget === undefined ? null : readTarget(event.roleTarget);
     const roleTarget = own ?? await this.defaultRoleTarget();
     return { ...event, responses, noAnswer, roleTarget, roleTargetIsDefault: own === null };
   }
