@@ -123,3 +123,16 @@ publish (no new route); character switch reuses moveResponse; spec override = nu
 bulk selections; target = zod-checked JSON (`Event.roleTarget`, guild default in a one-row `settings` table), all
 maths and offspec highlights as pure site functions; slider = native range + two number inputs; buttons = CSS fix +
 existing `.icon-button`.
+
+## Next: Dashboard (user decisions 2026-10-24)
+The home page (`/`) for everyone, with officer sections by capability. One `GET /dashboard` returns only the
+sections the caller may see (ponytail: one endpoint, not one per widget; no chart library).
+1. Everyone - my next events: each open upcoming event with my answer and the character answering; quick
+   IN / LATE / TENTATIVE / OUT buttons, a note dialog (LATE asks the minutes), a character picker when I have more
+   than one approved. `PUT /me/events/:id/answer`, reusing ResponseService (updateResponse, setNote, moveResponse).
+2. Officers (events.manage) - composition: per open event, confirmed per role vs target (site targetCounts),
+   no-answer count, next reminder.
+3. Officers - to do: characters waiting for approval (roster.approve), events starting within 24 h not yet
+   published, players with approved characters but no Telegram linked.
+4. Officers - attendance: per player over the last 10 published events, IN / LATE / BENCH / OUT / no answer
+   (bench included to track rotations). Computed in JS (about 60 players x 10 events), shown as a table.
