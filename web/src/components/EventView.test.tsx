@@ -452,16 +452,9 @@ describe('editing', () => {
 });
 
 describe('publishing', () => {
-  test('is disabled with unsaved changes, and says why', async () => {
-    setup();
-    await ready();
-    expect(screen.getByRole('button', { name: 'Publish roster' })).toBeEnabled();
-
-    await userEvent.selectOptions(answer('Maybe'), 'BENCH');
-
-    expect(screen.getByRole('button', { name: 'Publish roster' })).toBeDisabled();
-    expect(screen.getByText(/Save your changes first/)).toBeInTheDocument();
-  });
+  const withNote = (r: ReturnType<typeof response>, note: string) => ({ ...r, note });
+  const dialog = () => screen.getByRole('dialog', { name: 'Publish the roster' });
+  const open = () => userEvent.click(screen.getByRole('button', { name: 'Publish roster' }));
 
   test('is disabled until somebody is confirmed', async () => {
     setup(eventDetail({ responses: [response('Cleo', 'HEALER', 'IN', false, 'PRIEST')] }));
@@ -471,37 +464,90 @@ describe('publishing', () => {
     expect(screen.getByText(/Confirm at least one player first/)).toBeInTheDocument();
   });
 
-  test('asks for confirmation, counting confirmed players including late ones', async () => {
+  test('opens a dialog counting confirmed players including late ones; Cancel changes nothing', async () => {
     const api = setup();
     await ready();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Publish roster' }));
+    await open();
 
-    expect(screen.getByText('Post the roster of 3 players to the channel?')).toBeInTheDocument();
+    expect(within(dialog()).getByText('Post the roster of 3 players to the channel?')).toBeInTheDocument();
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(api.saveRoster).not.toHaveBeenCalled();
     expect(api.publish).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.getByRole('button', { name: 'Publish roster' })).toBeInTheDocument();
   });
 
-  test('uses the singular for a single player', async () => {
-    setup(eventDetail({ responses: [response('Tom', 'TANK', 'IN', true, 'WARRIOR')] }));
+  test('uses the singular for a single player, and with nobody left over saves nothing', async () => {
+    const api = setup(eventDetail({ responses: [response('Tom', 'TANK', 'IN', true, 'WARRIOR')] }));
     await ready();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Publish roster' }));
-
-    expect(screen.getByText('Post the roster of 1 player to the channel?')).toBeInTheDocument();
-  });
-
-  test('publishes after confirmation and reloads', async () => {
-    const api = setup();
-    await ready();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Publish roster' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Yes, publish' }));
+    await open();
+    expect(within(dialog()).getByText('Post the roster of 1 player to the channel?')).toBeInTheDocument();
+    expect(within(dialog()).queryByRole('radiogroup')).not.toBeInTheDocument();
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Yes, publish' }));
 
     await waitFor(() => expect(api.publish).toHaveBeenCalledWith('e1'));
+    expect(api.saveRoster).not.toHaveBeenCalled();
+  });
+
+  test('the unconfirmed IN/LATE go to the bench by default, or out, saved before publishing', async () => {
+    const order: string[] = [];
+    const api = setup(undefined, {
+      saveRoster: vi.fn(async () => { order.push('save'); return { success: true }; }),
+      publish: vi.fn(async () => { order.push('publish'); return { success: true }; }),
+    });
+    await ready();
+
+    await open();
+    const choice = within(dialog()).getByRole('radiogroup', { name: '2 not confirmed go to' });
+    expect(within(choice).getByLabelText('Bench')).toBeChecked();
+    await userEvent.click(within(choice).getByLabelText('Out'));
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Yes, publish' }));
+
+    await waitFor(() => expect(order).toEqual(['save', 'publish']));
+    expect(api.saveRoster).toHaveBeenCalledWith('e1', expect.arrayContaining([
+      { characterId: 'c-Cleo', status: 'OUT', isConfirmed: false },
+      { characterId: 'c-Rex', status: 'OUT', isConfirmed: false },
+    ]));
     expect(await screen.findByText('Roster published.')).toBeInTheDocument();
-    await waitFor(() => expect(api.getEvent).toHaveBeenCalledTimes(2));
+  });
+
+  test('unsaved board changes go with the publish', async () => {
+    const api = setup();
+    await ready();
+
+    await userEvent.selectOptions(answer('Maybe'), 'BENCH');
+    await open();
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Yes, publish' }));
+
+    await waitFor(() => expect(api.saveRoster).toHaveBeenCalledWith('e1', expect.arrayContaining([
+      expect.objectContaining({ characterId: 'c-Maybe', status: 'BENCH' }),
+    ])));
+  });
+
+  test('every answer with a note shows up, confirmed or not, with its tick to change at the last minute', async () => {
+    const api = setup(eventDetail({ responses: [
+      withNote(response('Ulfgaar', 'TANK', 'IN', true, 'WARRIOR'), 'arriving 21:30, leaving 23:30'),
+      response('Tom', 'TANK', 'IN', true, 'WARRIOR'),
+      withNote(response('Cleo', 'HEALER', 'TENTATIVE', false, 'PRIEST'), 'maybe, babysitting'),
+    ] }));
+    await ready();
+
+    await open();
+    const notes = within(dialog()).getByRole('list', { name: 'Answers with a note' });
+    expect(within(notes).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(notes).getByText('arriving 21:30, leaving 23:30')).toBeInTheDocument();
+
+    await userEvent.click(within(notes).getByLabelText('Confirm Ulfgaar'));
+    await userEvent.click(within(notes).getByLabelText('Confirm Cleo'));
+    expect(within(dialog()).getByText('Post the roster of 2 players to the channel?')).toBeInTheDocument();
+    expect(within(dialog()).getByRole('radiogroup', { name: '1 not confirmed go to' })).toBeInTheDocument();
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Yes, publish' }));
+
+    await waitFor(() => expect(api.saveRoster).toHaveBeenCalledWith('e1', expect.arrayContaining([
+      { characterId: 'c-Ulfgaar', status: 'BENCH', isConfirmed: false },
+      { characterId: 'c-Cleo', status: 'IN', isConfirmed: true },
+    ])));
   });
 
   test('when the channel refuses, shows why and leaves the event editable', async () => {
@@ -509,25 +555,77 @@ describe('publishing', () => {
     setup(undefined, { publish });
     await ready();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Publish roster' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Yes, publish' }));
+    await open();
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Yes, publish' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Publication failed on every channel');
-    expect(screen.getByRole('button', { name: 'Publish roster' })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Publish roster' })).toBeEnabled());
     expect(answer('Tom')).toBeEnabled();
   });
 
   test('cannot be triggered twice while publishing', async () => {
     let resolve!: (v: unknown) => void;
     const publish = vi.fn().mockReturnValue(new Promise(r => { resolve = r; }));
-    setup(undefined, { publish });
+    setup(eventDetail({ responses: [response('Tom', 'TANK', 'IN', true, 'WARRIOR')] }), { publish });
     await ready();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Publish roster' }));
-    await userEvent.dblClick(screen.getByRole('button', { name: 'Yes, publish' }));
+    await open();
+    await userEvent.dblClick(within(dialog()).getByRole('button', { name: 'Yes, publish' }));
 
     expect(publish).toHaveBeenCalledTimes(1);
     resolve({ success: true });
+  });
+
+  test('focus starts on Cancel; Escape closes and gives focus back to the Publish button', async () => {
+    setup();
+    await ready();
+    await open();
+    expect(within(dialog()).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Publish roster' })).toHaveFocus();
+  });
+
+  test('Escape does nothing while publishing', async () => {
+    setup(eventDetail({ responses: [response('Tom', 'TANK', 'IN', true, 'WARRIOR')] }), { publish: vi.fn(() => new Promise(() => {})) });
+    await ready();
+    await open();
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Yes, publish' }));
+
+    await userEvent.keyboard('{Escape}');
+    expect(dialog()).toBeInTheDocument();
+  });
+
+  test('saved but not published: says so and reloads, so the board matches what was saved', async () => {
+    const api = setup(undefined, { publish: vi.fn().mockRejectedValue(new ApiError('Publication failed on every channel', 502)) });
+    await ready();
+    await open();
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Yes, publish' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Roster saved, but publishing failed: Publication failed on every channel');
+    expect(api.saveRoster).toHaveBeenCalled();
+    await waitFor(() => expect(api.getEvent).toHaveBeenCalledTimes(2));
+  });
+
+  test('ticking then unticking a TENTATIVE puts back the answer; Cancel leaves the board alone', async () => {
+    const api = setup(eventDetail({ responses: [
+      response('Tom', 'TANK', 'IN', true, 'WARRIOR'),
+      withNote(response('Cleo', 'HEALER', 'TENTATIVE', false, 'PRIEST'), 'maybe'),
+    ] }));
+    await ready();
+    await open();
+    const notes = within(dialog()).getByRole('list', { name: 'Answers with a note' });
+
+    await userEvent.click(within(notes).getByLabelText('Confirm Cleo'));
+    await userEvent.click(within(notes).getByLabelText('Confirm Cleo'));
+    expect(within(notes).getByText('TENTATIVE')).toBeInTheDocument();
+    expect(within(notes).getByLabelText('Confirm Cleo')).toHaveAccessibleDescription('maybe');
+
+    await userEvent.click(within(notes).getByLabelText('Confirm Cleo'));
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Cancel' }));
+    expect(answer('Cleo')).toHaveValue('TENTATIVE');
+    expect(api.saveRoster).not.toHaveBeenCalled();
   });
 });
 

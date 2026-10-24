@@ -28,7 +28,8 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
 `web/` is the officers' admin (Next.js App Router, client rendering). With the API running on :3000:
 `cd web && npm install && npm run dev`, then open http://127.0.0.1:5173 (`/api/*` is proxied to `API_ORIGIN`).
 
-- Pages: **Events** (list, create, board; **In-game invites**: `/invite Name-Realm` macros of up to 255 bytes for
+- Pages: **Events** (list, create, board; **Publish** opens a last check: answers with a note with their confirm
+  tick, and where the unconfirmed IN/LATE go (Bench or Out); unsaved edits are saved with it; **In-game invites**: `/invite Name-Realm` macros of up to 255 bytes for
   the confirmed IN/LATE characters, with a Copy button), **Roster** (each player's characters together, alts under the main;
   add / edit / remove / release names, assign a name to an account; approve, reject or revoke characters players
   added; **New season** empties the roster after typing NEW SEASON), **Users** (roles, password resets), **Roles**

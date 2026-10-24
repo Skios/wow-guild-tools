@@ -193,6 +193,9 @@ button.icon-button, .actions.compact button.icon-button { display: inline-grid; 
 .alt-row td { border-top: none; }
 .alt-row td:first-child { padding-left: 1.75rem; position: relative; }
 .alt-row td:first-child::before { content: '↳'; position: absolute; left: 0.6rem; color: var(--muted); }
+.check { display: flex; align-items: center; gap: 0.4rem; margin: 0; font-size: 0.95rem; color: var(--text); }
+.plain-list { list-style: none; margin: 0; padding: 0; }
+.plain-list .stack, .modal .plain-list.stack { gap: 0.5rem; }
 .modal-backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.55); display: grid; place-items: center; padding: 1rem; z-index: 50; }
 .modal { width: min(520px, 100%); max-height: 90vh; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow); }
 .chips { display: inline-flex; flex-wrap: wrap; gap: 0.15rem 0.8rem; }

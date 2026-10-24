@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApi, useMeta } from '../context';
 import { formatDateTime, formatRange } from '../format';
 import {
@@ -11,6 +11,7 @@ import type { EventDetail, MessageResult, NoAnswerEntry, ResponseStatus } from '
 import { EventBoard } from './EventBoard';
 import { EventReminders } from './EventReminders';
 import { InviteMacros } from './InviteMacros';
+import { PublishDialog } from './PublishDialog';
 import { NoAnswerPanel } from './NoAnswerPanel';
 import { RoleIcon } from './RoleIcon';
 
@@ -29,6 +30,7 @@ export function EventView({ id }: { id: string }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [messageText, setMessageText] = useState('');
   const [results, setResults] = useState<MessageResult[] | null>(null);
+  const publishButton = useRef<HTMLButtonElement>(null);
 
   // Rebuild the editable rows whenever fresh data arrives. Done during render (not in an effect)
   // so the board never flashes empty for a frame.
@@ -114,7 +116,7 @@ export function EventView({ id }: { id: string }) {
   if (!event.data) return <p className="muted" role="status">Loading event…</p>;
 
   const data = event.data;
-  const canPublish = !published && !dirty && summary.confirmed > 0;
+  const canPublish = !published && summary.confirmed > 0;
   const defaultMessage = `Reminder: ${data.title} on ${formatDateTime(data.startTime)}. Are you coming?`;
 
   return (
@@ -210,20 +212,29 @@ export function EventView({ id }: { id: string }) {
         <section className="card" aria-label="Publish">
           <h3>Publish</h3>
           <p className="muted">
-            Posts the roster to the channel and closes sign-ups. {dirty ? 'Save your changes first.' : summary.confirmed === 0 ? 'Confirm at least one player first.' : ''}
+            Posts the roster to the channel and closes sign-ups. {summary.confirmed === 0 ? 'Confirm at least one player first.' : dirty ? 'Unsaved changes are saved with it.' : ''}
           </p>
-          {!confirming ? (
-            <button type="button" className="primary" disabled={!canPublish || locked} onClick={() => setConfirming(true)}>
-              Publish roster
-            </button>
-          ) : (
-            <div className="actions" role="group" aria-label="Confirm publication">
-              <span>Post the roster of {summary.confirmed} player{summary.confirmed === 1 ? '' : 's'} to the channel?</span>
-              <button type="button" className="danger" disabled={busy !== null} onClick={() => run('publishing', () => api.publish(id), 'Roster published.')}>
-                {busy === 'publishing' ? 'Publishing…' : 'Yes, publish'}
-              </button>
-              <button type="button" disabled={busy !== null} onClick={() => setConfirming(false)}>Cancel</button>
-            </div>
+          <button type="button" ref={publishButton} className="primary" disabled={!canPublish || locked} onClick={() => setConfirming(true)}>
+            Publish roster
+          </button>
+          {confirming && (
+            <PublishDialog
+              rows={rows}
+              busy={busy !== null}
+              onCancel={() => { setConfirming(false); publishButton.current?.focus(); }}
+              onPublish={final => run('publishing', async () => {
+                const changes = changedSelections(final);
+                if (changes.length > 0) {
+                  await api.saveRoster(id, changes);
+                  event.reload(); // saved even if publishing fails next: the board must show it
+                }
+                try {
+                  await api.publish(id);
+                } catch (e) {
+                  throw changes.length > 0 ? new Error(`Roster saved, but publishing failed: ${errorMessage(e)}`) : e;
+                }
+              }, 'Roster published.')}
+            />
           )}
         </section>
       )}

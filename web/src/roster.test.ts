@@ -293,3 +293,18 @@ describe('addCharacter off-specs and nickname', () => {
     expect(addCharacter([], entry)[0]).toMatchObject({ offSpecs: ['FROST'], nickname: 'Matte' });
   });
 });
+
+describe('sendUnconfirmed', () => {
+  test('moves IN/LATE players nobody confirmed to the bench (or out); the rest stay', async () => {
+    const { sendUnconfirmed } = await import('./roster');
+    const base = { characterId: '', name: '', realm: '', class: 'MAGE', spec: null, role: 'DPS' as const, username: null, offSpecs: [], nickname: null, lateMinutes: null, note: null, saved: null };
+    const rows = [
+      { ...base, characterId: 'a', status: 'IN' as const, isConfirmed: true },
+      { ...base, characterId: 'b', status: 'LATE' as const, isConfirmed: false, lateMinutes: 15 },
+      { ...base, characterId: 'c', status: 'TENTATIVE' as const, isConfirmed: false },
+    ];
+
+    expect(sendUnconfirmed(rows, 'OUT').map(r => [r.characterId, r.status])).toEqual([['a', 'IN'], ['b', 'OUT'], ['c', 'TENTATIVE']]);
+    expect(sendUnconfirmed(rows, 'BENCH')[1]).toMatchObject({ status: 'BENCH', lateMinutes: null });
+  });
+});

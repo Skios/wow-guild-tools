@@ -179,3 +179,8 @@ export function groupRows(rows: RosterRow[]): RosterGroups {
     out: where('OUT'),
   };
 }
+
+/** At publish, IN/LATE players nobody confirmed go to the bench or out. */
+export function sendUnconfirmed(rows: RosterRow[], to: 'BENCH' | 'OUT'): RosterRow[] {
+  return rows.map(r => (isAttending(r.status) && !r.isConfirmed ? setStatus(r, to) : r));
+}
