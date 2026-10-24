@@ -99,3 +99,5 @@ profile and characters, roster approval + new season, notes on answers, Roles pa
 - Homepage for everyone: next events with quick answers and a note dialog.
 - Discord bot for players who don't use Telegram (Identity already multi-platform)
 - Officer management page in the admin site (optional)
+- Tests: DB integration tests on a real Postgres in CI (migrate deploy, then services without mocks) and a few
+  Playwright E2E flows (login, approve, answer with a note). Parked by the user 2026-10-24: features first.
