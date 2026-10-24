@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isTimeZone } from '../lib/format-time.js';
 
 const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
@@ -16,6 +17,9 @@ const EnvSchema = z.object({
   SITE_URL: z.url({ protocol: /^https?$/ }).refine(isSecureOrLocal, 'must be https (http only for localhost)').optional(),
   // Shared with pg_cron (Supabase Vault "reminders_secret"): it calls POST /api/reminders/run. Without it reminders are off.
   REMINDERS_SECRET: z.string().min(32).max(256).regex(/^[A-Za-z0-9_-]+$/).optional(),
+  // Times in bot messages (invites, reminders, cancels). IANA name, e.g. Europe/Rome (the default).
+  // An empty value counts as unset (some hosts write the key with no value).
+  GUILD_TIME_ZONE: z.preprocess(v => (v === '' ? undefined : v), z.string().refine(isTimeZone, 'must be an IANA time zone, e.g. Europe/Rome').optional()),
   HOST: z.string().min(1).default('0.0.0.0'),
   // Only behind a proxy that overwrites X-Forwarded-For (e.g. Fly); otherwise clients could spoof their IP.
   TRUST_PROXY: z.enum(['true', 'false']).transform(v => v === 'true').optional(),

@@ -109,9 +109,10 @@ describe('EventService.getEvent', () => {
 });
 
 describe('EventService.listEvents', () => {
-  const answer = (status: string, isConfirmed = false, inRoster = true) => ({ status, isConfirmed, character: { inRoster } });
+  const answer = (status: string, isConfirmed = false, id = 'x', userId: string | null = null) => ({ status, isConfirmed, character: { id, userId, inRoster: true } });
+  const roster = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `c${i}`, userId: `u${i}` }));
 
-  beforeEach(() => prismaMock.character.count.mockResolvedValue(10));
+  beforeEach(() => prismaMock.character.findMany.mockResolvedValue(roster(10)));
 
   test('summarises responses per event instead of returning every row', async () => {
     prismaMock.event.findMany.mockResolvedValue([
@@ -129,18 +130,27 @@ describe('EventService.listEvents', () => {
     expect(listed!.counts).toMatchObject({ in: 3, out: 1, tentative: 1, bench: 1, late: 1, confirmed: 3 });
   });
 
-  test('counts roster members who have not answered yet', async () => {
-    prismaMock.event.findMany.mockResolvedValue([{ ...event, responses: [answer('IN'), answer('OUT'), answer('IN', false, false)] }]);
+  test('counts the players who have not answered yet', async () => {
+    prismaMock.event.findMany.mockResolvedValue([{ ...event, responses: [answer('IN', false, 'c0', 'u0'), answer('OUT', false, 'c1', 'u1'), answer('IN', false, 'other', 'stranger')] }]);
 
     const [listed] = await new EventService().listEvents(20, 0);
 
-    // 10 in the roster, 2 of them answered; the third answer is an alt outside the roster
+    // 10 players on the roster, 2 of them answered; the third answer is someone not on it
     expect(listed!.counts.noAnswer).toBe(8);
   });
 
+  test("a player answers once for all their characters; an unclaimed name counts as one", async () => {
+    prismaMock.character.findMany.mockResolvedValue([{ id: 'main', userId: 'u1' }, { id: 'alt', userId: 'u1' }, { id: 'free', userId: null }]);
+    prismaMock.event.findMany.mockResolvedValue([{ ...event, responses: [answer('IN', false, 'main', 'u1')] }]);
+
+    const [listed] = await new EventService().listEvents(20, 0);
+
+    expect(listed!.counts.noAnswer).toBe(1);
+  });
+
   test('never reports a negative number of missing answers', async () => {
-    prismaMock.character.count.mockResolvedValue(1);
-    prismaMock.event.findMany.mockResolvedValue([{ ...event, responses: [answer('IN'), answer('OUT')] }]);
+    prismaMock.character.findMany.mockResolvedValue(roster(1));
+    prismaMock.event.findMany.mockResolvedValue([{ ...event, responses: [answer('IN', false, 'c0', 'u0'), answer('OUT', false, 'y', 'v')] }]);
 
     const [listed] = await new EventService().listEvents(20, 0);
 
@@ -235,6 +245,34 @@ describe('EventService.getEventDetail', () => {
     prismaMock.setting.findUnique.mockResolvedValue({ key: 'roleTarget', value: { mode: 'nonsense' } });
 
     expect((await new EventService().getEventDetail('e1')).roleTarget).toEqual({ mode: 'flex', tanks: 2, healersPer5: 1, meleeShare: 50 });
+  });
+
+  test("no answer is per player: alts of someone who answered stay out, and one line per silent player (the main)", async () => {
+    prismaMock.event.findUnique.mockResolvedValue({
+      ...event,
+      responses: [{ status: 'IN', characterId: 'c-Main', character: { id: 'c-Main', name: 'Main', userId: 'u1', user: { username: 'a', nickname: null } } }],
+    });
+    prismaMock.character.findMany.mockResolvedValue([
+      { ...rosterRow('Alt', { username: 'a', identities: [] }), userId: 'u1', isMain: false },
+      { ...rosterRow('QuietAlt', { username: 'q', identities: [] }), userId: 'u2', isMain: false },
+      { ...rosterRow('QuietMain', { username: 'q', identities: [] }), userId: 'u2', isMain: true },
+      { ...rosterRow('Unclaimed', null), userId: null, isMain: false },
+    ]);
+
+    const detail = await new EventService().getEventDetail('e1');
+
+    expect(detail.noAnswer.map(c => c.name)).toEqual(['QuietMain', 'Unclaimed']);
+    expect(detail.responses[0]!.alternatives.map(a => a.name)).toEqual(['Alt']); // still offered to switch to
+  });
+
+  test('a silent player with no main among their characters shows once (the first)', async () => {
+    prismaMock.event.findUnique.mockResolvedValue({ ...event, responses: [] });
+    prismaMock.character.findMany.mockResolvedValue([
+      { ...rosterRow('Aalt', { username: 'q', identities: [] }), userId: 'u2', isMain: false },
+      { ...rosterRow('Balt', { username: 'q', identities: [] }), userId: 'u2', isMain: false },
+    ]);
+
+    expect((await new EventService().getEventDetail('e1')).noAnswer.map(c => c.name)).toEqual(['Aalt']);
   });
 
   test('404 for an unknown event, without querying the roster', async () => {

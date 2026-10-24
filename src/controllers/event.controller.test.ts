@@ -211,8 +211,8 @@ describe('GET /events/:id', () => {
 
 describe('GET /events', () => {
   test('lists events with response counts', async () => {
-    prismaMock.character.count.mockResolvedValue(0);
-    prismaMock.event.findMany.mockResolvedValue([{ id: EID, title: 'Raid', responses: [{ status: 'IN', isConfirmed: true, character: { inRoster: true } }] }]);
+    prismaMock.character.findMany.mockResolvedValue([]);
+    prismaMock.event.findMany.mockResolvedValue([{ id: EID, title: 'Raid', responses: [{ status: 'IN', isConfirmed: true, character: { id: 'c', userId: 'u', inRoster: true } }] }]);
 
     const res = await (await app()).inject('/events');
 
@@ -227,7 +227,7 @@ describe('GET /events', () => {
 
   test('passes valid pagination to the database', async () => {
     prismaMock.event.findMany.mockResolvedValue([]);
-    prismaMock.character.count.mockResolvedValue(0);
+    prismaMock.character.findMany.mockResolvedValue([]);
     await (await app()).inject('/events?limit=5&offset=10');
     expect(prismaMock.event.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 5, skip: 10 }));
   });

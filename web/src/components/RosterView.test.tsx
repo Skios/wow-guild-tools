@@ -65,6 +65,17 @@ describe('the roster list', () => {
     expect(totals).toHaveTextContent('3 characters');
     expect(totals).toHaveTextContent('1 linked to a player');
     expect(totals).toHaveTextContent('2 waiting');
+    // By main role, written out (off-specs not counted).
+    const roles = screen.getByRole('list', { name: 'Roster by role' });
+    expect(roles).toHaveTextContent('1 Tank');
+    expect(roles).toHaveTextContent('2 Ranged DPS');
+    expect(roles).toHaveTextContent('0 Healer');
+  });
+
+  test('New season sits in the roster table card', async () => {
+    setup([member('A')]);
+    await screen.findByText('A');
+    expect(within(screen.getByRole('region', { name: 'Roster characters' })).getByRole('region', { name: 'New season' })).toBeInTheDocument();
   });
 
   test('an empty roster says how to start', async () => {
@@ -586,6 +597,14 @@ describe('characters waiting for approval', () => {
     expect(api.listPendingRoster).toHaveBeenCalledTimes(2);
   });
 
+  test("an alt says it is one, next to the name", async () => {
+    setup([], { listPendingRoster: vi.fn().mockResolvedValue([waiting, member('Mainy', { claimed: true, username: 'x', isMain: true })]) });
+    await within(await screen.findByRole('region', { name: 'Waiting for approval' })).findByText('Kerlink');
+
+    expect(within(pendingList()).getByText('Kerlink').closest('td')).toHaveTextContent('Kerlink (alt)');
+    expect(within(pendingList()).getByText('Mainy').closest('td')).not.toHaveTextContent('(alt)');
+  });
+
   test('rejecting asks first, then takes the character from the player', async () => {
     const api = setup([], { listPendingRoster: vi.fn().mockResolvedValue([waiting]) });
     await within(await screen.findByRole('region', { name: 'Waiting for approval' })).findByText('Kerlink');
@@ -661,4 +680,16 @@ test('the in-game invites live on the event page, not here', async () => {
   setup([member('Jaina')]);
   await screen.findByText('Jaina');
   expect(screen.queryByRole('region', { name: 'In-game invites' })).not.toBeInTheDocument();
+});
+
+test('adding a character suggests the exact spelling as you type (guild first, then Raider.IO)', async () => {
+  const searchCharacters = vi.fn().mockResolvedValue([{ name: 'Brannock', realm: 'Nemesis', class: 'WARRIOR', inGuild: false }]);
+  setup([], { searchCharacters });
+  const form = await screen.findByRole('form', { name: 'Add to roster' });
+
+  await userEvent.type(within(form).getByLabelText('Character'), 'bra');
+  await userEvent.click(await within(form).findByRole('button', { name: /Brannock/ }));
+
+  expect(searchCharacters).toHaveBeenCalledWith('bra');
+  expect(within(form).getByLabelText('Realm')).toHaveValue('Nemesis');
 });

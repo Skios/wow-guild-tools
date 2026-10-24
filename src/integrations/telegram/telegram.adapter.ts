@@ -1,6 +1,7 @@
 import type { DirectMessage, NotificationAdapter, NotificationPayload, PublicationPayload } from '../../types/notification.types.js';
 import { TelegramClient } from './telegram.client.js';
 import { telegramConfig } from '../../config/telegram.js';
+import { formatStart } from '../../lib/format-time.js';
 
 const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -19,7 +20,7 @@ export class TelegramAdapter implements NotificationAdapter {
     try {
       const text = `📢 <b>NEW RAID EVENT</b> 📢\n\n` +
                    `⚔️ <b>Event</b>: ${escapeHtml(payload.eventTitle)}\n` +
-                   `⏰ <b>Start</b>: ${payload.startTime.toLocaleString()}\n` +
+                   `⏰ <b>Start</b>: ${formatStart(payload.startTime)}\n` +
                    `${payload.description ? `📝 <b>Details</b>: ${escapeHtml(payload.description)}\n` : ''}\n` +
                    `Please mark your presence below!`;
 

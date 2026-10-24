@@ -30,7 +30,7 @@ function PendingRow({ person, accounts, busy, onApprove, onReject, onAssign }: {
   const className = useMeta().classes.find(c => c.id === person.class)?.label ?? person.class;
   return (
     <tr>
-      <td><span className="role-cell"><SpecIcon classId={person.class} spec={person.spec} role={person.role} /><CharacterName name={person.name} classId={person.class} /></span></td>
+      <td><span className="role-cell"><SpecIcon classId={person.class} spec={person.spec} role={person.role} /><CharacterName name={person.name} classId={person.class} />{!person.isMain && <span className="muted"> (alt)</span>}</span></td>
       <td className="muted">{person.realm}</td>
       <td>{[spec, className].filter(Boolean).join(' ')}</td>
       <td>{person.nickname ?? person.username}</td>
@@ -98,7 +98,7 @@ export function NewSeason({ busy, onStart }: { busy: boolean; onStart: () => voi
   const [typed, setTyped] = useState('');
   const close = () => { setOpen(false); setTyped(''); };
   return (
-    <section className="card" aria-label="New season">
+    <section className="new-season" aria-label="New season">
       <h3>New season</h3>
       <p className="muted">
         Empties the roster. Players keep their characters, which wait for approval again; empty unclaimed names are

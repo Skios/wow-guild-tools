@@ -170,8 +170,11 @@ export function RosterView() {
           <li><strong>{people.length}</strong> characters</li>
           <li><strong>{claimed}</strong> linked to a player</li>
           <li><strong>{people.length - claimed}</strong> waiting</li>
-          {byRole.map(({ role, count }) => <li key={role} title={meta.roles.find(r => r.id === role)?.label}><RoleIcon role={role} /> {count}</li>)}
         </ul>
+        <ul className="summary roles-summary" aria-label="Roster by role">
+          {byRole.map(({ role, count }) => <li key={role}><RoleIcon role={role} /> <strong>{count}</strong> {meta.roles.find(r => r.id === role)?.label}</li>)}
+        </ul>
+        <p className="muted small">Counted by main spec; off-specs aren&apos;t counted.</p>
       </section>
 
       {notice && <p className="notice" role="status">{notice}</p>}
@@ -223,6 +226,15 @@ export function RosterView() {
             </tbody>
           </table>
         )}
+        {canEdit && (
+          <NewSeason
+            busy={busy}
+            onStart={() => act(
+              () => api.newSeason(),
+              ({ removed }) => `New season started: ${removed} characters left the roster. Approve them again as players come back.`,
+            )}
+          />
+        )}
       </section>
 
       {canEdit && (
@@ -231,21 +243,13 @@ export function RosterView() {
           <RosterForm
             initial={{ name: '', realm: lastRealm(), class: '', spec: '', offSpecs: [], nickname: '' }}
             submitLabel="Add to roster"
+            suggest={api.searchCharacters}
             onSubmit={add}
             keepAfterSave={['realm']}
           />
         </section>
       )}
 
-      {canEdit && (
-        <NewSeason
-          busy={busy}
-          onStart={() => act(
-            () => api.newSeason(),
-            ({ removed }) => `New season started: ${removed} characters left the roster. Approve them again as players come back.`,
-          )}
-        />
-      )}
     </div>
   );
 }

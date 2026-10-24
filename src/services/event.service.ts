@@ -3,6 +3,7 @@ import { prisma } from '../config/db.js';
 import { shownNickname } from './roster.service.js';
 import { ROLE_ORDER, specLabel, specRole } from '../domain/wow.js';
 import { eventState } from '../domain/event-state.js';
+import { formatStart } from '../lib/format-time.js';
 import { TelegramAdapter } from '../integrations/telegram/telegram.adapter.js';
 import { AppError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { EventRepository } from '../repositories/event.repository.js';
@@ -30,17 +31,26 @@ export interface ResponseCounts {
   noAnswer: number;
 }
 
-type ListedResponse = { status: ResponseStatus; isConfirmed: boolean; character: { inRoster: boolean } };
+type Owned = { id: string; userId: string | null };
+type ListedResponse = { status: ResponseStatus; isConfirmed: boolean; character: Owned };
 
-function countResponses(responses: ListedResponse[], rosterSize: number): ResponseCounts {
+/** A player answers once, whichever of their characters; an unclaimed roster name counts as its own player. */
+const playerKey = (c: Owned) => c.userId ?? c.id;
+
+/** Roster players with no answer from any of their characters. */
+export function noAnswerCount(roster: Owned[], answered: Owned[]): number {
+  const silent = new Set(roster.map(playerKey));
+  for (const c of answered) silent.delete(playerKey(c));
+  return silent.size;
+}
+
+function countResponses(responses: ListedResponse[], roster: Owned[]): ResponseCounts {
   const counts: ResponseCounts = { in: 0, out: 0, tentative: 0, bench: 0, late: 0, confirmed: 0, noAnswer: 0 };
-  let rosterAnswers = 0;
-  for (const { status, isConfirmed, character } of responses) {
+  for (const { status, isConfirmed } of responses) {
     counts[status.toLowerCase() as 'in' | 'out' | 'tentative' | 'bench' | 'late'] += 1;
     if (isConfirmed) counts.confirmed += 1;
-    if (character.inRoster) rosterAnswers += 1;
   }
-  counts.noAnswer = Math.max(0, rosterSize - rosterAnswers);
+  counts.noAnswer = noAnswerCount(roster, responses.map(r => r.character));
   return counts;
 }
 
@@ -70,7 +80,7 @@ const stillAhead = (startTime: Date, minutesBefore: number[] | undefined) =>
   minutesBefore?.filter(minutes => startTime.getTime() - minutes * MINUTE_MS > Date.now());
 
 const reminderText = (event: { title: string; startTime: Date }) =>
-  `Reminder: ${event.title} on ${event.startTime.toLocaleString()}. Are you coming?`;
+  `Reminder: ${event.title} on ${formatStart(event.startTime)}. Are you coming?`;
 
 export class EventService {
   private eventRepo = new EventRepository();
@@ -173,7 +183,7 @@ export class EventService {
       if (!telegramId) continue;
       const from = originals.find(o => o.id === a.switchedFrom)?.name;
       const spec = a.spec ? specLabel(a.character.class, a.spec) : 'your main spec';
-      const text = `${event.title} on ${event.startTime.toLocaleString()}: you're in with ${a.character.name}${from ? ` (not ${from})` : ''}, playing ${spec}.`;
+      const text = `${event.title} on ${formatStart(event.startTime)}: you're in with ${a.character.name}${from ? ` (not ${from})` : ''}, playing ${spec}.`;
       const sent = await this.notificationService.sendDirect('telegram', telegramId, { text });
       if (!sent.success) continue;
       await prisma.response.update({ where: { id: a.id }, data: { toldAssignment: changed ? assignment : null } });
@@ -189,7 +199,7 @@ export class EventService {
     // Conditional, so two cancels at once announce once.
     const done = await prisma.event.updateMany({ where: { id: eventId, canceledAt: null }, data: { canceledAt: new Date() } });
     if (done.count === 0) throw new ConflictError('Already cancelled');
-    const text = `${event.title} on ${event.startTime.toLocaleString()} is cancelled.`;
+    const text = `${event.title} on ${formatStart(event.startTime)} is cancelled.`;
     const channels = await this.notificationService.announce(`❌ ${text}`);
     // Unsent reminders stay: while cancelled they are used up unsent, and the ones still ahead come back on reopen.
     const answered = await prisma.response.findMany({
@@ -210,7 +220,7 @@ export class EventService {
     if (event.startTime <= new Date()) throw new ConflictError('The event has already started');
     const done = await prisma.event.updateMany({ where: { id: eventId, canceledAt: { not: null } }, data: { canceledAt: null } });
     if (done.count === 0) throw new ConflictError('The event is not cancelled');
-    const channels = await this.notificationService.announce(`✅ ${event.title} on ${event.startTime.toLocaleString()} is back on.`);
+    const channels = await this.notificationService.announce(`✅ ${event.title} on ${formatStart(event.startTime)} is back on.`);
     return { channels };
   }
 
@@ -342,7 +352,15 @@ export class EventService {
     // The player's other approved characters that haven't answered: an officer can switch to one of them.
     const alternativesOf = (userId: string | null | undefined) => (userId ? missing.filter(c => c.userId === userId) : [])
       .map(({ id, name, class: cls, spec, role }) => ({ id, name, class: cls, spec, role }));
-    const noAnswer = missing.map(({ user, userId, inRoster, isMain, createdAt, updatedAt, ...character }) => {
+    // No answer is per player: someone who answered with any character is done; a silent player shows once (the main).
+    const answered = new Set(event.responses.flatMap(r => (r.character.userId ? [r.character.userId] : [])));
+    const silent = new Map<string, (typeof missing)[number]>();
+    for (const c of missing) {
+      if (c.userId && answered.has(c.userId)) continue;
+      const key = c.userId ?? c.id;
+      if (!silent.has(key) || c.isMain) silent.set(key, c);
+    }
+    const noAnswer = [...silent.values()].map(({ user, userId, inRoster, isMain, createdAt, updatedAt, ...character }) => {
       void userId; void inRoster; void isMain; void createdAt; void updatedAt;
       return {
         ...character, nickname: shownNickname({ ...character, user }),
@@ -358,14 +376,14 @@ export class EventService {
   }
 
   async listEvents(limit: number = 20, offset: number = 0) {
-    const [events, rosterSize] = await Promise.all([
+    const [events, roster] = await Promise.all([
       this.eventRepo.findAll(limit, offset),
-      prisma.character.count({ where: { inRoster: true } }),
+      prisma.character.findMany({ where: { inRoster: true }, select: { id: true, userId: true } }),
     ]);
     return events.map(({ responses, ...event }: Event & { responses: ListedResponse[] }) => ({
       ...event,
       state: eventState(event),
-      counts: countResponses(responses, rosterSize),
+      counts: countResponses(responses, roster),
     }));
   }
 }

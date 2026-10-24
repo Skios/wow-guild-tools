@@ -32,7 +32,7 @@ export class EventRepository {
       take: limit,
       skip: offset,
       orderBy: { startTime: 'asc' },
-      include: { responses: { select: { status: true, isConfirmed: true, character: { select: { inRoster: true } } } } },
+      include: { responses: { select: { status: true, isConfirmed: true, character: { select: { id: true, userId: true } } } } },
     });
   }
 }

@@ -4,6 +4,7 @@ import { specRole } from '../domain/wow.js';
 import { NotFoundError } from '../lib/errors.js';
 import { eventState } from '../domain/event-state.js';
 import { ResponseService } from './response.service.js';
+import { noAnswerCount } from './event.service.js';
 import { defaultRoleTarget, readTarget, seasonStart } from './settings.service.js';
 
 const UPCOMING = 10;
@@ -65,17 +66,17 @@ export class DashboardService {
   /** Per open event: confirmed per role played, no answers, the target in use, the next reminder. */
   async composition() {
     const now = new Date();
-    const [events, rosterSize, fallback] = await Promise.all([
+    const [events, roster, fallback] = await Promise.all([
       prisma.event.findMany({
         // Not over and not cancelled: open ones and published ones still being adjusted.
         where: { canceledAt: null, endTime: { gt: now } }, orderBy: { startTime: 'asc' }, take: UPCOMING,
         select: {
           id: true, title: true, startTime: true, endTime: true, isPublished: true, canceledAt: true, roleTarget: true,
-          responses: { select: { status: true, isConfirmed: true, spec: true, character: { select: { class: true, role: true, inRoster: true } } } },
+          responses: { select: { status: true, isConfirmed: true, spec: true, character: { select: { id: true, userId: true, class: true, role: true } } } },
           reminders: { where: { sentAt: null }, select: { minutesBefore: true } },
         },
       }),
-      prisma.character.count({ where: { inRoster: true } }),
+      prisma.character.findMany({ where: { inRoster: true }, select: { id: true, userId: true } }),
       defaultRoleTarget(),
     ]);
     return events.map(({ responses, reminders, roleTarget, ...event }) => {
@@ -91,7 +92,7 @@ export class DashboardService {
         state: eventState(event, now),
         confirmed: team.length,
         byRole,
-        noAnswer: Math.max(0, rosterSize - responses.filter(r => r.character.inRoster).length),
+        noAnswer: noAnswerCount(roster, responses.map(r => r.character)),
         roleTarget: roleTarget === null ? fallback : readTarget(roleTarget, fallback),
         nextReminder: upcoming.length ? new Date(Math.min(...upcoming)) : null,
       };

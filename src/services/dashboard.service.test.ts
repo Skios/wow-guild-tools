@@ -99,13 +99,14 @@ describe('officers: composition of the open events', () => {
     prismaMock.event.findMany.mockResolvedValue([{
       id: 'e1', title: 'Raid', startTime: inHours(30), roleTarget: null,
       responses: [
-        { status: 'IN', isConfirmed: true, spec: null, character: { class: 'WARRIOR', role: 'TANK', inRoster: true } },
-        { status: 'LATE', isConfirmed: true, spec: 'SHADOW', character: { class: 'PRIEST', role: 'HEALER', inRoster: true } },
-        { status: 'IN', isConfirmed: false, spec: null, character: { class: 'MAGE', role: 'RANGED_DPS', inRoster: true } },
+        { status: 'IN', isConfirmed: true, spec: null, character: { id: 'c0', userId: 'u0', class: 'WARRIOR', role: 'TANK', inRoster: true } },
+        { status: 'LATE', isConfirmed: true, spec: 'SHADOW', character: { id: 'c1', userId: 'u1', class: 'PRIEST', role: 'HEALER', inRoster: true } },
+        { status: 'IN', isConfirmed: false, spec: null, character: { id: 'c2', userId: 'u2', class: 'MAGE', role: 'RANGED_DPS', inRoster: true } },
       ],
       reminders: [{ minutesBefore: 1440 }, { minutesBefore: 480 }],
     }]);
-    prismaMock.character.count.mockResolvedValue(10);
+    // 10 players, plus u0's alt: still 7 left once 3 players answered.
+    prismaMock.character.findMany.mockResolvedValue([...Array.from({ length: 10 }, (_, i) => ({ id: `c${i}`, userId: `u${i}` })), { id: 'alt0', userId: 'u0' }]);
 
     const [row] = await new DashboardService().composition();
 
