@@ -1,5 +1,5 @@
 import { prisma } from '../config/db.js';
-import { ConflictError, NotFoundError } from '../lib/errors.js';
+import { AppError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { ResponseStatus } from '@prisma/client';
 
 export class EventLockedError extends ConflictError {
@@ -26,6 +26,26 @@ async function requireApproved(characterIds: string[]) {
  */
 const clearNoteUnless = (eventId: string, characterId: string, status: ResponseStatus) =>
   prisma.response.updateMany({ where: { eventId, characterId, NOT: { status } }, data: { note: null } });
+
+/**
+ * The spec each selection plays, for the ones that say: an off-spec of the character, or null for its main.
+ * Anything else is refused before writing.
+ */
+async function playedSpecs(selections: { characterId: string; spec?: string | null | undefined }[]) {
+  const asked = selections.filter(s => s.spec !== undefined);
+  const result = new Map<string, string | null>();
+  if (asked.length === 0) return result;
+  const characters = await prisma.character.findMany({
+    where: { id: { in: asked.map(s => s.characterId) } }, select: { id: true, name: true, spec: true, offSpecs: true },
+  });
+  for (const { characterId, spec } of asked) {
+    const character = characters.find(c => c.id === characterId);
+    if (spec === null || spec === character?.spec) { result.set(characterId, null); continue; }
+    if (!character?.offSpecs.includes(spec!)) throw new AppError(`${character?.name ?? 'That character'} has no such off-spec`, 400);
+    result.set(characterId, spec!);
+  }
+  return result;
+}
 
 export class ResponseService {
   private async openEvent(eventId: string) {
@@ -60,17 +80,19 @@ export class ResponseService {
 
   async bulkUpdateResponses(
     eventId: string,
-    selections: { characterId: string; status: ResponseStatus; isConfirmed: boolean; lateMinutes?: number | undefined }[],
+    selections: { characterId: string; status: ResponseStatus; isConfirmed: boolean; lateMinutes?: number | undefined; spec?: string | null | undefined }[],
   ) {
     const event = await this.openEvent(eventId);
     await requireApproved(selections.map(s => s.characterId));
+    const specs = await playedSpecs(selections);
 
     const updates = selections.flatMap(s => {
       const arrival = this.arrival(s.status, event.startTime, s.lateMinutes);
+      const spec = specs.has(s.characterId) ? { spec: specs.get(s.characterId)! } : {};
       return [clearNoteUnless(eventId, s.characterId, s.status), prisma.response.upsert({
         where: { eventId_characterId: { eventId, characterId: s.characterId } },
-        update: { status: s.status, isConfirmed: s.isConfirmed, ...arrival },
-        create: { eventId, characterId: s.characterId, status: s.status, isConfirmed: s.isConfirmed, arrivalTime: arrival.arrivalTime ?? null },
+        update: { status: s.status, isConfirmed: s.isConfirmed, ...arrival, ...spec },
+        create: { eventId, characterId: s.characterId, status: s.status, isConfirmed: s.isConfirmed, arrivalTime: arrival.arrivalTime ?? null, ...spec },
       })];
     });
 
@@ -89,12 +111,13 @@ export class ResponseService {
    * The player answers with another of their characters: status, arrival and note move; an officer confirms again.
    * Upsert, so a double tap (or a target an officer already answered for) ends with one answer, not a conflict.
    */
-  async moveResponse(eventId: string, fromCharacterId: string, toCharacterId: string) {
+  async moveResponse(eventId: string, fromCharacterId: string, toCharacterId: string, { keepConfirmed = false } = {}) {
     await this.openEvent(eventId);
     await requireApproved([toCharacterId]);
     const answer = await prisma.response.findUnique({ where: { eventId_characterId: { eventId, characterId: fromCharacterId } } });
     if (!answer) throw new NotFoundError('No answer to move');
-    const moved = { status: answer.status, arrivalTime: answer.arrivalTime, note: answer.note, isConfirmed: false };
+    // The spec played was the old character's; the new one plays its main until an officer says otherwise.
+    const moved = { status: answer.status, arrivalTime: answer.arrivalTime, note: answer.note, isConfirmed: keepConfirmed && answer.isConfirmed, spec: null };
     await prisma.$transaction([
       prisma.response.deleteMany({ where: { eventId, characterId: fromCharacterId } }),
       prisma.response.upsert({
@@ -103,5 +126,17 @@ export class ResponseService {
         update: moved,
       }),
     ]);
+  }
+
+  /** An officer swaps which of a player's approved characters comes (alt -> main to fill a role). Confirmation kept. */
+  async switchCharacter(eventId: string, fromCharacterId: string, toCharacterId: string) {
+    const owners = await prisma.character.findMany({ where: { id: { in: [fromCharacterId, toCharacterId] } }, select: { id: true, userId: true } });
+    const [from, to] = [fromCharacterId, toCharacterId].map(id => owners.find(c => c.id === id)?.userId);
+    if (!from || from !== to) throw new AppError("Both characters must belong to the same player", 400);
+    // Unlike the player's own double tap, an officer never overwrites an answer the target already has.
+    const taken = await prisma.response.findUnique({ where: { eventId_characterId: { eventId, characterId: toCharacterId } }, select: { id: true } });
+    if (taken) throw new ConflictError('That character has already answered for this event');
+    // ponytail: read-then-move outside one transaction; a concurrent edit of the same answer can be lost. Fine at guild scale.
+    await this.moveResponse(eventId, fromCharacterId, toCharacterId, { keepConfirmed: true });
   }
 }

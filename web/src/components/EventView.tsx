@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApi, useMeta } from '../context';
 import { formatDateTime, formatRange } from '../format';
 import {
-  addCharacter, changedSelections, confirmRow, groupRows, isAttending, isDirty, rowsFromResponses, setLateMinutes, setStatus, summarize,
-  type RosterRow,
+  addCharacter, changedSelections, confirmRow, groupRows, isAttending, isDirty, rowsFromResponses, setLateMinutes, setPlaySpec, setStatus, summarize,
+  type RoleOfSpec, type RosterRow,
 } from '../roster';
 import { errorMessage, useAsync } from '../useAsync';
 import type { EventDetail, MessageResult, NoAnswerEntry, ResponseStatus } from '../types';
@@ -21,6 +21,7 @@ export function EventView({ id }: { id: string }) {
   const api = useApi();
   const meta = useMeta();
   const event = useAsync(() => api.getEvent(id), [api, id]);
+  const roleOf: RoleOfSpec = (classId, spec) => meta.classes.find(c => c.id === classId)?.specs.find(s => s.id === spec)?.role;
 
   const [rows, setRows] = useState<RosterRow[]>([]);
   const [busy, setBusy] = useState<Busy>(null);
@@ -37,7 +38,7 @@ export function EventView({ id }: { id: string }) {
   const [source, setSource] = useState<EventDetail | null>(null);
   if (event.data && event.data !== source) {
     setSource(event.data);
-    setRows(rowsFromResponses(event.data.responses, event.data.startTime));
+    setRows(rowsFromResponses(event.data.responses, event.data.startTime, roleOf));
     setSelected(new Set());
   }
 
@@ -157,6 +158,14 @@ export function EventView({ id }: { id: string }) {
             onStatus: (cid, status: ResponseStatus) => edit(cid, r => setStatus(r, status)),
             onConfirm: (cid, confirmed) => edit(cid, r => confirmRow(r, confirmed)),
             onLateMinutes: (cid, minutes) => edit(cid, r => setLateMinutes(r, minutes)),
+            onPlaySpec: (cid, spec) => edit(cid, r => setPlaySpec(r, spec, spec ? roleOf(r.class, spec) : undefined)),
+            ...(!dirty && {
+              onSwitch: (cid: string, to: string) => {
+                const row = rows.find(r => r.characterId === cid);
+                const target = row?.alternatives?.find(a => a.id === to);
+                return run('saving', () => api.switchCharacter(id, cid, to), `${row?.name} now comes as ${target?.name}.`);
+              },
+            }),
             selected,
             onSelect: toggle,
           }}
@@ -193,11 +202,11 @@ export function EventView({ id }: { id: string }) {
             <button
               type="button"
               disabled={!dirty || locked}
-              onClick={() => { setRows(rowsFromResponses(data.responses, data.startTime)); setNotice(null); }}
+              onClick={() => { setRows(rowsFromResponses(data.responses, data.startTime, roleOf)); setNotice(null); }}
             >
               Discard changes
             </button>
-            {dirty && <span className="muted" role="status">Unsaved changes</span>}
+            {dirty && <span className="muted" role="status">Unsaved changes{rows.some(r => r.alternatives?.length) && ' · save them to switch characters'}</span>}
           </div>
         </section>
       )}

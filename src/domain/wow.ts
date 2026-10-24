@@ -97,6 +97,9 @@ function findSpec(cls: unknown, id: unknown): SpecInfo | undefined {
 
 export const isValidSpec = (cls: unknown, id: unknown) => findSpec(cls, id) !== undefined;
 
+/** The role a spec plays, or undefined for an unknown pair. */
+export const specRole = (cls: unknown, id: unknown): WoWRole | undefined => findSpec(cls, id)?.role;
+
 /** Validates a class/spec pair; the role comes from the spec. */
 export function parseClassSpec(cls: unknown, id: unknown): { class: WoWClass; spec: string; role: WoWRole } {
   if (!isClass(cls)) throw new Error(`Unknown class: ${String(cls)}`);

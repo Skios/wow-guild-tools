@@ -66,6 +66,8 @@ export const FinalizeRosterSchema = z.object({
           status: z.enum(ResponseStatus),
           isConfirmed: z.boolean(),
           lateMinutes: z.number().int().min(0).max(MAX_LATE_MINUTES).optional(),
+          // The spec played that night (an off-spec); null = the main one, missing = unchanged.
+          spec: z.string().min(1).max(40).nullable().optional(),
         })
         .refine(s => !s.isConfirmed || s.status === 'IN' || s.status === 'LATE', {
           message: 'Only players marked IN or LATE can be confirmed',
@@ -86,6 +88,9 @@ export const FinalizeRosterSchema = z.object({
 // The creator comes from the signed-in officer, never from the request body.
 export type CreateEventInput = z.infer<typeof CreateEventSchema> & { createdByUserId?: string };
 export type FinalizeRosterInput = z.infer<typeof FinalizeRosterSchema>;
+
+export const SwitchCharacterParamsSchema = z.object({ id: EventIdSchema, characterId: z.string().uuid('Invalid character ID') });
+export const SwitchCharacterSchema = z.object({ to: z.string().uuid('Invalid character ID') });
 
 export const MAX_MESSAGE_LENGTH = 500;
 

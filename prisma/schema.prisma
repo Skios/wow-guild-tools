@@ -175,6 +175,7 @@ model Response {
   isConfirmed   Boolean    @default(false)
   arrivalTime  DateTime?
   note         String?
+  spec         String?        // the off-spec played that night, set by an officer; null = the main spec
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 

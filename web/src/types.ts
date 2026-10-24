@@ -64,6 +64,15 @@ export interface EventSummary {
   counts: ResponseCounts;
 }
 
+/** Another approved character of the same player, which an officer can switch the answer to. */
+export interface Alternative {
+  id: string;
+  name: string;
+  class: string;
+  spec: string | null;
+  role: RoleId;
+}
+
 export interface EventResponse {
   id: string;
   characterId: string;
@@ -72,6 +81,9 @@ export interface EventResponse {
   arrivalTime: string | null;
   /** The player's note on their answer (e.g. "leaving 30 min early"). */
   note: string | null;
+  /** The off-spec an officer set for this event; null = the character's main spec. */
+  spec: string | null;
+  alternatives: Alternative[];
   character: {
     id: string;
     name: string;
@@ -127,6 +139,8 @@ export interface RosterSelection {
   status: ResponseStatus;
   isConfirmed: boolean;
   lateMinutes?: number;
+  /** Only when it changed: the off-spec played, or null for the main one. */
+  spec?: string | null;
 }
 
 export interface MessageResult {

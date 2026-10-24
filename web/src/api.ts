@@ -108,6 +108,8 @@ export function createApi({ fetchImpl = fetch, getToken = async () => null, onUn
     listEvents: () => request<EventSummary[]>(`/events?limit=${EVENTS_PAGE}`),
     getEvent: (eventId: string) => request<EventDetail>(`/events/${id(eventId)}`),
     createEvent: (event: NewEvent) => request<EventSummary>('/events', send('POST', event)),
+    switchCharacter: (eventId: string, characterId: string, to: string) =>
+      request<void>(`/events/${id(eventId)}/responses/${id(characterId)}/switch`, send('POST', { to })),
     setReminders: (eventId: string, minutesBefore: number[]) =>
       request<Reminder[]>(`/events/${id(eventId)}/reminders`, send('PUT', { minutesBefore })),
     saveRoster: (eventId: string, selections: RosterSelection[]) =>

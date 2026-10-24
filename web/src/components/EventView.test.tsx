@@ -789,3 +789,67 @@ describe('in-game invites', () => {
     expect(screen.queryByRole('region', { name: 'In-game invites' })).not.toBeInTheDocument();
   });
 });
+
+describe('the spec and character a player brings that night', () => {
+  const fardina = (over = {}) => ({
+    ...response('Fardina', 'HEALER', 'IN', true, 'PRIEST'),
+    character: { ...response('Fardina', 'HEALER', 'IN', true, 'PRIEST').character, spec: 'HOLY', offSpecs: ['SHADOW'] },
+    ...over,
+  });
+  const playsAs = () => screen.getByLabelText('Fardina plays as') as HTMLSelectElement;
+
+  test('an officer moves her to an off-spec: she changes column, and it is saved', async () => {
+    const api = setup(eventDetail({ responses: [fardina()] }));
+    await ready();
+    expect(within(region('Healer (1)')).getByText('Fardina')).toBeInTheDocument();
+
+    await userEvent.selectOptions(playsAs(), 'SHADOW');
+
+    expect(within(region('Ranged DPS (1)')).getByText('Fardina')).toBeInTheDocument();
+    expect(within(region('Ranged DPS (1)')).getByRole('img', { name: 'Shadow Priest' })).toBeInTheDocument();
+    await userEvent.click(save());
+    await waitFor(() => expect(api.saveRoster).toHaveBeenCalledWith('e1', [{ characterId: 'c-Fardina', status: 'IN', isConfirmed: true, spec: 'SHADOW' }]));
+  });
+
+  test('an off-spec saved earlier shows in its column; back to the main spec sends null', async () => {
+    const api = setup(eventDetail({ responses: [fardina({ spec: 'SHADOW' })] }));
+    await ready();
+    expect(within(region('Ranged DPS (1)')).getByText('Fardina')).toBeInTheDocument();
+    expect(playsAs()).toHaveValue('SHADOW');
+
+    await userEvent.selectOptions(playsAs(), 'HOLY');
+    expect(within(region('Healer (1)')).getByText('Fardina')).toBeInTheDocument();
+    await userEvent.click(save());
+    await waitFor(() => expect(api.saveRoster).toHaveBeenCalledWith('e1', [expect.objectContaining({ characterId: 'c-Fardina', spec: null })]));
+  });
+
+  test('no off-specs, no choice', async () => {
+    setup(eventDetail({ responses: [response('Tom', 'TANK', 'IN', true, 'WARRIOR')] }));
+    await ready();
+    expect(screen.queryByLabelText('Tom plays as')).not.toBeInTheDocument();
+  });
+
+  test("switching to the player's other character goes to the server at once and reloads", async () => {
+    const detail = eventDetail({ responses: [fardina({ alternatives: [{ id: 'c-Bigtank', name: 'Bigtank', class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK' }] })] });
+    const api = setup(detail);
+    await ready();
+
+    await userEvent.selectOptions(screen.getByLabelText('Switch Fardina to'), 'c-Bigtank');
+
+    await waitFor(() => expect(api.switchCharacter).toHaveBeenCalledWith('e1', 'c-Fardina', 'c-Bigtank'));
+    expect(await screen.findByText('Fardina now comes as Bigtank.')).toBeInTheDocument();
+    await waitFor(() => expect(api.getEvent).toHaveBeenCalledTimes(2));
+  });
+
+  test('switching waits for unsaved changes to be saved', async () => {
+    setup(eventDetail({ responses: [
+      fardina({ alternatives: [{ id: 'c-Bigtank', name: 'Bigtank', class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK' }] }),
+      response('Tom', 'TANK', 'IN', true, 'WARRIOR'),
+    ] }));
+    await ready();
+
+    await userEvent.selectOptions(answer('Tom'), 'BENCH');
+    expect(screen.queryByLabelText('Switch Fardina to')).not.toBeInTheDocument();
+    expect(screen.getByText(/save them to switch characters/)).toHaveAttribute('role', 'status');
+  });
+});

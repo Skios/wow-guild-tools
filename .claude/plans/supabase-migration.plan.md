@@ -108,7 +108,7 @@ profile and characters, roster approval + new season, notes on answers, Roles pa
 2. [x] In-game invites move from the Roster page to the event page: only confirmed IN/LATE characters.
 3. [x] Publish dialog: one choice for every unconfirmed IN/LATE (Bench or Out); above it, every answer with a note
    (e.g. "IN, arriving 21:30, leaving 23:30") with its confirm tick, so officers make last changes before publishing.
-4. On the event board an officer can (a) switch which approved character a player brings (alt -> main; the answer
+4. [x] On the event board an officer can (a) switch which approved character a player brings (alt -> main; the answer
    moves, like the bot's) and (b) set the spec a character plays that night among its offspecs, which moves it to
    that role's column. Per event only; the roster is unchanged.
 5. Role target: guild default + per-event override. Two modes:

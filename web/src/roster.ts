@@ -1,4 +1,4 @@
-import type { EventResponse, NoAnswerEntry, ResponseStatus, RoleId, RosterSelection } from './types';
+import type { EventResponse, NoAnswerEntry, ResponseStatus, RoleId, RosterSelection, Alternative } from './types';
 
 export const ROLE_ORDER: Record<RoleId, number> = { TANK: 0, HEALER: 1, DPS: 2, RANGED_DPS: 3 };
 export const ROLES: RoleId[] = ['TANK', 'HEALER', 'DPS', 'RANGED_DPS'];
@@ -9,6 +9,7 @@ interface SavedState {
   status: ResponseStatus;
   isConfirmed: boolean;
   lateMinutes: number | null;
+  playSpec?: string | null;
 }
 
 export interface RosterRow {
@@ -29,7 +30,16 @@ export interface RosterRow {
   note: string | null;
   /** What the server has; null for a character added in this session. */
   saved: SavedState | null;
+  /** The off-spec played that night (spec and role above then follow it); null/missing = the main spec. */
+  playSpec?: string | null;
+  /** The character's own spec and role, kept while it plays an off-spec. */
+  main?: { spec: string | null; role: RoleId };
+  /** The player's other approved characters an officer can switch to. */
+  alternatives?: Alternative[];
 }
+
+/** Role of a spec of a class, from the game data; undefined when unknown. */
+export type RoleOfSpec = (classId: string, spec: string) => RoleId | undefined;
 
 /** IN and LATE both mean "coming"; only they can be confirmed for the raid. */
 export const isAttending = (status: ResponseStatus) => status === 'IN' || status === 'LATE';
@@ -42,16 +52,21 @@ function minutesLate(arrivalTime: string | null, startTime: string): number | nu
   return Math.max(0, Math.round((arrival - start) / 60_000));
 }
 
-export function rowsFromResponses(responses: EventResponse[], startTime: string): RosterRow[] {
+export function rowsFromResponses(responses: EventResponse[], startTime: string, roleOf: RoleOfSpec = () => undefined): RosterRow[] {
   return responses.map(r => {
     const lateMinutes = minutesLate(r.arrivalTime, startTime);
+    const playSpec = r.spec ?? null;
+    const playRole = playSpec ? roleOf(r.character.class, playSpec) : undefined;
     return {
       characterId: r.characterId,
       name: r.character.name,
       realm: r.character.realm,
       class: r.character.class,
-      spec: r.character.spec,
-      role: r.character.role,
+      spec: playSpec ?? r.character.spec,
+      role: playRole ?? r.character.role,
+      playSpec,
+      main: { spec: r.character.spec, role: r.character.role },
+      alternatives: r.alternatives ?? [],
       username: r.character.user?.username ?? null,
       offSpecs: r.character.offSpecs,
       nickname: r.character.nickname,
@@ -59,9 +74,18 @@ export function rowsFromResponses(responses: EventResponse[], startTime: string)
       isConfirmed: r.isConfirmed,
       lateMinutes,
       note: r.note ?? null,
-      saved: { status: r.status, isConfirmed: r.isConfirmed, lateMinutes },
+      saved: { status: r.status, isConfirmed: r.isConfirmed, lateMinutes, playSpec },
     };
   });
+}
+
+/** An officer's call for the night: play this off-spec (or null: back to the main), in that spec's role. */
+export function setPlaySpec(row: RosterRow, spec: string | null, role: RoleId | undefined): RosterRow {
+  const main = row.main ?? { spec: row.spec, role: row.role };
+  const backToMain = spec === null || spec === main.spec;
+  return backToMain
+    ? { ...row, main, playSpec: null, spec: main.spec, role: main.role }
+    : { ...row, main, playSpec: spec, spec, role: role ?? main.role };
 }
 
 export function sortRows(rows: RosterRow[]): RosterRow[] {
@@ -119,14 +143,16 @@ const isChanged = (row: RosterRow) =>
   !row.saved
   || row.saved.status !== row.status
   || row.saved.isConfirmed !== row.isConfirmed
-  || row.saved.lateMinutes !== row.lateMinutes;
+  || row.saved.lateMinutes !== row.lateMinutes
+  || (row.saved.playSpec ?? null) !== (row.playSpec ?? null);
 
 export function changedSelections(rows: RosterRow[]): RosterSelection[] {
-  return rows.filter(isChanged).map(({ characterId, status, isConfirmed, lateMinutes }) => ({
+  return rows.filter(isChanged).map(({ characterId, status, isConfirmed, lateMinutes, playSpec, saved }) => ({
     characterId,
     status,
     isConfirmed,
     ...(status === 'LATE' && lateMinutes !== null && { lateMinutes }),
+    ...((saved?.playSpec ?? null) !== (playSpec ?? null) && { spec: playSpec ?? null }),
   }));
 }
 

@@ -12,6 +12,8 @@ const response = (
 ): EventResponse => ({
   id: `r-${name}`,
   note: null,
+  spec: null,
+  alternatives: [],
   characterId: `c-${name}`,
   status,
   isConfirmed,
@@ -306,5 +308,34 @@ describe('sendUnconfirmed', () => {
 
     expect(sendUnconfirmed(rows, 'OUT').map(r => [r.characterId, r.status])).toEqual([['a', 'IN'], ['b', 'OUT'], ['c', 'TENTATIVE']]);
     expect(sendUnconfirmed(rows, 'BENCH')[1]).toMatchObject({ status: 'BENCH', lateMinutes: null });
+  });
+});
+
+describe('the spec played that night', () => {
+  const tank = rowsFromResponses([{
+    ...response('Brann', 'DPS', 'IN', true),
+    character: { ...response('Brann', 'DPS', 'IN', true).character, class: 'WARRIOR', spec: 'FURY', offSpecs: ['PROTECTION'] },
+  }], '2099-10-18T19:00:00Z', (_cls, spec) => (spec === 'PROTECTION' ? 'TANK' : undefined))[0]!;
+
+  test('setPlaySpec moves the row to the off-spec role, and back to the main', async () => {
+    const { setPlaySpec } = await import('./roster');
+    const off = setPlaySpec(tank, 'PROTECTION', 'TANK');
+    expect(off).toMatchObject({ playSpec: 'PROTECTION', spec: 'PROTECTION', role: 'TANK' });
+    expect(setPlaySpec(off, 'FURY', 'DPS')).toMatchObject({ playSpec: null, spec: 'FURY', role: 'DPS' });
+    expect(setPlaySpec(off, null, undefined)).toMatchObject({ playSpec: null, spec: 'FURY', role: 'DPS' });
+  });
+
+  test('a saved off-spec loads in its role; only a change sends `spec`, null meaning the main', async () => {
+    const { setPlaySpec } = await import('./roster');
+    const [saved] = rowsFromResponses([{
+      ...response('Brann', 'DPS', 'IN', true), spec: 'PROTECTION',
+      character: { ...response('Brann', 'DPS', 'IN', true).character, class: 'WARRIOR', spec: 'FURY', offSpecs: ['PROTECTION'] },
+    }], '2099-10-18T19:00:00Z', () => 'TANK');
+    expect(saved).toMatchObject({ role: 'TANK', spec: 'PROTECTION' });
+    expect(changedSelections([saved!])).toEqual([]);
+
+    const back = setPlaySpec(saved!, null, undefined);
+    expect(changedSelections([back])).toEqual([{ characterId: 'c-Brann', status: 'IN', isConfirmed: true, spec: null }]);
+    expect(changedSelections([setPlaySpec(tank, 'PROTECTION', 'TANK')])[0]).toMatchObject({ spec: 'PROTECTION' });
   });
 });

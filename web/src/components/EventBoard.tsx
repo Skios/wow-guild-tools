@@ -10,6 +10,10 @@ export interface BoardHandlers {
   onStatus: (characterId: string, status: ResponseStatus) => void;
   onConfirm: (characterId: string, confirmed: boolean) => void;
   onLateMinutes: (characterId: string, minutes: number | null) => void;
+  /** The spec played that night (null = main). */
+  onPlaySpec: (characterId: string, spec: string | null) => void;
+  /** Switch the answer to another of the player's characters; undefined while it can't (unsaved changes). */
+  onSwitch?: (characterId: string, to: string) => void;
   /** People who can be messaged from this list (tentative). */
   selected: Set<string>;
   onSelect: (characterId: string, selected: boolean) => void;
@@ -27,6 +31,8 @@ function People({ rows, handlers, selectable = false }: { rows: RosterRow[]; han
           onStatus={s => handlers.onStatus(row.characterId, s)}
           onConfirm={c => handlers.onConfirm(row.characterId, c)}
           onLateMinutes={m => handlers.onLateMinutes(row.characterId, m)}
+          onPlaySpec={spec => handlers.onPlaySpec(row.characterId, spec)}
+          onSwitch={handlers.onSwitch && (to => handlers.onSwitch!(row.characterId, to))}
           {...(selectable && {
             selection: { selected: handlers.selected.has(row.characterId), onToggle: (on: boolean) => handlers.onSelect(row.characterId, on) },
           })}

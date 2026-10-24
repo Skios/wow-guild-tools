@@ -198,6 +198,21 @@ describe('EventService.getEventDetail', () => {
     expect(detail.noAnswer[0]!.nickname).toBe('Jay');
   });
 
+  test("each answer lists the player's other approved characters that haven't answered, to switch to", async () => {
+    prismaMock.event.findUnique.mockResolvedValue({
+      ...event,
+      responses: [{ status: 'IN', characterId: 'c-Alt', character: { id: 'c-Alt', name: 'Alt', userId: 'u1', user: { username: 't', nickname: null } } }],
+    });
+    prismaMock.character.findMany.mockResolvedValue([
+      { ...rosterRow('Main', { username: 't', identities: [] }), userId: 'u1', class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK' },
+      { ...rosterRow('Stranger', { username: 's', identities: [] }), userId: 'u2' },
+    ]);
+
+    const detail = await new EventService().getEventDetail('e1');
+
+    expect(detail.responses[0]!.alternatives).toEqual([{ id: 'c-Main', name: 'Main', class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK' }]);
+  });
+
   test('404 for an unknown event, without querying the roster', async () => {
     prismaMock.event.findUnique.mockResolvedValue(null);
 
@@ -232,6 +247,17 @@ describe('EventService.publishEvent', () => {
     expect(adapter.publishFinalRoster).toHaveBeenCalledWith(
       expect.objectContaining({ roster: { team: ['Tank'], bench: ['Bench', 'Maybe'] } }),
     );
+  });
+
+  test('sorted by the role played that night: a warrior told to play its off-spec tank comes first', async () => {
+    prismaMock.response.findMany.mockResolvedValue([
+      row('Tank', 'IN', true, 'TANK'),
+      { ...row('Aaron', 'IN', true, 'DPS'), spec: 'PROTECTION', character: { name: 'Aaron', role: 'DPS', class: 'WARRIOR' } },
+    ]);
+
+    await new EventService().publishEvent('e1');
+
+    expect(adapter.publishFinalRoster).toHaveBeenCalledWith(expect.objectContaining({ roster: { team: ['Aaron', 'Tank'], bench: [] } }));
   });
 
   test('a confirmed late player is on the team; an unconfirmed one is on the bench', async () => {

@@ -305,3 +305,28 @@ describe('POST /events with reminders', () => {
     expect((await post('/events', { ...newEvent(), reminders: [2] })).statusCode).toBe(400);
   });
 });
+
+describe('POST /events/:id/responses/:characterId/switch', () => {
+  const FROM = uuid(20);
+  const TO = uuid(21);
+  const call = async (payload: unknown) => (await app()).inject({ method: 'POST', url: `/events/${EID}/responses/${FROM}/switch`, payload: payload as object });
+
+  test("moves the answer to the player's other character", async () => {
+    prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, startTime: new Date(inHours(24)) });
+    prismaMock.character.count.mockResolvedValue(1);
+    prismaMock.character.findMany.mockResolvedValue([{ id: FROM, userId: 'u1' }, { id: TO, userId: 'u1' }]);
+    prismaMock.response.findUnique.mockImplementation(async (args: { where: { eventId_characterId: { characterId: string } } }) =>
+      (args.where.eventId_characterId.characterId === FROM ? { id: 'r1', status: 'IN', isConfirmed: true, arrivalTime: null, note: null } : null));
+    prismaMock.$transaction.mockResolvedValue([]);
+
+    const res = await call({ to: TO });
+
+    expect(res.statusCode).toBe(200);
+    expect(prismaMock.response.upsert.mock.calls[0]![0].create).toMatchObject({ characterId: TO, isConfirmed: true });
+  });
+
+  test('a bad body is a 400', async () => {
+    expect((await call({ to: 'nope' })).statusCode).toBe(400);
+    expect((await call({ to: FROM })).statusCode).toBe(400); // same character
+  });
+});

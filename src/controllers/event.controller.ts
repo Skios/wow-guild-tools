@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { sendError } from '../lib/http-error.js';
 import { requireCapability } from '../plugins/auth.js';
 import { EventService } from '../services/event.service.js';
-import { CreateEventSchema, EventParamsSchema, FinalizeRosterSchema, ListEventsQuerySchema, MessageSchema, SetRemindersSchema } from '../validators/event.validator.js';
+import { CreateEventSchema, EventParamsSchema, FinalizeRosterSchema, ListEventsQuerySchema, MessageSchema, SetRemindersSchema, SwitchCharacterParamsSchema, SwitchCharacterSchema } from '../validators/event.validator.js';
 
 export async function eventRoutes(fastify: FastifyInstance) {
   const eventService = new EventService();
@@ -44,6 +44,18 @@ export async function eventRoutes(fastify: FastifyInstance) {
       const { id } = EventParamsSchema.parse(request.params);
       const body = MessageSchema.parse(request.body);
       return reply.send({ results: await eventService.messageCharacters(id, body.characterIds, body.text) });
+    } catch (error) {
+      return sendError(request, reply, error);
+    }
+  });
+
+  fastify.post('/events/:id/responses/:characterId/switch', async (request, reply) => {
+    try {
+      const { id, characterId } = SwitchCharacterParamsSchema.parse(request.params);
+      const { to } = SwitchCharacterSchema.parse(request.body);
+      if (to === characterId) return reply.code(400).send({ error: 'Already answering with that character' });
+      await eventService.switchCharacter(id, characterId, to);
+      return reply.send({ success: true });
     } catch (error) {
       return sendError(request, reply, error);
     }

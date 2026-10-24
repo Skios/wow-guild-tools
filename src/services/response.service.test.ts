@@ -83,10 +83,19 @@ describe('ResponseService.moveResponse (the player answers with another characte
     expect(prismaMock.response.deleteMany).toHaveBeenCalledWith({ where: { eventId: 'e1', characterId: 'main' } });
     expect(prismaMock.response.upsert).toHaveBeenCalledWith({
       where: { eventId_characterId: { eventId: 'e1', characterId: 'alt' } },
-      create: { eventId: 'e1', characterId: 'alt', ...answer, isConfirmed: false },
-      update: { ...answer, isConfirmed: false },
+      create: { eventId: 'e1', characterId: 'alt', ...answer, isConfirmed: false, spec: null },
+      update: { ...answer, isConfirmed: false, spec: null },
     });
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  test('an officer switching it keeps the confirmation; the spec played goes back to the new character\'s main', async () => {
+    prismaMock.response.findUnique.mockResolvedValue({ id: 'r1', isConfirmed: true, status: 'IN', arrivalTime: null, note: null, spec: 'FROST' });
+    prismaMock.$transaction.mockResolvedValue([]);
+
+    await new ResponseService().moveResponse('e1', 'main', 'alt', { keepConfirmed: true });
+
+    expect(prismaMock.response.upsert.mock.calls[0]![0].create).toMatchObject({ isConfirmed: true, spec: null });
   });
 
   test('nothing to move when the first character never answered', async () => {
@@ -239,5 +248,77 @@ describe('ResponseService.bulkUpdateResponses', () => {
     await new ResponseService().bulkUpdateResponses('e1', []);
 
     expect(prismaMock.response.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('ResponseService.switchCharacter (an officer swaps which character a player brings)', () => {
+  beforeEach(() => {
+    prismaMock.response.findUnique.mockResolvedValue({ id: 'r1', isConfirmed: true, status: 'IN', arrivalTime: null, note: null });
+    prismaMock.$transaction.mockResolvedValue([]);
+  });
+
+  test("moves the answer to another of the same player's characters, confirmation kept", async () => {
+    prismaMock.character.findMany.mockResolvedValue([{ id: 'main', userId: 'u1' }, { id: 'alt', userId: 'u1' }]);
+    prismaMock.response.findUnique.mockImplementation(async (args: { where: { eventId_characterId: { characterId: string } } }) =>
+      (args.where.eventId_characterId.characterId === 'alt' ? { id: 'r1', isConfirmed: true, status: 'IN', arrivalTime: null, note: null } : null));
+
+    await new ResponseService().switchCharacter('e1', 'alt', 'main');
+
+    expect(prismaMock.response.deleteMany).toHaveBeenCalledWith({ where: { eventId: 'e1', characterId: 'alt' } });
+    expect(prismaMock.response.upsert.mock.calls[0]![0].create).toMatchObject({ characterId: 'main', isConfirmed: true });
+  });
+
+  test('a target that already answered is refused, never overwritten', async () => {
+    prismaMock.character.findMany.mockResolvedValue([{ id: 'main', userId: 'u1' }, { id: 'alt', userId: 'u1' }]);
+    prismaMock.response.findUnique.mockImplementation(async (args: { where: { eventId_characterId: { characterId: string } } }) =>
+      ({ id: `r-${args.where.eventId_characterId.characterId}`, status: 'IN', isConfirmed: false, arrivalTime: null, note: null }));
+
+    await expect(new ResponseService().switchCharacter('e1', 'alt', 'main')).rejects.toBeInstanceOf(ConflictError);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['another player', [{ id: 'main', userId: 'u1' }, { id: 'alt', userId: 'u2' }]],
+    ['an unclaimed name', [{ id: 'main', userId: null }, { id: 'alt', userId: null }]],
+    ['a missing character', [{ id: 'main', userId: 'u1' }]],
+  ])("refuses a character of %s, without touching the answers", async (_label, found) => {
+    prismaMock.character.findMany.mockResolvedValue(found);
+
+    await expect(new ResponseService().switchCharacter('e1', 'main', 'alt')).rejects.toMatchObject({ status: 400 });
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('the spec played that night', () => {
+  beforeEach(() => {
+    prismaMock.character.findMany.mockResolvedValue([{ id: 'c1', class: 'MAGE', spec: 'FIRE', offSpecs: ['FROST'] }]);
+  });
+  const save = (spec: string | null | undefined) =>
+    new ResponseService().bulkUpdateResponses('e1', [{ characterId: 'c1', status: 'IN', isConfirmed: true, ...(spec !== undefined && { spec }) }]);
+  const written = () => prismaMock.response.upsert.mock.calls[0]![0];
+
+  test('an off-spec is stored; the main spec, or null, means "as usual"', async () => {
+    await save('FROST');
+    expect(written().update.spec).toBe('FROST');
+    expect(written().create.spec).toBe('FROST');
+
+    prismaMock.response.upsert.mockClear();
+    await save('FIRE');
+    expect(written().update.spec).toBeNull();
+
+    prismaMock.response.upsert.mockClear();
+    await save(null);
+    expect(written().update.spec).toBeNull();
+  });
+
+  test('not sent: the spec stays as it was', async () => {
+    await save(undefined);
+    expect(written().update).not.toHaveProperty('spec');
+    expect(prismaMock.character.findMany).not.toHaveBeenCalled();
+  });
+
+  test('a spec the character has not set up is refused', async () => {
+    await expect(save('ARCANE')).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/off-spec/) });
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 });

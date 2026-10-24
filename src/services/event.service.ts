@@ -1,7 +1,7 @@
 import type { Event, ResponseStatus } from '@prisma/client';
 import { prisma } from '../config/db.js';
 import { shownNickname } from './roster.service.js';
-import { ROLE_ORDER } from '../domain/wow.js';
+import { ROLE_ORDER, specRole } from '../domain/wow.js';
 import { TelegramAdapter } from '../integrations/telegram/telegram.adapter.js';
 import { AppError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { EventRepository } from '../repositories/event.repository.js';
@@ -41,13 +41,16 @@ function countResponses(responses: ListedResponse[], rosterSize: number): Respon
   return counts;
 }
 
-type RosterRow = { status: ResponseStatus; isConfirmed: boolean; character: { name: string; role: keyof typeof ROLE_ORDER } };
+type RosterRow = { status: ResponseStatus; isConfirmed: boolean; spec?: string | null; character: { name: string; class?: string; role: keyof typeof ROLE_ORDER } };
+
+/** The role played that night: the off-spec's an officer picked, else the character's own. */
+const playedRole = (r: RosterRow) => (r.spec && specRole(r.character.class, r.spec)) || r.character.role;
 
 const attending = (status: ResponseStatus) => status === 'IN' || status === 'LATE';
 
 function buildRoster(rows: RosterRow[]) {
   const byRoleThenName = (a: RosterRow, b: RosterRow) =>
-    ROLE_ORDER[a.character.role] - ROLE_ORDER[b.character.role] || a.character.name.localeCompare(b.character.name);
+    ROLE_ORDER[playedRole(a)] - ROLE_ORDER[playedRole(b)] || a.character.name.localeCompare(b.character.name);
   const names = (list: RosterRow[]) => [...list].sort(byRoleThenName).map(r => r.character.name);
 
   return {
@@ -98,7 +101,7 @@ export class EventService {
     return event;
   }
 
-  async finalizeRoster(eventId: string, selections: { characterId: string; status: ResponseStatus; isConfirmed: boolean; lateMinutes?: number | undefined }[]) {
+  async finalizeRoster(eventId: string, selections: { characterId: string; status: ResponseStatus; isConfirmed: boolean; lateMinutes?: number | undefined; spec?: string | null | undefined }[]) {
     return this.responseService.bulkUpdateResponses(eventId, selections);
   }
 
@@ -132,6 +135,11 @@ export class EventService {
       await prisma.event.updateMany({ where: { id: eventId }, data: { isPublished: false } });
       throw error;
     }
+  }
+
+  /** An officer swaps which of a player's characters comes to the event. */
+  async switchCharacter(eventId: string, fromCharacterId: string, toCharacterId: string) {
+    await this.responseService.switchCharacter(eventId, fromCharacterId, toCharacterId);
   }
 
   /** Privately reminds people who have not answered. Each person gets their own delivery result. */
@@ -239,6 +247,9 @@ export class EventService {
       include: { user: { select: { username: true, nickname: true, identities: { where: { platform: 'telegram' }, select: { id: true } } } } },
       orderBy: { name: 'asc' },
     });
+    // The player's other approved characters that haven't answered: an officer can switch to one of them.
+    const alternativesOf = (userId: string | null | undefined) => (userId ? missing.filter(c => c.userId === userId) : [])
+      .map(({ id, name, class: cls, spec, role }) => ({ id, name, class: cls, spec, role }));
     const noAnswer = missing.map(({ user, userId, inRoster, isMain, createdAt, updatedAt, ...character }) => {
       void userId; void inRoster; void isMain; void createdAt; void updatedAt;
       return {
@@ -246,7 +257,9 @@ export class EventService {
         username: user?.username ?? null, reachable: (user?.identities.length ?? 0) > 0,
       };
     });
-    const responses = event.responses.map(r => ({ ...r, character: { ...r.character, nickname: shownNickname(r.character) } }));
+    const responses = event.responses.map(r => ({
+      ...r, character: { ...r.character, nickname: shownNickname(r.character) }, alternatives: alternativesOf(r.character.userId),
+    }));
     return { ...event, responses, noAnswer };
   }
 

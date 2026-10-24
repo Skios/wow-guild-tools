@@ -48,6 +48,7 @@ export function fakeApi(overrides: Overrides = {}): Api {
     getEvent: vi.fn(),
     createEvent: vi.fn().mockResolvedValue({}),
     setReminders: vi.fn().mockResolvedValue([]),
+    switchCharacter: vi.fn().mockResolvedValue(undefined),
     saveRoster: vi.fn().mockResolvedValue({ success: true }),
     publish: vi.fn().mockResolvedValue({ success: true }),
     message: vi.fn().mockResolvedValue({ results: [] }),
@@ -111,7 +112,7 @@ export const response = (
   name: string, role: RoleId, status: EventResponse['status'], isConfirmed = false, cls = 'MAGE',
   arrivalTime: string | null = null,
 ): EventResponse => ({
-  id: `r-${name}`, characterId: `c-${name}`, status, isConfirmed, arrivalTime, note: null,
+  id: `r-${name}`, characterId: `c-${name}`, status, isConfirmed, arrivalTime, note: null, spec: null, alternatives: [],
   character: { id: `c-${name}`, name, realm: 'Silvermoon', class: cls, spec: null, role, isMain: true, user: { username: `${name.toLowerCase()}_player` }, offSpecs: [], nickname: null },
 });
 

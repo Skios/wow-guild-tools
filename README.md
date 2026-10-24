@@ -28,7 +28,8 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
 `web/` is the officers' admin (Next.js App Router, client rendering). With the API running on :3000:
 `cd web && npm install && npm run dev`, then open http://127.0.0.1:5173 (`/api/*` is proxied to `API_ORIGIN`).
 
-- Pages: **Events** (list, create, board; **Publish** opens a last check: answers with a note with their confirm
+- Pages: **Events** (list, create, board; on the board an officer sets the spec a character plays that night among its
+  off-specs, which moves it to that role's column, and switches a player to another of their approved characters; **Publish** opens a last check: answers with a note with their confirm
   tick, and where the unconfirmed IN/LATE go (Bench or Out); unsaved edits are saved with it; **In-game invites**: `/invite Name-Realm` macros of up to 255 bytes for
   the confirmed IN/LATE characters, with a Copy button), **Roster** (each player's characters together, alts under the main;
   add / edit / remove / release names, assign a name to an account; approve, reject or revoke characters players
@@ -120,7 +121,7 @@ pg_net's request log for a while: whoever can read the database's `net` schema c
 Every route is under `/api` (the same domain serves the admin site on Vercel). Main routes: `GET/POST /roster`, `PUT/DELETE /roster/:id`, `POST /roster/:id/release`,
 `GET /roster/pending`, `POST /roster/:id/approve`, `POST /roster/:id/revoke`, `DELETE /roster/:id/pending`, `POST /roster/new-season`,
 `GET/POST /events`, `GET /events/:id`, `PATCH /events/:id/roster`, `POST /events/:id/publish`,
-`POST /events/:id/message`, `PUT /events/:id/reminders`, `GET /meta/wow`, `GET /auth/me`, `GET/POST /roles`, `PUT/DELETE /roles/:id`,
+`POST /events/:id/message`, `PUT /events/:id/reminders`, `POST /events/:id/responses/:characterId/switch`, `GET /meta/wow`, `GET /auth/me`, `GET/POST /roles`, `PUT/DELETE /roles/:id`,
 `GET /roles/capabilities`, `PUT /users/:id/role`, `GET /users`, `POST /users/:id/password-reset`,
 `POST /auth/password`, `GET/POST/DELETE /me/telegram`, `POST /me/telegram/bot-link`, `POST /me/password-reset-link`, `GET/PUT /me/profile`,
 `GET /me/claimable`, `POST /me/characters`, `POST /me/characters/:id/claim`, `PUT/DELETE /me/characters/:id`,
