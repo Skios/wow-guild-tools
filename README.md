@@ -30,7 +30,8 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
 
 - Pages: **Events** (list, create, board), **Roster** (each player's characters together, alts under the main;
   add / edit / remove / release names, assign a name to an account; approve, reject or revoke characters players
-  added; **New season** empties the roster after typing NEW SEASON), **Users** (roles, password resets), **Roles**
+  added; **In-game invites**: `/invite Name-Realm` macros of up to 255 bytes with a Copy button; **New season**
+  empties the roster after typing NEW SEASON), **Users** (roles, password resets), **Roles**
   (Owner only: create, edit and delete roles, ticking capabilities from the list the code registers), and your
   **Profile** (click your name). The menu shows what your role can open: raid leaders (`roster.approve`) see the
   Roster to approve and revoke, without editing it.

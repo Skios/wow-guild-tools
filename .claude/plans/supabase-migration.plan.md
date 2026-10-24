@@ -95,7 +95,7 @@ profile and characters, roster approval + new season, notes on answers, Roles pa
   vars in both Vercel projects, prod bot, prod hooks.
 - M4 reminders as scheduled jobs per event (officers pick the times); Supabase pg_cron every few minutes sends the
   due ones to whoever hasn't answered (accounts.plan.md "Later").
-- In-game invite string (`/invite Name-Realm` lines) for the approved roster, with a copy button.
+- [x] In-game invite macros on the Roster page (2026-10-24).
 - Homepage for everyone: next events with quick answers and a note dialog.
 - Discord bot for players who don't use Telegram (Identity already multi-platform)
 - Officer management page in the admin site (optional)

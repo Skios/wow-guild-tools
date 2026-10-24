@@ -527,7 +527,7 @@ describe('assigning a roster name to an account', () => {
     await userEvent.selectOptions(within(rowOf('Brannock')).getByRole('combobox', { name: 'Assign Brannock to an account' }), 'u7');
 
     expect(api.assignRosterOwner).toHaveBeenCalledWith('c-Brannock', 'u7');
-    expect(await screen.findByRole('status')).toHaveTextContent('Brannock is now Matte’s.');
+    expect(await screen.findByText('Brannock is now Matte’s.')).toHaveAttribute('role', 'status');
   });
 
   test('a claimed name has no assign menu (release it first)', async () => {
@@ -653,5 +653,36 @@ describe('new season', () => {
 
     await waitFor(() => expect(api.newSeason).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/New season started: 4 characters left the roster/)).toBeInTheDocument();
+  });
+});
+
+describe('in-game invites', () => {
+  test('lists /invite macros for the roster and copies one', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    setup([member('Jaina'), member('Thrall', { realm: 'Argent Dawn' })]);
+
+    const invites = await screen.findByRole('region', { name: 'In-game invites' });
+    const macro = '/invite Jaina-Silvermoon\n/invite Thrall-ArgentDawn';
+    expect(within(invites).getByRole('textbox', { name: 'Macro 1' })).toHaveValue(macro);
+
+    await userEvent.click(within(invites).getByRole('button', { name: 'Copy macro 1' }));
+    expect(writeText).toHaveBeenCalledWith(macro);
+    await waitFor(() => expect(within(invites).getByRole('status')).toHaveTextContent('Macro 1 copied'));
+  });
+
+  test('no clipboard (plain http, old browser): says to copy by hand', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    setup([member('Jaina')]);
+
+    const invites = await screen.findByRole('region', { name: 'In-game invites' });
+    await userEvent.click(within(invites).getByRole('button', { name: 'Copy macro 1' }));
+    expect(within(invites).getByRole('status')).toHaveTextContent(/copy it by hand/);
+  });
+
+  test('hidden while the roster is empty', async () => {
+    setup([]);
+    await screen.findByText(/The roster is empty/);
+    expect(screen.queryByRole('region', { name: 'In-game invites' })).not.toBeInTheDocument();
   });
 });
