@@ -56,6 +56,15 @@ function buildRoster(rows: RosterRow[]) {
   };
 }
 
+const MINUTE_MS = 60_000;
+
+/** Reminders still ahead of now; one already due would go out at once, on top of the invite. */
+const stillAhead = (startTime: Date, minutesBefore: number[] | undefined) =>
+  minutesBefore?.filter(minutes => startTime.getTime() - minutes * MINUTE_MS > Date.now());
+
+const reminderText = (event: { title: string; startTime: Date }) =>
+  `Reminder: ${event.title} on ${event.startTime.toLocaleString()}. Are you coming?`;
+
 export class EventService {
   private eventRepo = new EventRepository();
   private responseService = new ResponseService();
@@ -74,7 +83,7 @@ export class EventService {
       if (!creator) throw new NotFoundError('User not found');
     }
 
-    const event = await this.eventRepo.create(data);
+    const event = await this.eventRepo.create({ ...data, reminders: stillAhead(new Date(data.startTime), data.reminders) });
 
     // Fire and forget: the event exists even if the channel is down.
     this.notificationService
@@ -130,7 +139,7 @@ export class EventService {
     const event = await this.getEvent(eventId);
     if (event.isPublished) throw new ConflictError('Event already published');
 
-    const text = customText ?? `Reminder: ${event.title} on ${event.startTime.toLocaleString()}. Are you coming?`;
+    const text = customText ?? reminderText(event);
     const found = await prisma.character.findMany({
       where: { id: { in: characterIds }, OR: [{ inRoster: true }, { responses: { some: { eventId } } }] },
       include: { user: { select: { identities: { where: { platform: 'telegram' }, select: { platformUserId: true } } } } },
@@ -150,6 +159,70 @@ export class EventService {
       results.push(sent.success ? { ...base, status: 'sent' } : { ...base, status: 'failed', error: sent.error ?? 'Delivery failed' });
     }
     return results;
+  }
+
+  /** The event's reminders become exactly these; the ones already sent stay, as a record. */
+  async setReminders(eventId: string, minutesBefore: number[]) {
+    const event = await this.getEvent(eventId);
+    const ahead = stillAhead(event.startTime, minutesBefore) ?? [];
+    await prisma.$transaction([
+      prisma.reminder.deleteMany({ where: { eventId, sentAt: null, minutesBefore: { notIn: minutesBefore } } }),
+      prisma.reminder.createMany({ data: ahead.map(m => ({ eventId, minutesBefore: m })), skipDuplicates: true }),
+    ]);
+    return prisma.reminder.findMany({ where: { eventId }, orderBy: { minutesBefore: 'desc' }, select: { id: true, minutesBefore: true, sentAt: true } });
+  }
+
+  /**
+   * Sends every reminder that is due (pg_cron calls this through POST /reminders/run). Each one is claimed before
+   * sending, so two runs never send it twice; one for an event that is closed or has started is used up unsent.
+   */
+  async sendDueReminders() {
+    const now = new Date();
+    const unsent = await prisma.reminder.findMany({
+      where: { sentAt: null },
+      select: { id: true, minutesBefore: true, event: { select: { id: true, title: true, startTime: true, isPublished: true } } },
+    });
+    const due = unsent.filter(r => r.event.startTime.getTime() - r.minutesBefore * MINUTE_MS <= now.getTime());
+
+    const events = new Map<string, { event: (typeof due)[number]['event']; ids: string[] }>();
+    let reminders = 0;
+    for (const r of due) {
+      const claimed = await prisma.reminder.updateMany({ where: { id: r.id, sentAt: null }, data: { sentAt: now } });
+      if (claimed.count === 0) continue;
+      reminders += 1;
+      if (r.event.isPublished || r.event.startTime <= now) continue;
+      const entry = events.get(r.event.id) ?? { event: r.event, ids: [] };
+      events.set(r.event.id, { ...entry, ids: [...entry.ids, r.id] });
+    }
+
+    let messages = 0;
+    for (const { event, ids } of events.values()) {
+      const { tried, sent } = await this.remindUnanswered(event);
+      messages += sent;
+      // Every message failed (Telegram down): give them back, the next run tries again.
+      if (tried > 0 && sent === 0) {
+        await prisma.reminder.updateMany({ where: { id: { in: ids } }, data: { sentAt: null } });
+        reminders -= ids.length;
+      }
+    }
+    return { reminders, messages };
+  }
+
+  /** One private message per player whose approved characters have not answered: how many were tried, how many arrived. */
+  private async remindUnanswered(event: { id: string; title: string; startTime: Date }) {
+    const players = await prisma.user.findMany({
+      where: { characters: { some: { inRoster: true }, none: { responses: { some: { eventId: event.id } } } } },
+      select: { identities: { where: { platform: 'telegram' }, select: { platformUserId: true } } },
+    });
+    const telegramIds = players.flatMap(p => p.identities.map(i => i.platformUserId));
+    let sent = 0;
+    // ponytail: one message at a time (well under Telegram's 30/s); batch if a roster ever gets to hundreds.
+    for (const telegramId of telegramIds) {
+      const result = await this.notificationService.sendDirect('telegram', telegramId, { text: reminderText(event), eventId: event.id });
+      if (result.success) sent += 1;
+      else console.warn('Reminder not delivered:', result.error);
+    }
+    return { tried: telegramIds.length, sent };
   }
 
   async getEvent(id: string) {

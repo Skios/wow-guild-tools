@@ -1,5 +1,5 @@
 import type {
-  Account, CharacterSuggestion, ClaimableCharacter, EventDetail, Profile, RosterAccount, SiteRoleSummary, EventSummary, Meta, MessageResult, NewEvent, Officer, RosterCharacter, RosterEntryInput, RosterSelection, RoleInput,
+  Account, CharacterSuggestion, ClaimableCharacter, EventDetail, Profile, RosterAccount, SiteRoleSummary, EventSummary, Meta, MessageResult, NewEvent, Officer, Reminder, RosterCharacter, RosterEntryInput, RosterSelection, RoleInput,
 } from './types';
 
 const BASE = '/api';
@@ -108,6 +108,8 @@ export function createApi({ fetchImpl = fetch, getToken = async () => null, onUn
     listEvents: () => request<EventSummary[]>(`/events?limit=${EVENTS_PAGE}`),
     getEvent: (eventId: string) => request<EventDetail>(`/events/${id(eventId)}`),
     createEvent: (event: NewEvent) => request<EventSummary>('/events', send('POST', event)),
+    setReminders: (eventId: string, minutesBefore: number[]) =>
+      request<Reminder[]>(`/events/${id(eventId)}/reminders`, send('PUT', { minutesBefore })),
     saveRoster: (eventId: string, selections: RosterSelection[]) =>
       request<{ success: true }>(`/events/${id(eventId)}/roster`, send('PATCH', { selections })),
     publish: (eventId: string) => request<{ success: true }>(`/events/${id(eventId)}/publish`, send('POST')),

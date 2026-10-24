@@ -144,10 +144,25 @@ model Event {
   creator     User?      @relation(fields: [createdBy], references: [id])
   isPublished  Boolean    @default(false)
   responses   Response[]
+  reminders   Reminder[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
   @@map("events")
+}
+
+// A private message to whoever hasn't answered, sent once at startTime - minutesBefore.
+// pg_cron checks every 5 minutes and calls POST /api/reminders/run when one is due (migration 20261024120000).
+model Reminder {
+  id            String    @id @default(uuid())
+  eventId       String
+  event         Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  minutesBefore Int
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([eventId, minutesBefore])
+  @@map("reminders")
 }
 
 model Response {

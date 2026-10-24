@@ -268,3 +268,40 @@ describe('POST /events/:id/message', () => {
     expect((await post('/events/xyz/message', { characterIds: [CID] })).statusCode).toBe(400);
   });
 });
+
+describe('PUT /events/:id/reminders', () => {
+  const put = async (payload: unknown) => (await app()).inject({ method: 'PUT', url: `/events/${EID}/reminders`, payload: payload as object });
+
+  test('replaces the reminders and returns them', async () => {
+    prismaMock.event.findUnique.mockResolvedValue({ id: EID, startTime: new Date(inHours(48)), responses: [] });
+    prismaMock.reminder.findMany.mockResolvedValue([{ id: 'r1', minutesBefore: 1440, sentAt: null }]);
+
+    const res = await put({ minutesBefore: [1440] });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([{ id: 'r1', minutesBefore: 1440, sentAt: null }]);
+    expect(prismaMock.reminder.createMany).toHaveBeenCalledWith({ data: [{ eventId: EID, minutesBefore: 1440 }], skipDuplicates: true });
+  });
+
+  test.each([
+    ['a duplicate time', [60, 60]],
+    ['under 5 minutes', [1]],
+    ['over 14 days', [14 * 24 * 60 + 1]],
+    ['more than 5', [10, 20, 30, 40, 50, 60]],
+    ['not whole minutes', [1.5]],
+  ])('refuses %s', async (_label, minutesBefore) => {
+    expect((await put({ minutesBefore })).statusCode).toBe(400);
+    expect(prismaMock.reminder.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /events with reminders', () => {
+  test('passes them on; bad ones are a 400', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ id: uuid(1) });
+    prismaMock.event.create.mockResolvedValue({ id: EID, title: 'Raid', startTime: new Date(inHours(24)), description: null });
+
+    expect((await post('/events', { ...newEvent(), reminders: [1440, 480] })).statusCode).toBe(201);
+    expect(prismaMock.event.create.mock.calls[0]![0].data.reminders).toEqual({ create: [{ minutesBefore: 480 }] }); // 24h ahead: -1 day already passed
+    expect((await post('/events', { ...newEvent(), reminders: [2] })).statusCode).toBe(400);
+  });
+});

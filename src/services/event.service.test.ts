@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
 
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
@@ -387,5 +387,122 @@ describe('EventService.messageCharacters', () => {
     prismaMock.event.findUnique.mockResolvedValue({ ...event, isPublished: true });
     await expect(new EventService().messageCharacters('e1', ids)).rejects.toBeInstanceOf(ConflictError);
     expect(adapter.sendDirect).not.toHaveBeenCalled();
+  });
+});
+
+describe('reminders', () => {
+  const NOW = new Date('2026-10-17T12:00:00Z');
+  const inHours = (h: number) => new Date(NOW.getTime() + h * 3_600_000);
+  const live = { id: 'e1', title: 'Raid', startTime: inHours(10), isPublished: false };
+  const unsent = (id: string, minutesBefore: number, ev = live) => ({ id, minutesBefore, event: ev });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    prismaMock.reminder.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.user.findMany.mockResolvedValue([
+      { identities: [{ platformUserId: '42' }] },
+      { identities: [] }, // never linked Telegram: nobody to write to
+    ]);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  test('a new event gets its reminders, except those whose time has already passed', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ id: 'u1' });
+    prismaMock.event.create.mockResolvedValue({ ...event });
+    const start = inHours(10).toISOString();
+
+    await new EventService().createEvent({ ...input, startTime: start, endTime: inHours(13).toISOString(), reminders: [1440, 480] });
+
+    expect(prismaMock.event.create.mock.calls[0]![0].data.reminders).toEqual({ create: [{ minutesBefore: 480 }] });
+  });
+
+  test('setReminders keeps the sent ones, drops unsent ones no longer wanted, adds the new ones still ahead', async () => {
+    prismaMock.event.findUnique.mockResolvedValue({ ...event, startTime: inHours(10) });
+    prismaMock.reminder.deleteMany.mockResolvedValue({ count: 1 });
+    prismaMock.reminder.createMany.mockResolvedValue({ count: 1 });
+    prismaMock.reminder.findMany.mockResolvedValue([{ id: 'r1', minutesBefore: 60, sentAt: null }]);
+
+    const result = await new EventService().setReminders('e1', [60, 900]); // the event starts in 10 h: 15 h before is past
+
+    expect(prismaMock.reminder.deleteMany).toHaveBeenCalledWith({ where: { eventId: 'e1', sentAt: null, minutesBefore: { notIn: [60, 900] } } });
+    expect(prismaMock.reminder.createMany).toHaveBeenCalledWith({ data: [{ eventId: 'e1', minutesBefore: 60 }], skipDuplicates: true });
+    expect(result).toEqual([{ id: 'r1', minutesBefore: 60, sentAt: null }]);
+  });
+
+  test('setReminders on a missing event is a 404', async () => {
+    prismaMock.event.findUnique.mockResolvedValue(null);
+    await expect(new EventService().setReminders('e1', [60])).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  test('sends a due reminder once to each player with no answer on any character, with the answer buttons', async () => {
+    prismaMock.reminder.findMany.mockResolvedValue([unsent('r1', 720), unsent('r2', 60)]); // r2 is due in 9 hours
+
+    const result = await new EventService().sendDueReminders();
+
+    expect(prismaMock.reminder.updateMany).toHaveBeenCalledTimes(1);
+    expect(prismaMock.reminder.updateMany).toHaveBeenCalledWith({ where: { id: 'r1', sentAt: null }, data: { sentAt: NOW } });
+    expect(prismaMock.user.findMany.mock.calls[0]![0].where).toEqual({
+      characters: { some: { inRoster: true }, none: { responses: { some: { eventId: 'e1' } } } },
+    });
+    expect(adapter.sendDirect).toHaveBeenCalledTimes(1);
+    expect(adapter.sendDirect).toHaveBeenCalledWith('42', expect.objectContaining({ eventId: 'e1', text: expect.stringMatching(/Reminder: Raid/) }));
+    expect(result).toEqual({ reminders: 1, messages: 1 });
+  });
+
+  test('two reminders due together for one event send one message', async () => {
+    prismaMock.reminder.findMany.mockResolvedValue([unsent('r1', 720), unsent('r2', 1440)]);
+
+    await new EventService().sendDueReminders();
+
+    expect(prismaMock.reminder.updateMany).toHaveBeenCalledTimes(2);
+    expect(adapter.sendDirect).toHaveBeenCalledTimes(1);
+  });
+
+  test('a reminder another run already took is not sent again', async () => {
+    prismaMock.reminder.findMany.mockResolvedValue([unsent('r1', 720)]);
+    prismaMock.reminder.updateMany.mockResolvedValue({ count: 0 });
+
+    expect(await new EventService().sendDueReminders()).toEqual({ reminders: 0, messages: 0 });
+    expect(adapter.sendDirect).not.toHaveBeenCalled();
+  });
+
+  test('closed or already started events: the reminder is used up, nobody is written to', async () => {
+    prismaMock.reminder.findMany.mockResolvedValue([
+      unsent('r1', 720, { ...live, isPublished: true }),
+      unsent('r2', 60, { ...live, id: 'e2', startTime: inHours(-1) }),
+    ]);
+
+    await new EventService().sendDueReminders();
+
+    expect(prismaMock.reminder.updateMany).toHaveBeenCalledTimes(2);
+    expect(adapter.sendDirect).not.toHaveBeenCalled();
+  });
+
+  test('every message failed: the reminder is given back for the next run', async () => {
+    prismaMock.reminder.findMany.mockResolvedValue([unsent('r1', 720)]);
+    adapter.sendDirect.mockResolvedValue({ success: false, error: 'telegram down' });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(await new EventService().sendDueReminders()).toEqual({ reminders: 0, messages: 0 });
+    expect(prismaMock.reminder.updateMany).toHaveBeenLastCalledWith({ where: { id: { in: ['r1'] } }, data: { sentAt: null } });
+  });
+
+  test('nobody left to write to is not a failure: the reminder stays used', async () => {
+    prismaMock.reminder.findMany.mockResolvedValue([unsent('r1', 720)]);
+    prismaMock.user.findMany.mockResolvedValue([]);
+
+    expect(await new EventService().sendDueReminders()).toEqual({ reminders: 1, messages: 0 });
+    expect(prismaMock.reminder.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  test('a failed delivery is not counted and does not stop the others', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    prismaMock.reminder.findMany.mockResolvedValue([unsent('r1', 720)]);
+    prismaMock.user.findMany.mockResolvedValue([{ identities: [{ platformUserId: '1' }] }, { identities: [{ platformUserId: '2' }] }]);
+    adapter.sendDirect.mockResolvedValueOnce({ success: false, error: 'blocked' });
+
+    expect(await new EventService().sendDueReminders()).toEqual({ reminders: 1, messages: 1 });
+    expect(adapter.sendDirect).toHaveBeenCalledTimes(2);
   });
 });

@@ -603,3 +603,52 @@ describe('nickname and off-specs on the board', () => {
     expect(within(row).getByRole('group', { name: 'Off-specs: Frost (Ranged DPS), NEWSPEC' })).toHaveTextContent('?');
   });
 });
+
+describe('reminders', () => {
+  test('shows them and saves a change straight away', async () => {
+    const api = setup(eventDetail({ reminders: [{ id: 'r1', minutesBefore: 1440, sentAt: '2099-01-01T00:00:00Z' }, { id: 'r2', minutesBefore: 480, sentAt: null }] }), {
+      setReminders: vi.fn().mockResolvedValue([{ id: 'r1', minutesBefore: 1440, sentAt: '2099-01-01T00:00:00Z' }]),
+    });
+    await ready();
+
+    const card = region('Reminders');
+    expect(within(card).getByText('1 day before').closest('li')).toHaveTextContent('sent');
+    await userEvent.click(within(card).getByRole('button', { name: 'Remove 8 h before' }));
+
+    await waitFor(() => expect(api.setReminders).toHaveBeenCalledWith('e1', [1440]));
+    await waitFor(() => expect(within(card).queryByText('8 h before')).not.toBeInTheDocument());
+  });
+
+  test('a failed save says why and keeps the old list', async () => {
+    setup(eventDetail({ reminders: [{ id: 'r2', minutesBefore: 480, sentAt: null }] }), {
+      setReminders: vi.fn().mockRejectedValue(new ApiError('At most 5 reminders', 400)),
+    });
+    await ready();
+
+    await userEvent.click(within(region('Reminders')).getByRole('button', { name: 'Remove 8 h before' }));
+
+    expect(await within(region('Reminders')).findByRole('alert')).toHaveTextContent('At most 5 reminders');
+    expect(within(region('Reminders')).getByText('8 h before')).toBeInTheDocument();
+  });
+
+  test('closed once the roster is published', async () => {
+    setup(eventDetail({ isPublished: true, reminders: [{ id: 'r2', minutesBefore: 480, sentAt: null }] }));
+    await ready();
+    const card = region('Reminders');
+    expect(within(card).getByText(/no more reminders go out/)).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Remove 8 h before' })).toBeDisabled();
+    expect(within(card).getByRole('button', { name: 'Add reminder' })).toBeDisabled();
+  });
+
+  test('a reload shows reminders sent in the meantime', async () => {
+    const before = eventDetail({ reminders: [{ id: 'r2', minutesBefore: 480, sentAt: null }] });
+    const after = eventDetail({ reminders: [{ id: 'r2', minutesBefore: 480, sentAt: '2099-01-01T00:00:00Z' }] });
+    setup(before, { getEvent: vi.fn().mockResolvedValueOnce(before).mockResolvedValue(after), saveRoster: vi.fn().mockResolvedValue({ success: true }) });
+    await ready();
+
+    await userEvent.selectOptions(answer('Cleo'), 'IN');
+    await userEvent.click(save());
+
+    await waitFor(() => expect(within(region('Reminders')).getByText('8 h before').closest('li')).toHaveTextContent('sent'));
+  });
+});

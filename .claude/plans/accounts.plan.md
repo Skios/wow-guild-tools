@@ -157,7 +157,7 @@ publishable key.
 8. [x] Roles page (Owner): list by rank, create / edit / delete, capabilities as checkboxes from GET /roles/capabilities
 
 ## Later (user decisions 2026-10-23)
-- Reminders as scheduled jobs per event: officers set times (e.g. Sunday 20:00, Monday 13:00); at each time the
+- [x] (done 2026-10-24 as "X before the start", see README "Reminders") Reminders as scheduled jobs per event: officers set times (e.g. Sunday 20:00, Monday 13:00); at each time the
   people who haven't answered get a DM. A table of reminders (event, time, sent); Supabase pg_cron runs every few
   minutes and sends the due ones (Vercel Hobby cron runs only once a day).
 - In-game invite string: `/invite Name-Realm` lines for the approved roster, kept up to date, with a copy button.

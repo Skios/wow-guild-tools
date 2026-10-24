@@ -10,6 +10,7 @@ export class EventRepository {
         endTime: new Date(data.endTime),
         ...(data.description !== undefined && { description: data.description }),
         ...(data.createdByUserId !== undefined && { createdBy: data.createdByUserId }),
+        ...(data.reminders?.length && { reminders: { create: data.reminders.map(minutesBefore => ({ minutesBefore })) } }),
       },
     });
   }
@@ -21,6 +22,7 @@ export class EventRepository {
         responses: {
           include: { character: { include: { user: { select: { username: true, nickname: true } } } } },
         },
+        reminders: { orderBy: { minutesBefore: 'desc' }, select: { id: true, minutesBefore: true, sentAt: true } },
       },
     });
   }

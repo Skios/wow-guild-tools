@@ -176,3 +176,19 @@ describe('new event form', () => {
     resolve({});
   });
 });
+
+describe('reminders on a new event', () => {
+  const fillTitle = (text: string) => userEvent.type(screen.getByLabelText('Title'), text);
+  const submit = () => userEvent.click(screen.getByRole('button', { name: 'Create event' }));
+  test('start as a day and 8 hours before, and go with the event', async () => {
+    const api = withData();
+    renderWith(<EventsView />, api);
+    await screen.findByLabelText('Title');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove 8 h before' }));
+    await fillTitle('Mythic');
+    await submit();
+
+    await waitFor(() => expect(api.createEvent).toHaveBeenCalledWith(expect.objectContaining({ reminders: [1440] })));
+  });
+});

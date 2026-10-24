@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { sendError } from '../lib/http-error.js';
 import { requireCapability } from '../plugins/auth.js';
 import { EventService } from '../services/event.service.js';
-import { CreateEventSchema, EventParamsSchema, FinalizeRosterSchema, ListEventsQuerySchema, MessageSchema } from '../validators/event.validator.js';
+import { CreateEventSchema, EventParamsSchema, FinalizeRosterSchema, ListEventsQuerySchema, MessageSchema, SetRemindersSchema } from '../validators/event.validator.js';
 
 export async function eventRoutes(fastify: FastifyInstance) {
   const eventService = new EventService();
@@ -44,6 +44,16 @@ export async function eventRoutes(fastify: FastifyInstance) {
       const { id } = EventParamsSchema.parse(request.params);
       const body = MessageSchema.parse(request.body);
       return reply.send({ results: await eventService.messageCharacters(id, body.characterIds, body.text) });
+    } catch (error) {
+      return sendError(request, reply, error);
+    }
+  });
+
+  fastify.put('/events/:id/reminders', async (request, reply) => {
+    try {
+      const { id } = EventParamsSchema.parse(request.params);
+      const { minutesBefore } = SetRemindersSchema.parse(request.body);
+      return reply.send(await eventService.setReminders(id, minutesBefore));
     } catch (error) {
       return sendError(request, reply, error);
     }

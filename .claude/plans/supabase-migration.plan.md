@@ -93,8 +93,9 @@ profile and characters, roster approval + new season, notes on answers, Roles pa
 - Check that the API sees the real client IP through the site's rewrite (rate limits per IP), before the alpha.
 - Alpha preview with a group of testers, then the prod environment: wgt-prod Supabase settings, Production env
   vars in both Vercel projects, prod bot, prod hooks.
-- M4 reminders as scheduled jobs per event (officers pick the times); Supabase pg_cron every few minutes sends the
-  due ones to whoever hasn't answered (accounts.plan.md "Later").
+- [x] M4 reminders (2026-10-24): `reminders` table (minutes before, sent once), pg_cron every 5 min checks inside
+  Postgres and only when one is due calls POST /api/reminders/run via pg_net (secrets in Vault). Defaults 1 day and
+  8 h; event page edits them. [ ] Per environment: REMINDERS_SECRET on the API project + the two Vault secrets.
 - [x] In-game invite macros on the Roster page (2026-10-24).
 - Homepage for everyone: next events with quick answers and a note dialog.
 - Discord bot for players who don't use Telegram (Identity already multi-platform)

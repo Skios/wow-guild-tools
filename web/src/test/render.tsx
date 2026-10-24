@@ -47,6 +47,7 @@ export function fakeApi(overrides: Overrides = {}): Api {
     listEvents: vi.fn().mockResolvedValue([]),
     getEvent: vi.fn(),
     createEvent: vi.fn().mockResolvedValue({}),
+    setReminders: vi.fn().mockResolvedValue([]),
     saveRoster: vi.fn().mockResolvedValue({ success: true }),
     publish: vi.fn().mockResolvedValue({ success: true }),
     message: vi.fn().mockResolvedValue({ results: [] }),
@@ -121,7 +122,7 @@ export const noAnswer = (name: string, over: Partial<NoAnswerEntry> = {}): NoAns
 
 export const eventDetail = (over: Partial<EventDetail> = {}): EventDetail => ({
   id: 'e1', title: 'Raid Night', startTime: '2099-10-18T19:00:00Z', endTime: '2099-10-18T22:00:00Z',
-  description: 'Bring flasks', isPublished: false, noAnswer: [],
+  description: 'Bring flasks', isPublished: false, noAnswer: [], reminders: [],
   responses: [
     response('Zed', 'RANGED_DPS', 'IN', true),
     response('Tom', 'TANK', 'IN', true, 'WARRIOR'),

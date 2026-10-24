@@ -2,7 +2,9 @@ import { useState, type FormEvent } from 'react';
 import { useApi } from '../context';
 import { MAX_DESCRIPTION, MAX_TITLE, validateNewEvent, type EventFormField, type EventFormValues } from '../eventForm';
 import { toLocalInput } from '../format';
+import { DEFAULT_REMINDERS } from '../reminders';
 import { errorMessage } from '../useAsync';
+import { RemindersEditor } from './RemindersEditor';
 
 function initialValues(): EventFormValues {
   const now = new Date();
@@ -12,6 +14,7 @@ function initialValues(): EventFormValues {
 export function NewEventForm({ onCreated }: { onCreated: () => void }) {
   const api = useApi();
   const [values, setValues] = useState(initialValues);
+  const [reminders, setReminders] = useState(DEFAULT_REMINDERS);
   const [errors, setErrors] = useState<Partial<Record<EventFormField, string>>>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -29,8 +32,9 @@ export function NewEventForm({ onCreated }: { onCreated: () => void }) {
 
     setBusy(true);
     try {
-      await api.createEvent(result.payload);
+      await api.createEvent({ ...result.payload, reminders });
       setValues(initialValues());
+      setReminders(DEFAULT_REMINDERS);
       onCreated();
     } catch (e) {
       setServerError(errorMessage(e));
@@ -71,6 +75,10 @@ export function NewEventForm({ onCreated }: { onCreated: () => void }) {
           <textarea id="description" rows={2} value={values.description} onChange={set('description')} {...field('description')} />
           {fieldError('description')}
         </div>
+        <fieldset className="span-2">
+          <legend>Reminders <span className="muted">(a private message to whoever hasn&apos;t answered)</span></legend>
+          <RemindersEditor value={reminders} onChange={setReminders} disabled={busy} />
+        </fieldset>
       </div>
       {serverError && <p role="alert" className="error">{serverError}</p>}
       <button type="submit" className="primary" disabled={busy}>{busy ? 'Creating…' : 'Create event'}</button>

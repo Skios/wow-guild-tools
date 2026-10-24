@@ -9,6 +9,7 @@ import {
 import { errorMessage, useAsync } from '../useAsync';
 import type { EventDetail, MessageResult, NoAnswerEntry, ResponseStatus } from '../types';
 import { EventBoard } from './EventBoard';
+import { EventReminders } from './EventReminders';
 import { NoAnswerPanel } from './NoAnswerPanel';
 import { RoleIcon } from './RoleIcon';
 
@@ -197,6 +198,9 @@ export function EventView({ id }: { id: string }) {
           </div>
         </section>
       )}
+
+      {/* Keyed on the list: a reload with reminders sent meanwhile starts it afresh. */}
+      <EventReminders key={data.reminders.map(r => `${r.minutesBefore}:${r.sentAt ?? ''}`).join()} eventId={id} initial={data.reminders} closed={published} />
 
       {!published && (
         <section className="card" aria-label="Publish">

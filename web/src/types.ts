@@ -101,9 +101,16 @@ export interface NoAnswerEntry {
   reachable: boolean;
 }
 
+export interface Reminder {
+  id: string;
+  minutesBefore: number;
+  sentAt: string | null;
+}
+
 export interface EventDetail extends Omit<EventSummary, 'counts'> {
   responses: EventResponse[];
   noAnswer: NoAnswerEntry[];
+  reminders: Reminder[];
 }
 
 export interface NewEvent {
@@ -111,6 +118,8 @@ export interface NewEvent {
   startTime: string;
   endTime: string;
   description?: string;
+  /** Minutes before the start. */
+  reminders?: number[];
 }
 
 export interface RosterSelection {

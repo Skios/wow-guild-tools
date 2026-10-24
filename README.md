@@ -98,16 +98,34 @@ goes to the player's main (or the character already answering for that event); w
 the bot's private message has a button for each of the others, to answer with it instead.
 Set `SITE_URL` (the site's address) so `/start` can send the sign-up link.
 
+## Reminders
+Each event has reminders, "X before the start" (new events: 1 day and 8 hours; officers change them on the event page).
+At each time, every player with no answer on any approved character gets one private message with the answer buttons.
+The database wakes the API: pg_cron checks every 5 minutes inside Postgres (no traffic, no API call when nothing is
+due) and only then calls `POST /api/reminders/run` through pg_net. Each reminder is sent once; one for an event that
+is published or already started is used up unsent. Set up once per environment (local, dev, prod):
+1. A secret: `openssl rand -hex 32`. Put it in the API's `REMINDERS_SECRET` (Vercel: API project, Sensitive).
+2. In the Supabase SQL editor (local: Studio, :54323), with your values:
+   `select vault.create_secret('https://<api-domain>/api/reminders/run', 'reminders_url');`
+   `select vault.create_secret('<the secret>', 'reminders_secret');`
+   (local API: `http://host.docker.internal:3000/api/reminders/run`). The job itself comes with the migrations.
+3. Check: `select * from cron.job where jobname = 'wake-reminders';` (one row), `select * from cron.job_run_details order by start_time desc limit 5;` and `select * from net._http_response order by created desc limit 5;`.
+Without the secrets nothing is called; without `REMINDERS_SECRET` the route answers 503 (and the job keeps knocking
+every 5 minutes until it's set). The URL must be https (plain http only for a local API). Each reminder is sent at
+most once; if every message for it fails (Telegram down) it is given back for the next run. The secret also sits in
+pg_net's request log for a while: whoever can read the database's `net` schema can see it.
+
 ## API
 Every route is under `/api` (the same domain serves the admin site on Vercel). Main routes: `GET/POST /roster`, `PUT/DELETE /roster/:id`, `POST /roster/:id/release`,
 `GET /roster/pending`, `POST /roster/:id/approve`, `POST /roster/:id/revoke`, `DELETE /roster/:id/pending`, `POST /roster/new-season`,
 `GET/POST /events`, `GET /events/:id`, `PATCH /events/:id/roster`, `POST /events/:id/publish`,
-`POST /events/:id/message`, `GET /meta/wow`, `GET /auth/me`, `GET/POST /roles`, `PUT/DELETE /roles/:id`,
+`POST /events/:id/message`, `PUT /events/:id/reminders`, `GET /meta/wow`, `GET /auth/me`, `GET/POST /roles`, `PUT/DELETE /roles/:id`,
 `GET /roles/capabilities`, `PUT /users/:id/role`, `GET /users`, `POST /users/:id/password-reset`,
 `POST /auth/password`, `GET/POST/DELETE /me/telegram`, `POST /me/telegram/bot-link`, `POST /me/password-reset-link`, `GET/PUT /me/profile`,
 `GET /me/claimable`, `POST /me/characters`, `POST /me/characters/:id/claim`, `PUT/DELETE /me/characters/:id`,
 `PUT /me/characters/:id/main`, `GET /characters/search`, `GET /roster/accounts`, `PUT /roster/:id/owner`,
-`POST /auth/reset` (no login), `POST /signup` (no login), `POST /webhooks/telegram` (own secret).
+`POST /auth/reset` (no login), `POST /signup` (no login), `POST /webhooks/telegram` (own secret),
+`POST /reminders/run` (pg_cron, own secret).
 
 ## Deploy (Vercel + Supabase, free tiers)
 Two Vercel projects, each with Production (`main`) and Preview `develop` (the dev environment):
@@ -119,5 +137,5 @@ The pipeline deploys only what a push changed (site, API + migrations, or both).
 ## Status
 Milestones 1–3 (core, bot, admin site) are live on Vercel + Supabase (dev). Accounts are in progress: roles,
 sign-up, Users page, Telegram linking, profile and characters, roster approval, new season, notes on every answer and
-the Roles page are done. Then an alpha with testers, reminders (M4) and production.
+the Roles page, in-game invite macros and reminders (M4) are done. Then an alpha with testers and production.
 See `.claude/plans`.

@@ -8,6 +8,7 @@ import { linkRoutes } from './controllers/link.controller.js';
 import { TelegramClient } from './integrations/telegram/telegram.client.js';
 import { linkConfig } from './services/link.service.js';
 import { signupRoutes } from './controllers/signup.controller.js';
+import { reminderRoutes } from './controllers/reminder.controller.js';
 import { roleRoutes } from './controllers/role.controller.js';
 import { meRoutes } from './controllers/me.controller.js';
 import { rosterApprovalRoutes, rosterRoutes } from './controllers/roster.controller.js';
@@ -54,6 +55,7 @@ export async function buildApp(options: { logger?: FastifyServerOptions['logger'
     // and each group of routes the capability it needs (src/domain/roles.ts).
     await api.register(telegramRoutes);
     await api.register(signupRoutes(accounts));
+    await api.register(reminderRoutes(env.REMINDERS_SECRET));
     await api.register(async (site) => {
       requireSiteUser(site, verifyToken);
       const guarded = (capability: string, routes: FastifyPluginAsync) => site.register(async (scope) => {

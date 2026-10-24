@@ -18,12 +18,24 @@ export const ListEventsQuerySchema = z.object({
 
 const DateTimeSchema = z.string().datetime({ offset: true });
 
+// Reminders are minutes before the start: 1440 = a day before.
+export const MIN_REMINDER_MINUTES = 5;
+export const MAX_REMINDER_MINUTES = 14 * 24 * 60;
+export const MAX_REMINDERS = 5;
+const RemindersSchema = z
+  .array(z.number().int().min(MIN_REMINDER_MINUTES).max(MAX_REMINDER_MINUTES))
+  .max(MAX_REMINDERS, `At most ${MAX_REMINDERS} reminders`)
+  .refine(list => new Set(list).size === list.length, { message: 'Each reminder time once' });
+
+export const SetRemindersSchema = z.object({ minutesBefore: RemindersSchema });
+
 export const CreateEventSchema = z
   .object({
     title: z.string().trim().min(1, "Title is required").max(100),
     startTime: DateTimeSchema,
     endTime: DateTimeSchema,
     description: z.string().max(1000).optional(),
+    reminders: RemindersSchema.optional(),
   })
   .superRefine((event, ctx) => {
     const start = Date.parse(event.startTime);

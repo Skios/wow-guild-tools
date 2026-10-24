@@ -14,6 +14,8 @@ const EnvSchema = z.object({
   SUPABASE_SECRET_KEY: z.string().min(1).optional(),
   // The site's address (e.g. https://wgt-web-....vercel.app): the bot links to it for sign-up and linking.
   SITE_URL: z.url({ protocol: /^https?$/ }).refine(isSecureOrLocal, 'must be https (http only for localhost)').optional(),
+  // Shared with pg_cron (Supabase Vault "reminders_secret"): it calls POST /api/reminders/run. Without it reminders are off.
+  REMINDERS_SECRET: z.string().min(32).max(256).regex(/^[A-Za-z0-9_-]+$/).optional(),
   HOST: z.string().min(1).default('0.0.0.0'),
   // Only behind a proxy that overwrites X-Forwarded-For (e.g. Fly); otherwise clients could spoof their IP.
   TRUST_PROXY: z.enum(['true', 'false']).transform(v => v === 'true').optional(),
