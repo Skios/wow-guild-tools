@@ -102,3 +102,19 @@ profile and characters, roster approval + new season, notes on answers, Roles pa
 - Officer management page in the admin site (optional)
 - Tests: DB integration tests on a real Postgres in CI (migrate deploy, then services without mocks) and a few
   Playwright E2E flows (login, approve, answer with a note). Parked by the user 2026-10-24: features first.
+
+## Next: event composition round (user decisions 2026-10-24), in this order
+1. Buttons: one style app-wide. Pencil = edit; centred X = remove / revoke / reject / delete; same icon-button class.
+2. In-game invites move from the Roster page to the event page: only confirmed IN/LATE characters.
+3. Publish dialog: one choice for every unconfirmed IN/LATE (Bench or Out); above it, every answer with a note
+   (e.g. "IN, arriving 21:30, leaving 23:30") with its confirm tick, so officers make last changes before publishing.
+4. On the event board an officer can (a) switch which approved character a player brings (alt -> main; the answer
+   moves, like the bot's) and (b) set the spec a character plays that night among its offspecs, which moves it to
+   that role's column. Per event only; the roster is unchanged.
+5. Role target: guild default + per-event override. Two modes:
+   - Flex: tanks (default 2), healers "X per 5 people" (+1 offspec ready), DPS split melee/ranged by a slider (%).
+   - Fixed: raid size N; tanks, healers; DPS = N - tanks - healers; slider with melee (sword) left and ranged (bow)
+     right, both editable, always summing to the DPS total and never over the raid size.
+   The summary shows each count with the target in brackets; on a gap, characters whose offspec fills it are
+   highlighted.
+6. Then: a Dashboard (contents to agree).
