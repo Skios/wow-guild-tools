@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { useApi, useOfficer } from '../context';
 import type { RoleInput, SiteRoleSummary } from '../types';
 import { errorMessage, useAsync } from '../useAsync';
+import { PencilIcon, XIcon } from './icons';
 
 // Plain words for the capabilities the code registers today; a new one shows by its name until it gets a label.
 const LABEL: Record<string, string> = {
@@ -192,12 +193,12 @@ function Roles() {
                       </span>
                     ) : (
                       <span className="actions compact">
-                        <button type="button" disabled={!ready} onClick={() => open(role)} aria-label={`Edit ${role.name}`}>Edit</button>
+                        <button type="button" className="icon-button" disabled={!ready} onClick={() => open(role)} aria-label={`Edit ${role.name}`} title="Edit"><PencilIcon /></button>
                         {!role.isDefault && (
                           <button
-                            type="button" onClick={() => setConfirming(role.id)} aria-label={`Delete ${role.name}`}
-                            disabled={role.users > 0} title={role.users > 0 ? `Give its ${role.users} accounts another role first` : undefined}
-                          >Delete</button>
+                            type="button" className="icon-button" onClick={() => setConfirming(role.id)} aria-label={`Delete ${role.name}`}
+                            disabled={role.users > 0} title={role.users > 0 ? `Give its ${role.users} accounts another role first` : 'Delete'}
+                          ><XIcon /></button>
                         )}
                       </span>
                     ))}

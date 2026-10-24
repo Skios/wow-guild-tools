@@ -3,6 +3,7 @@ import { useMeta, useSpecInfo } from '../context';
 import { moveItem, validateRosterEntry, type RosterFormField, type RosterFormValues } from '../rosterForm';
 import type { CharacterSuggestion, RosterEntryInput } from '../types';
 import { errorMessage } from '../useAsync';
+import { XIcon } from './icons';
 
 interface Props {
   initial: RosterFormValues;
@@ -174,9 +175,9 @@ export function RosterForm({ initial, submitLabel, onSubmit, onCancel, keepAfter
                 <li key={id}>
                   <span className="ordinal">#{i + 2}</span>
                   <span>{label}{roleLabel && ` (${roleLabel})`}</span>
-                  <button type="button" ref={track(`up-${id}`)} aria-label={`Move ${label} up`} aria-disabled={i === 0 || undefined} onClick={() => moveOffSpec(i, -1)}>↑</button>
-                  <button type="button" ref={track(`down-${id}`)} aria-label={`Move ${label} down`} aria-disabled={i === values.offSpecs.length - 1 || undefined} onClick={() => moveOffSpec(i, 1)}>↓</button>
-                  <button type="button" ref={track(`remove-${id}`)} aria-label={`Remove ${label} from off-specs`} onClick={() => removeOffSpec(i)}>Remove</button>
+                  <button type="button" className="icon-button" ref={track(`up-${id}`)} aria-label={`Move ${label} up`} aria-disabled={i === 0 || undefined} onClick={() => moveOffSpec(i, -1)}>↑</button>
+                  <button type="button" className="icon-button" ref={track(`down-${id}`)} aria-label={`Move ${label} down`} aria-disabled={i === values.offSpecs.length - 1 || undefined} onClick={() => moveOffSpec(i, 1)}>↓</button>
+                  <button type="button" className="icon-button" ref={track(`remove-${id}`)} aria-label={`Remove ${label} from off-specs`} title="Remove" onClick={() => removeOffSpec(i)}><XIcon /></button>
                 </li>
               );
             })}

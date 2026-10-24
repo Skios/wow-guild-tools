@@ -4,6 +4,7 @@ import { ROLES, ROLE_ORDER } from '../roster';
 import { errorMessage, useAsync } from '../useAsync';
 import type { RosterAccount, RosterCharacter, RosterEntryInput } from '../types';
 import { CharacterName } from './CharacterName';
+import { PencilIcon, UnlinkIcon, XIcon } from './icons';
 import { InviteMacros } from './InviteMacros';
 import { OffSpecs } from './OffSpecs';
 import { RoleIcon } from './RoleIcon';
@@ -102,10 +103,10 @@ function Row({ person, alt, canEdit, editing, pending, busy, accounts, onAssign,
           </span>
         ) : (
           <span className="actions compact">
-            {canEdit && <button type="button" onClick={onEdit} aria-label={`Edit ${person.name}`}>Edit</button>}
-            {person.claimed && canEdit && <button type="button" onClick={() => onAsk('release')} aria-label={`Release ${person.name}`}>Release</button>}
-            {person.claimed && <button type="button" onClick={() => onAsk('revoke')} aria-label={`Revoke ${person.name}`}>Revoke</button>}
-            {!person.claimed && canEdit && <button type="button" onClick={() => onAsk('remove')} aria-label={`Remove ${person.name}`}>Remove</button>}
+            {canEdit && <button type="button" className="icon-button" onClick={onEdit} aria-label={`Edit ${person.name}`} title="Edit"><PencilIcon /></button>}
+            {person.claimed && canEdit && <button type="button" className="icon-button" onClick={() => onAsk('release')} aria-label={`Release ${person.name}`} title="Free the name for another player"><UnlinkIcon /></button>}
+            {person.claimed && <button type="button" className="icon-button" onClick={() => onAsk('revoke')} aria-label={`Revoke ${person.name}`} title="Revoke approval"><XIcon /></button>}
+            {!person.claimed && canEdit && <button type="button" className="icon-button" onClick={() => onAsk('remove')} aria-label={`Remove ${person.name}`} title="Remove"><XIcon /></button>}
           </span>
         )}
       </td>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMeta, useSpecLabel } from '../context';
 import type { RosterAccount, RosterCharacter } from '../types';
 import { CharacterName } from './CharacterName';
+import { XIcon } from './icons';
 import { SpecIcon } from './SpecIcon';
 
 /** "Assign to…": give a character to another account. */
@@ -43,7 +44,7 @@ function PendingRow({ person, accounts, busy, onApprove, onReject, onAssign }: {
         ) : (
           <span className="actions compact">
             <button type="button" className="primary" disabled={busy} onClick={onApprove} aria-label={`Approve ${person.name}`}>Approve</button>
-            <button type="button" disabled={busy} onClick={() => setAsking(true)} aria-label={`Reject ${person.name}`}>Reject</button>
+            <button type="button" className="icon-button" disabled={busy} onClick={() => setAsking(true)} aria-label={`Reject ${person.name}`} title="Reject"><XIcon /></button>
             <AssignSelect person={person} accounts={accounts} busy={busy} onAssign={onAssign} />
           </span>
         )}

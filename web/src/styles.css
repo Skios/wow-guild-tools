@@ -181,7 +181,13 @@ button.danger { background: var(--danger); border-color: var(--danger); color: #
 .person-note::before { content: '“'; } .person-note::after { content: '”'; }
 .cell-actions { width: 1%; white-space: nowrap; text-align: right; }
 .cell-actions .actions { justify-content: flex-end; }
-.icon-button { display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0; }
+/* Icon-only actions: pencil = edit, X = remove / revoke / reject / delete. Selectors beat `.actions.compact button`,
+   whose padding pushed the icon off-centre. */
+button.icon-button, .actions.compact button.icon-button { display: inline-grid; place-items: center; width: 34px; height: 34px; min-height: 34px; padding: 0; flex: none; }
+.chips li { display: inline-flex; align-items: center; gap: 0.25rem; }
+.chips button.icon-button { width: 24px; height: 24px; min-height: 24px; border-color: transparent; background: none; }
+@media (pointer: coarse) { button.icon-button, .actions.compact button.icon-button { width: 40px; height: 40px; min-height: 40px; } }
+.chips button.icon-button svg { width: 14px; height: 14px; }
 .icon-button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
 /* A player's other characters, under their main. */
 .alt-row td { border-top: none; }
