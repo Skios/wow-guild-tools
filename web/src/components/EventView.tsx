@@ -3,13 +3,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApi, useMeta } from '../context';
 import { formatDateTime, formatRange } from '../format';
 import {
-  addCharacter, changedSelections, confirmRow, groupRows, isDirty, rowsFromResponses, setLateMinutes, setStatus, summarize,
+  addCharacter, changedSelections, confirmRow, groupRows, isAttending, isDirty, rowsFromResponses, setLateMinutes, setStatus, summarize,
   type RosterRow,
 } from '../roster';
 import { errorMessage, useAsync } from '../useAsync';
 import type { EventDetail, MessageResult, NoAnswerEntry, ResponseStatus } from '../types';
 import { EventBoard } from './EventBoard';
 import { EventReminders } from './EventReminders';
+import { InviteMacros } from './InviteMacros';
 import { NoAnswerPanel } from './NoAnswerPanel';
 import { RoleIcon } from './RoleIcon';
 
@@ -198,6 +199,9 @@ export function EventView({ id }: { id: string }) {
           </div>
         </section>
       )}
+
+      {/* Who is confirmed right now on the board, saved or not. */}
+      <InviteMacros people={rows.filter(r => isAttending(r.status) && r.isConfirmed)} />
 
       {/* Keyed on the list: a reload with reminders sent meanwhile starts it afresh. */}
       <EventReminders key={data.reminders.map(r => `${r.minutesBefore}:${r.sentAt ?? ''}`).join()} eventId={id} initial={data.reminders} closed={published} />

@@ -656,33 +656,9 @@ describe('new season', () => {
   });
 });
 
-describe('in-game invites', () => {
-  test('lists /invite macros for the roster and copies one', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    setup([member('Jaina'), member('Thrall', { realm: 'Argent Dawn' })]);
 
-    const invites = await screen.findByRole('region', { name: 'In-game invites' });
-    const macro = '/invite Jaina-Silvermoon\n/invite Thrall-ArgentDawn';
-    expect(within(invites).getByRole('textbox', { name: 'Macro 1' })).toHaveValue(macro);
-
-    await userEvent.click(within(invites).getByRole('button', { name: 'Copy macro 1' }));
-    expect(writeText).toHaveBeenCalledWith(macro);
-    await waitFor(() => expect(within(invites).getByRole('status')).toHaveTextContent('Macro 1 copied'));
-  });
-
-  test('no clipboard (plain http, old browser): says to copy by hand', async () => {
-    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
-    setup([member('Jaina')]);
-
-    const invites = await screen.findByRole('region', { name: 'In-game invites' });
-    await userEvent.click(within(invites).getByRole('button', { name: 'Copy macro 1' }));
-    expect(within(invites).getByRole('status')).toHaveTextContent(/copy it by hand/);
-  });
-
-  test('hidden while the roster is empty', async () => {
-    setup([]);
-    await screen.findByText(/The roster is empty/);
-    expect(screen.queryByRole('region', { name: 'In-game invites' })).not.toBeInTheDocument();
-  });
+test('the in-game invites live on the event page, not here', async () => {
+  setup([member('Jaina')]);
+  await screen.findByText('Jaina');
+  expect(screen.queryByRole('region', { name: 'In-game invites' })).not.toBeInTheDocument();
 });

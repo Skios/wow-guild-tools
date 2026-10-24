@@ -5,7 +5,6 @@ import { errorMessage, useAsync } from '../useAsync';
 import type { RosterAccount, RosterCharacter, RosterEntryInput } from '../types';
 import { CharacterName } from './CharacterName';
 import { PencilIcon, UnlinkIcon, XIcon } from './icons';
-import { InviteMacros } from './InviteMacros';
 import { OffSpecs } from './OffSpecs';
 import { RoleIcon } from './RoleIcon';
 import { RosterForm } from './RosterForm';
@@ -225,8 +224,6 @@ export function RosterView() {
           </table>
         )}
       </section>
-
-      <InviteMacros people={rows.map(r => r.person)} />
 
       {canEdit && (
         <section className="card" aria-label="Add to the roster">

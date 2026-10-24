@@ -652,3 +652,29 @@ describe('reminders', () => {
     await waitFor(() => expect(within(region('Reminders')).getByText('8 h before').closest('li')).toHaveTextContent('sent'));
   });
 });
+
+describe('in-game invites', () => {
+  test('only confirmed IN and LATE characters, as /invite macros, follow the board as it changes', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    setup();
+    await ready();
+
+    const macro = () => (within(region('In-game invites')).getByRole('textbox', { name: 'Macro 1' }) as HTMLTextAreaElement).value.split('\n');
+    // full(): Tom, Zed, Runner (LATE) are confirmed; Cleo and Rex are IN but not confirmed.
+    expect(macro()).toEqual(expect.arrayContaining(['/invite Tom-Silvermoon', '/invite Zed-Silvermoon', '/invite Runner-Silvermoon']));
+    expect(macro()).toHaveLength(3);
+
+    await userEvent.click(confirmBox('Cleo'));
+    expect(macro()).toHaveLength(4);
+
+    await userEvent.click(within(region('In-game invites')).getByRole('button', { name: 'Copy macro 1' }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/invite Cleo-Silvermoon'));
+  });
+
+  test('nobody confirmed yet: no invites', async () => {
+    setup(eventDetail({ responses: [response('Cleo', 'HEALER', 'IN', false, 'PRIEST')] }));
+    await ready();
+    expect(screen.queryByRole('region', { name: 'In-game invites' })).not.toBeInTheDocument();
+  });
+});

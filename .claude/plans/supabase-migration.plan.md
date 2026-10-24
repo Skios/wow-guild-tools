@@ -96,7 +96,7 @@ profile and characters, roster approval + new season, notes on answers, Roles pa
 - [x] M4 reminders (2026-10-24): `reminders` table (minutes before, sent once), pg_cron every 5 min checks inside
   Postgres and only when one is due calls POST /api/reminders/run via pg_net (secrets in Vault). Defaults 1 day and
   8 h; event page edits them. [ ] Per environment: REMINDERS_SECRET on the API project + the two Vault secrets.
-- [x] In-game invite macros on the Roster page (2026-10-24).
+- [x] In-game invite macros (2026-10-24), on the event page for confirmed IN/LATE characters.
 - Homepage for everyone: next events with quick answers and a note dialog.
 - Discord bot for players who don't use Telegram (Identity already multi-platform)
 - Officer management page in the admin site (optional)
@@ -104,8 +104,8 @@ profile and characters, roster approval + new season, notes on answers, Roles pa
   Playwright E2E flows (login, approve, answer with a note). Parked by the user 2026-10-24: features first.
 
 ## Next: event composition round (user decisions 2026-10-24), in this order
-1. Buttons: one style app-wide. Pencil = edit; centred X = remove / revoke / reject / delete; same icon-button class.
-2. In-game invites move from the Roster page to the event page: only confirmed IN/LATE characters.
+1. [x] Buttons: one style app-wide. Pencil = edit; centred X = remove / revoke / reject / delete; same icon-button class.
+2. [x] In-game invites move from the Roster page to the event page: only confirmed IN/LATE characters.
 3. Publish dialog: one choice for every unconfirmed IN/LATE (Bench or Out); above it, every answer with a note
    (e.g. "IN, arriving 21:30, leaving 23:30") with its confirm tick, so officers make last changes before publishing.
 4. On the event board an officer can (a) switch which approved character a player brings (alt -> main; the answer

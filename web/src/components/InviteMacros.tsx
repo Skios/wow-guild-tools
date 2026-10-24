@@ -3,7 +3,7 @@ import { inviteMacros } from '../invite';
 
 const BY_HAND = 'Could not copy. Select the text and copy it by hand.';
 
-/** The roster as in-game macros: paste one into a macro and run it to invite everyone in it. */
+/** Confirmed characters as in-game macros: paste one into a macro and run it to invite everyone in it. */
 export function InviteMacros({ people }: { people: { name: string; realm: string }[] }) {
   const [copied, setCopied] = useState<string | null>(null);
   const macros = inviteMacros(people);
