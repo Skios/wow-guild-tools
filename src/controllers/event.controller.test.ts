@@ -32,6 +32,7 @@ beforeEach(() => {
   adapter.sendInvite.mockResolvedValue({ success: true });
   adapter.publishFinalRoster.mockResolvedValue({ success: true });
   adapter.sendDirect.mockResolvedValue({ success: true });
+  prismaMock.contact.findMany.mockResolvedValue([]);
 });
 afterEach(() => vi.useRealTimers());
 

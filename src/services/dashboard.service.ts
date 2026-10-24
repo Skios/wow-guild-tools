@@ -32,13 +32,16 @@ export class DashboardService {
 
   /** Upcoming events (published ones too, to show "you're in"), my answer to each, my approved characters. */
   async myEvents(userId: string) {
+    const now = new Date();
     const [characters, events] = await Promise.all([
       prisma.character.findMany({
         where: { userId, inRoster: true }, orderBy: [{ isMain: 'desc' }, { createdAt: 'asc' }],
         select: { id: true, name: true, class: true, spec: true, role: true },
       }),
       prisma.event.findMany({
-        where: { endTime: { gt: new Date() } }, orderBy: { startTime: 'asc' }, take: UPCOMING,
+        // Not over yet; a cancelled one shows (to say so) only until it would have started.
+        where: { endTime: { gt: now }, OR: [{ canceledAt: null }, { startTime: { gt: now } }] },
+        orderBy: { startTime: 'asc' }, take: UPCOMING,
         select: { id: true, title: true, startTime: true, endTime: true, isPublished: true, canceledAt: true },
       }),
     ]);

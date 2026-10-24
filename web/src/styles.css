@@ -226,7 +226,9 @@ button.icon-button, .actions.compact button.icon-button { display: inline-grid; 
 .character-name { font-weight: 700; text-shadow: 0 0 1px rgba(0, 0, 0, 0.6); }
 /* Light themes: class colours such as Priest white or Rogue yellow need a dark chip to stay readable. */
 :root[data-theme='parchment'] .character-name,
-:root[data-theme='daylight'] .character-name { background: var(--chip); padding: 0.05rem 0.45rem; border-radius: 6px; text-shadow: none; }
+:root[data-theme='daylight'] .character-name,
+:root[data-theme='parchment'] .class-select,
+:root[data-theme='daylight'] .class-select { background: var(--chip); padding: 0.05rem 0.45rem; border-radius: 6px; text-shadow: none; }
 
 .summary { list-style: none; display: flex; flex-wrap: wrap; gap: 0.35rem 1.25rem; padding: 0; margin: 0.75rem 0 0; align-items: center; }
 .summary li { display: inline-flex; align-items: center; gap: 0.35rem; }
@@ -324,3 +326,6 @@ button.link { background: none; border: none; padding: 0; min-height: 0; color: 
 .new-season h3 { margin: 0 0 0.25rem; font-size: 0.95rem; }
 .roles-summary li { font-size: 0.95rem; }
 .small { font-size: 0.8rem; margin: 0.25rem 0 0; }
+.contacted { display: block; font-size: 0.78rem; color: var(--muted); }
+.stack.tight { gap: 0.35rem; }
+.my-action { min-width: 15rem; }

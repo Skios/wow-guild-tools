@@ -209,6 +209,28 @@ describe('no answer panel', () => {
     expect(await screen.findByRole('list', { name: 'Message results' })).toHaveTextContent('Silent: sent');
   });
 
+  test('after sending, the page reloads to show the new contact times; never over unsaved changes', async () => {
+    let finish!: (v: unknown) => void;
+    const message = vi.fn()
+      .mockResolvedValueOnce({ results: [{ characterId: 'c-Silent', name: 'Silent', status: 'sent' }] })
+      .mockReturnValueOnce(new Promise(r => { finish = r; }));
+    const api = setup(undefined, { message });
+    await ready();
+
+    await userEvent.click(pick('Silent'));
+    await userEvent.click(send());
+    await waitFor(() => expect(api.getEvent).toHaveBeenCalledTimes(2));
+
+    // A board change made while the second send is still going: no reload afterwards.
+    await userEvent.click(pick('Silent'));
+    await userEvent.click(send());
+    fireEvent.change(answer('Maybe'), { target: { value: 'BENCH' } });
+    finish({ results: [] });
+    await screen.findAllByText('Unsaved changes', { exact: false });
+    await new Promise(r => setTimeout(r, 50));
+    expect(api.getEvent).toHaveBeenCalledTimes(2);
+  });
+
   test('the default text is visible as the placeholder, naming the event and when it is', async () => {
     setup();
     await ready();
@@ -982,5 +1004,19 @@ describe('role target', () => {
     await ready();
 
     expect(within(region('Healer (1)')).getByText(/can cover/)).toHaveTextContent('can cover Ranged DPS');
+  });
+});
+
+describe('contacted by an officer', () => {
+  test('each time shows under the name, in the No answer panel and on the board', async () => {
+    setup(eventDetail({
+      responses: [{ ...response('Maybe', 'HEALER', 'TENTATIVE', false, 'PRIEST'), contactedAt: ['2099-10-17T09:00:00Z'] }],
+      noAnswer: [noAnswer('Silent', { contactedAt: ['2099-10-16T18:00:00Z', '2099-10-17T20:15:00Z'] })],
+    }));
+    await ready();
+
+    const silent = within(region('No answer (1)')).getByText('Silent').closest('li')!;
+    expect(within(silent).getByText(/^Contacted /)).toHaveTextContent(/Contacted .+, .+/);
+    expect(within(region('Tentative (1)')).getByText(/^Contacted /)).toBeInTheDocument();
   });
 });

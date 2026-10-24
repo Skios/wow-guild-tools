@@ -31,7 +31,7 @@ describe('my next events', () => {
     const mine = await new DashboardService().myEvents('u1');
 
     expect(prismaMock.character.findMany.mock.calls[0]![0]).toMatchObject({ where: { userId: 'u1', inRoster: true }, orderBy: [{ isMain: 'desc' }, { createdAt: 'asc' }] });
-    expect(prismaMock.event.findMany.mock.calls[0]![0].where).toEqual({ endTime: { gt: NOW } });
+    expect(prismaMock.event.findMany.mock.calls[0]![0].where).toEqual({ endTime: { gt: NOW }, OR: [{ canceledAt: null }, { startTime: { gt: NOW } }] });
     expect(mine.characters).toEqual([MAIN, ALT]);
     expect(mine.events.map(e => [e.id, e.answer?.characterId ?? null])).toEqual([['e1', null], ['e2', 'c-alt']]);
   });

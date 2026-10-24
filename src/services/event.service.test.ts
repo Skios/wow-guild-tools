@@ -39,6 +39,7 @@ beforeEach(() => {
   adapter.publishFinalRoster.mockResolvedValue({ success: true });
   adapter.sendDirect.mockResolvedValue({ success: true });
   adapter.announce.mockResolvedValue({ success: true });
+  prismaMock.contact.findMany.mockResolvedValue([]);
 });
 
 describe('EventService.createEvent', () => {
@@ -265,6 +266,18 @@ describe('EventService.getEventDetail', () => {
     expect(detail.responses[0]!.alternatives.map(a => a.name)).toEqual(['Alt']); // still offered to switch to
   });
 
+  test('every time an officer messaged a character from this page comes with it', async () => {
+    prismaMock.event.findUnique.mockResolvedValue({ ...event, responses: [{ status: 'TENTATIVE', characterId: 'c-T', character: { id: 'c-T', name: 'T', userId: 'u9', user: null } }] });
+    prismaMock.character.findMany.mockResolvedValue([{ ...rosterRow('Silent', { username: 's', identities: [] }), userId: 'u1', isMain: true }]);
+    const at = (h: number) => new Date(Date.UTC(2026, 9, 17, h));
+    prismaMock.contact.findMany.mockResolvedValue([{ characterId: 'c-Silent', sentAt: at(9) }, { characterId: 'c-T', sentAt: at(10) }, { characterId: 'c-Silent', sentAt: at(20) }]);
+
+    const detail = await new EventService().getEventDetail('e1');
+
+    expect(detail.noAnswer[0]!.contactedAt).toEqual([at(9), at(20)]);
+    expect(detail.responses[0]!.contactedAt).toEqual([at(10)]);
+  });
+
   test('a silent player with no main among their characters shows once (the first)', async () => {
     prismaMock.event.findUnique.mockResolvedValue({ ...event, responses: [] });
     prismaMock.character.findMany.mockResolvedValue([
@@ -447,6 +460,19 @@ describe('EventService.messageCharacters', () => {
     ]);
     expect(adapter.sendDirect).toHaveBeenCalledTimes(1);
     expect(adapter.sendDirect).toHaveBeenCalledWith('4242', expect.objectContaining({ eventId: 'e1' }));
+  });
+
+  test('each message that arrives is logged with who sent it', async () => {
+    await new EventService().messageCharacters('e1', ids, undefined, 'officer-1');
+
+    expect(prismaMock.contact.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.contact.create).toHaveBeenCalledWith({ data: { eventId: 'e1', characterId: expect.any(String), sentBy: 'officer-1' } });
+  });
+
+  test('a message that did not arrive is not logged', async () => {
+    adapter.sendDirect.mockResolvedValue({ success: false, error: 'blocked' });
+    await new EventService().messageCharacters('e1', ids);
+    expect(prismaMock.contact.create).not.toHaveBeenCalled();
   });
 
   test('uses a default reminder that names the event, or the officer\'s own text', async () => {

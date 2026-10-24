@@ -146,6 +146,7 @@ model Event {
   canceledAt  DateTime?  // CANCELED (src/domain/event-state.ts); null = not cancelled
   responses   Response[]
   reminders   Reminder[]
+  contacts    Contact[]
   roleTarget  Json?      // the event's own role target (src/validators/role-target.validator.ts); null = the guild default
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
@@ -209,4 +210,17 @@ model Setting {
   updatedAt DateTime @updatedAt
 
   @@map("settings")
+}
+
+// Each private message an officer sent from an event page: who, to which character, when (shown as "contacted at").
+model Contact {
+  id          String   @id @default(uuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  characterId String
+  sentBy      String?  // the officer's user id
+  sentAt      DateTime @default(now())
+
+  @@index([eventId])
+  @@map("contacts")
 }

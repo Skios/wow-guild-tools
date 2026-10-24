@@ -29,11 +29,11 @@ Collected as reported; fixed in one pass later, not mixed into feature rounds.
   Note: the "Roster totals" line already has a per-role count with icons; check whether it shows what's wanted
   (main roles only, readable at a glance) or needs to be more visible.
 - [x] **Roster: "New season" inside the table's card (2026-10-24)**, like the totals at the top, not a card of its own.
-- **Dashboard: only events not over (2026-10-24).** Keep just the events that haven't ended (the API already
+- [x] **Dashboard: only events not over (2026-10-24).** Keep just the events that haven't ended (the API already
   filters on endTime > now for "Your next events" and the glance table: check what still shows, e.g. cancelled ones).
-- **Dashboard: the player's events as a glance table (2026-10-24).** Like "Events at a glance": one row per event,
+- [x] **Dashboard: the player's events as a glance table (2026-10-24).** Like "Events at a glance": one row per event,
   an "Action" column with the character dropdown (coloured by class) and, under it, In / Late / Tentative / Out as
   small icon buttons. The note dialog stays as it is.
-- **Contacted by an officer: every timestamp (2026-10-24).** For players an officer messaged (No answer panel, DMs
+- [x] **Contacted by an officer: every timestamp (2026-10-24).** For players an officer messaged (No answer panel, DMs
   from the event page), show each time they were contacted. Needs a small log of officer DMs (event, character,
   when); today the results are only shown once after sending.

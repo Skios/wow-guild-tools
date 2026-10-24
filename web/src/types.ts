@@ -87,6 +87,7 @@ export interface EventResponse {
   /** The off-spec an officer set for this event; null = the character's main spec. */
   spec: string | null;
   alternatives: Alternative[];
+  contactedAt?: string[];
   character: {
     id: string;
     name: string;
@@ -114,6 +115,8 @@ export interface NoAnswerEntry {
   nickname: string | null;
   /** Whether the bot can write to this person privately. */
   reachable: boolean;
+  /** Each time an officer messaged this character from the event page. */
+  contactedAt?: string[];
 }
 
 export interface Reminder {

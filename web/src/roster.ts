@@ -36,6 +36,8 @@ export interface RosterRow {
   main?: { spec: string | null; role: RoleId };
   /** The player's other approved characters an officer can switch to. */
   alternatives?: Alternative[];
+  /** Each time an officer messaged them from the event page. */
+  contactedAt?: string[];
 }
 
 /** Role of a spec of a class, from the game data; undefined when unknown. */
@@ -67,6 +69,7 @@ export function rowsFromResponses(responses: EventResponse[], startTime: string,
       playSpec,
       main: { spec: r.character.spec, role: r.character.role },
       alternatives: r.alternatives ?? [],
+      contactedAt: r.contactedAt ?? [],
       username: r.character.user?.username ?? null,
       offSpecs: r.character.offSpecs,
       nickname: r.character.nickname,
@@ -135,6 +138,7 @@ export function addCharacter(
     lateMinutes: null,
     note: null,
     saved: null,
+    contactedAt: character.contactedAt ?? [],
   };
   return [...rows, added];
 }

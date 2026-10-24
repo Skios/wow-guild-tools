@@ -16,7 +16,7 @@ const setup = (data: Dashboard = board(), officer = RAIDER, over = {}) => {
   renderWith(<DashboardView />, api, undefined, officer);
   return api;
 };
-const card = () => screen.findByRole('article', { name: 'Raid Night' });
+const card = () => screen.findByRole('row', { name: 'Raid Night' });
 
 describe('my next events', () => {
   test('answers with one tap, as the main by default, then refreshes', async () => {
@@ -41,6 +41,15 @@ describe('my next events', () => {
     await waitFor(() => expect(api.answerEvent).toHaveBeenCalledWith('e1', { characterId: 'c-main', status: 'TENTATIVE' }));
   });
 
+  test('one row per event: your answer with the character, and the character menu in its class colour', async () => {
+    setup(board({ me: { characters: [MAIN, ALT], events: [event({ answer: { eventId: 'e1', characterId: 'c-main', status: 'IN', isConfirmed: false, arrivalTime: null, note: null } })] } }));
+    const raid = await card();
+    const [yours] = within(raid).getAllByRole('cell');
+
+    expect(yours).toHaveTextContent('InUlfgaar');
+    expect(within(raid).getByLabelText('Answer with')).toHaveStyle({ color: 'rgb(199, 156, 110)' }); // warrior
+  });
+
   test('LATE asks for the minutes and a note in a dialog', async () => {
     const api = setup();
     const raid = await card();
@@ -60,7 +69,7 @@ describe('my next events', () => {
       event({ id: 'e2', title: 'Alt run' }),
     ] } }));
     const raid = await card();
-    expect(within(screen.getByRole('article', { name: 'Alt run' })).getByRole('button', { name: 'Note…' })).toBeDisabled();
+    expect(within(screen.getByRole('row', { name: 'Alt run' })).getByRole('button', { name: 'Note…' })).toBeDisabled();
     expect(within(raid).queryByLabelText('Answer with')).not.toBeInTheDocument(); // only one character
 
     await userEvent.click(within(raid).getByRole('button', { name: 'Note…' }));
@@ -90,7 +99,7 @@ describe('my next events', () => {
     expect(within(raid).getByText('Sign-ups are closed: you said in.')).toBeInTheDocument();
     expect(within(raid).getByText('Started')).toBeInTheDocument();
     expect(within(raid).queryByRole('button', { name: 'In' })).not.toBeInTheDocument();
-    expect(within(screen.getByRole('article', { name: 'Alt run' })).getByText('This event is cancelled.')).toBeInTheDocument();
+    expect(within(screen.getByRole('row', { name: 'Alt run' })).getByText('This event is cancelled.')).toBeInTheDocument();
   });
 
   test('no approved character yet: says how to get one', async () => {

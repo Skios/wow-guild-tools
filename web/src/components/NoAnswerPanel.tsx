@@ -3,6 +3,7 @@ import type { MessageResult, NoAnswerEntry, ResponseStatus } from '../types';
 import { CharacterName } from './CharacterName';
 import { OffSpecs } from './OffSpecs';
 import { SpecIcon } from './SpecIcon';
+import { ContactedLine } from './ContactedLine';
 
 const STATUS_LABEL: Record<ResponseStatus, string> = { IN: 'In', LATE: 'Late', TENTATIVE: 'Tentative', BENCH: 'Bench', OUT: 'Out' };
 
@@ -66,6 +67,7 @@ export function NoAnswerPanel(p: Props) {
                     <span className="muted note"> {person.username ? 'not on the bot yet' : 'unclaimed name'}</span>
                   )}
                   {person.reachable && person.username && !person.nickname && <span className="muted person-user"> @{person.username}</span>}
+                  <ContactedLine at={person.contactedAt} />
                 </span>
                 <select
                   aria-label={`Mark ${person.name} as`}

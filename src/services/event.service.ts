@@ -244,7 +244,7 @@ export class EventService {
   }
 
   /** Privately reminds people who have not answered. Each person gets their own delivery result. */
-  async messageCharacters(eventId: string, characterIds: string[], customText?: string) {
+  async messageCharacters(eventId: string, characterIds: string[], customText?: string, sentBy?: string) {
     const event = await this.getEvent(eventId);
     if (event.isPublished) throw new ConflictError('Event already published');
     if (event.canceledAt) throw new ConflictError('This event is cancelled');
@@ -266,6 +266,7 @@ export class EventService {
       if (!telegramId) { results.push({ ...base, status: 'unreachable' }); continue; }
 
       const sent = await this.notificationService.sendDirect('telegram', telegramId, { text, eventId });
+      if (sent.success) await prisma.contact.create({ data: { eventId, characterId, ...(sentBy && { sentBy }) } });
       results.push(sent.success ? { ...base, status: 'sent' } : { ...base, status: 'failed', error: sent.error ?? 'Delivery failed' });
     }
     return results;
@@ -370,9 +371,16 @@ export class EventService {
     const responses = event.responses.map(r => ({
       ...r, character: { ...r.character, nickname: shownNickname(r.character) }, alternatives: alternativesOf(r.character.userId),
     }));
+    // When an officer messaged each character from this page.
+    const contacts = await prisma.contact.findMany({ where: { eventId: id }, orderBy: { sentAt: 'asc' }, select: { characterId: true, sentAt: true } });
+    const contactedAt = (characterId: string) => contacts.filter(c => c.characterId === characterId).map(c => c.sentAt);
     const own = event.roleTarget === null || event.roleTarget === undefined ? null : readTarget(event.roleTarget);
     const roleTarget = own ?? await this.defaultRoleTarget();
-    return { ...event, state: eventState(event), responses, noAnswer, roleTarget, roleTargetIsDefault: own === null };
+    return {
+      ...event, state: eventState(event), roleTarget, roleTargetIsDefault: own === null,
+      responses: responses.map(r => ({ ...r, contactedAt: contactedAt(r.characterId) })),
+      noAnswer: noAnswer.map(c => ({ ...c, contactedAt: contactedAt(c.id) })),
+    };
   }
 
   async listEvents(limit: number = 20, offset: number = 0) {

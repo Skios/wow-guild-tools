@@ -28,11 +28,14 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
 `web/` is the officers' admin (Next.js App Router, client rendering). With the API running on :3000:
 `cd web && npm install && npm run dev`, then open http://127.0.0.1:5173 (`/api/*` is proxied to `API_ORIGIN`).
 
-- **Home** (`/`, every account): your next events with In / Late / Tentative / Out, a note dialog (Late asks the
+- **Home** (`/`, every account): your next events as a table (your answer and character; an Action column with
+  the character menu in class colour and In / Late / Tentative / Out icons), a note dialog (Late asks the
   minutes) and which approved character answers; published events say where you are. Officers (`events.manage`)
   also see the open events against their role target, a to-do list (approvals, events to publish within a day,
   players without Telegram) and attendance per player (played / late / bench / out / tentative / no answer) over the
   last 5, 10 or 20 published events or the whole season (since the last New season).
+- **Contacted**: every message an officer sends from an event page is logged; the board and the No answer panel
+  show "Contacted <times>" under the name.
 - **Event states**: Open -> Closed (published) or Cancelled, before the start; Started and Ended follow the clock.
   Players answer only while Open and not started. Officers keep fixing the board after publishing and after the
   start, and **Publish again** posts an update; at each publish players switched to another character or an

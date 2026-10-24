@@ -44,7 +44,7 @@ export async function eventRoutes(fastify: FastifyInstance) {
     try {
       const { id } = EventParamsSchema.parse(request.params);
       const body = MessageSchema.parse(request.body);
-      return reply.send({ results: await eventService.messageCharacters(id, body.characterIds, body.text) });
+      return reply.send({ results: await eventService.messageCharacters(id, body.characterIds, body.text, request.officer!.userId) });
     } catch (error) {
       return sendError(request, reply, error);
     }

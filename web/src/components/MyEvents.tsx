@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useMeta } from '../context';
 import { formatRange } from '../format';
 import type { MyCharacterChoice, MyEvent, QuickAnswer, QuickStatus } from '../types';
+import { CharacterName } from './CharacterName';
 import { EventStateBadge } from './EventStateBadge';
 
 const BUTTONS: { status: QuickStatus; label: string }[] = [
@@ -67,12 +69,18 @@ function AnswerDialog({ title, late, initialMinutes, initialNote, busy, error, o
   );
 }
 
-function EventCard({ event, characters, busy, onAnswer }: {
+const STATUS_ICON: Record<QuickStatus, string> = { IN: '✅', LATE: '⏰', TENTATIVE: '❓', OUT: '❌' };
+const STATUS_TEXT: Record<string, string> = { IN: 'In', LATE: 'Late', TENTATIVE: 'Tentative', OUT: 'Out', BENCH: 'Bench' };
+
+function EventRow({ event, characters, busy, onAnswer }: {
   event: MyEvent; characters: MyCharacterChoice[]; busy: boolean; onAnswer: (answer: QuickAnswer) => Promise<string | null>;
 }) {
+  const meta = useMeta();
+  const colour = (classId: string) => meta.classes.find(c => c.id === classId)?.color;
   // Before answering the player picks a character here; after, the select shows what the server has.
   const [choice, setChoice] = useState(characters[0]?.id ?? '');
   const picked = event.answer?.characterId ?? choice;
+  const pickedClass = characters.find(c => c.id === picked)?.class;
   const [dialog, setDialog] = useState<'late' | 'note' | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const status = event.answer?.status;
@@ -82,55 +90,60 @@ function EventCard({ event, characters, busy, onAnswer }: {
     if (problem) setDialogError(problem); else closeDialog();
   };
   const lateDialog = dialog === 'late' || (dialog === 'note' && status === 'LATE');
+  const answeredWith = characters.find(c => c.id === event.answer?.characterId);
 
   return (
-    <article className="card stack my-event" aria-label={event.title}>
-      <div className="row">
-        <h3><Link href={`/events/${event.id}`}>{event.title}</Link></h3>
-        {event.state !== 'OPEN' && <EventStateBadge state={event.state} />}
-      </div>
-      <p className="muted">{formatRange(event.startTime, event.endTime)}</p>
-      {event.state !== 'OPEN' ? <p>{closedLine(event, characters)}</p> : characters.length > 0 && (
-        <>
-          {characters.length > 1 && (
-            <div className="actions">
-              <label htmlFor={`as-${event.id}`}>Answer with</label>
-              <select id={`as-${event.id}`} value={picked} onChange={e => {
+    <tr aria-label={event.title}>
+      <th scope="row">
+        <Link href={`/events/${event.id}`}>{event.title}</Link> {event.state !== 'OPEN' && <EventStateBadge state={event.state} />}
+        <span className="muted block">{formatRange(event.startTime, event.endTime)}</span>
+      </th>
+      <td>
+        {status ? <strong>{STATUS_TEXT[status]}</strong> : <span className="muted">No answer</span>}
+        {answeredWith && <span className="block"><CharacterName name={answeredWith.name} classId={answeredWith.class} /></span>}
+        {event.answer?.note && <span className="person-note">{event.answer.note}</span>}
+      </td>
+      <td className="my-action">
+        {event.state !== 'OPEN' ? <span>{closedLine(event, characters)}</span> : characters.length > 0 && (
+          <div className="stack tight">
+            {characters.length > 1 && (
+              <select aria-label="Answer with" className="class-select" value={picked} style={{ color: pickedClass && colour(pickedClass) }} onChange={e => {
                 if (status && status !== 'BENCH') void send({ status: status as QuickStatus }, e.target.value);
                 else setChoice(e.target.value);
               }}>
                 {characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+            )}
+            <div className="actions compact" role="group" aria-label={`Your answer for ${event.title}`}>
+              {BUTTONS.map(b => (
+                <button key={b.status} type="button" className={`icon-button${status === b.status ? ' primary' : ''}`} aria-pressed={status === b.status}
+                  aria-label={b.label} title={b.label} {...(b.status === 'LATE' && { 'aria-haspopup': 'dialog' as const })} onClick={() => (b.status === 'LATE' ? setDialog('late') : void send({ status: b.status }))}>
+                  <span aria-hidden="true">{STATUS_ICON[b.status]}</span>
+                </button>
+              ))}
+              <button type="button" disabled={!event.answer} title={event.answer ? undefined : 'Answer first'} onClick={() => setDialog('note')}>Note…</button>
             </div>
-          )}
-          <div className="actions" role="group" aria-label={`Your answer for ${event.title}`}>
-            {BUTTONS.map(b => (
-              <button key={b.status} type="button" aria-pressed={status === b.status} className={status === b.status ? 'primary' : undefined}
-                onClick={() => (b.status === 'LATE' ? setDialog('late') : void send({ status: b.status }))}>{b.label}</button>
-            ))}
-            <button type="button" disabled={!event.answer} title={event.answer ? undefined : 'Answer first'} onClick={() => setDialog('note')}>Note…</button>
           </div>
-          {event.answer?.note && <p className="person-note">{event.answer.note}</p>}
-        </>
-      )}
-      {dialog && (
-        <AnswerDialog
-          title={`${dialog === 'late' ? 'Late' : 'Note'} for ${event.title}`}
-          late={lateDialog}
-          initialMinutes={minutesLate(event)}
-          initialNote={event.answer?.note ?? ''}
-          busy={busy}
-          error={dialogError}
-          onCancel={closeDialog}
-          onSave={(minutes, note) => void send({
-            status: dialog === 'late' ? 'LATE' : (status as QuickStatus),
-            ...(minutes !== undefined && { lateMinutes: minutes }),
-            // Sent when it changed (an emptied box clears it), or always from the Note dialog.
-            ...((dialog === 'note' || note !== (event.answer?.note ?? '')) && { note }),
-          })}
-        />
-      )}
-    </article>
+        )}
+        {dialog && (
+          <AnswerDialog
+            title={`${dialog === 'late' ? 'Late' : 'Note'} for ${event.title}`}
+            late={lateDialog}
+            initialMinutes={minutesLate(event)}
+            initialNote={event.answer?.note ?? ''}
+            busy={busy}
+            error={dialogError}
+            onCancel={closeDialog}
+            onSave={(minutes, note) => void send({
+              status: dialog === 'late' ? 'LATE' : (status as QuickStatus),
+              ...(minutes !== undefined && { lateMinutes: minutes }),
+              // Sent when it changed (an emptied box clears it), or always from the Note dialog.
+              ...((dialog === 'note' || note !== (event.answer?.note ?? '')) && { note }),
+            })}
+          />
+        )}
+      </td>
+    </tr>
   );
 }
 
@@ -139,14 +152,19 @@ export function MyEvents({ characters, events, busy, onAnswer }: {
   characters: MyCharacterChoice[]; events: MyEvent[]; busy: boolean; onAnswer: (eventId: string, answer: QuickAnswer) => Promise<string | null>;
 }) {
   return (
-    <section className="stack" aria-label="Your next events">
+    <section className="card stack" aria-label="Your next events">
       <h2>Your next events</h2>
       {characters.length === 0 && (
         <p className="muted">Add your characters on your profile and wait for an officer to approve one: then you answer here or on Telegram. <Link href="/profile">Open your profile</Link></p>
       )}
-      {events.length === 0 ? <p className="muted">No events coming up.</p> : events.map(e => (
-        <EventCard key={e.id} event={e} characters={characters} busy={busy} onAnswer={a => onAnswer(e.id, a)} />
-      ))}
+      {events.length === 0 ? <p className="muted">No events coming up.</p> : (
+        <div className="table-wrap"><table className="table">
+          <thead><tr><th scope="col">Event</th><th scope="col">Your answer</th><th scope="col">Action</th></tr></thead>
+          <tbody>
+            {events.map(e => <EventRow key={e.id} event={e} characters={characters} busy={busy} onAnswer={a => onAnswer(e.id, a)} />)}
+          </tbody>
+        </table></div>
+      )}
     </section>
   );
 }

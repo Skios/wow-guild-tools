@@ -3,6 +3,7 @@ import { MAX_LATE_MINUTES, STATUSES, type RosterRow } from '../roster';
 import type { ResponseStatus, RoleId } from '../types';
 import { useMeta, useSpecInfo } from '../context';
 import { CharacterName } from './CharacterName';
+import { ContactedLine } from './ContactedLine';
 import { OffSpecs } from './OffSpecs';
 import { SpecIcon } from './SpecIcon';
 
@@ -47,6 +48,7 @@ export function PersonRow({ row, eventStart, disabled, onStatus, onConfirm, onLa
         {late && row.lateMinutes !== null && <span className="muted"> ({formatTime(arrivalTime(eventStart, row.lateMinutes))})</span>}
         {row.username && !row.nickname && <span className="muted person-user"> @{row.username}</span>}
         {row.note && <span className="person-note">{row.note}</span>}
+        <ContactedLine at={row.contactedAt} />
         {cover && <span className="cover">can cover {cover.map(r => roles.find(x => x.id === r)?.label ?? r).join(', ')}</span>}
       </span>
 

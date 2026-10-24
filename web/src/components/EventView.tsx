@@ -35,6 +35,8 @@ export function EventView({ id }: { id: string }) {
   const [messageText, setMessageText] = useState('');
   const [results, setResults] = useState<MessageResult[] | null>(null);
   const publishButton = useRef<HTMLButtonElement>(null);
+  // Read after an await: the board may have changed meanwhile.
+  const dirtyNow = useRef(false);
   const [editingTarget, setEditingTarget] = useState(false);
 
   // Rebuild the editable rows whenever fresh data arrives. Done during render (not in an effect)
@@ -53,6 +55,7 @@ export function EventView({ id }: { id: string }) {
     [event.data, rows],
   );
   const dirty = isDirty(rows);
+  dirtyNow.current = dirty;
   const published = event.data?.isPublished ?? false;
   const state = event.data?.state ?? 'OPEN';
   const canceled = state === 'CANCELED';
@@ -101,6 +104,8 @@ export function EventView({ id }: { id: string }) {
     try {
       const sent = await api.message(id, askable, messageText.trim() || undefined);
       setResults(sent.results);
+      // Shows the new "contacted" times; never over unsaved board changes (made before or during the send).
+      if (!dirtyNow.current) event.reload();
     } catch (e) {
       setProblem(errorMessage(e));
     } finally {
