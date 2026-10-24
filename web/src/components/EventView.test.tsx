@@ -770,6 +770,19 @@ describe('in-game invites', () => {
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/invite Cleo-Silvermoon'));
   });
 
+  test('also the plain list of names, comma separated, with its own Copy', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    setup(eventDetail({ responses: [response('Tom', 'TANK', 'IN', true, 'WARRIOR'), response('Zed', 'RANGED_DPS', 'IN', true)] }));
+    await ready();
+
+    const invites = region('In-game invites');
+    expect(within(invites).getByRole('textbox', { name: 'Names' })).toHaveValue('Tom, Zed');
+    expect(within(invites).getByRole('textbox', { name: 'Macro 1' })).toBeInTheDocument();
+    await userEvent.click(within(invites).getByRole('button', { name: 'Copy names' }));
+    expect(writeText).toHaveBeenCalledWith('Tom, Zed');
+  });
+
   test('nobody confirmed yet: no invites', async () => {
     setup(eventDetail({ responses: [response('Cleo', 'HEALER', 'IN', false, 'PRIEST')] }));
     await ready();

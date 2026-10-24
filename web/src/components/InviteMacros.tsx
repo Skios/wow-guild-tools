@@ -7,6 +7,7 @@ const BY_HAND = 'Could not copy. Select the text and copy it by hand.';
 export function InviteMacros({ people }: { people: { name: string; realm: string }[] }) {
   const [copied, setCopied] = useState<string | null>(null);
   const macros = inviteMacros(people);
+  const names = people.map(p => p.name).join(', ');
   if (macros.length === 0) return null;
 
   const copy = async (macro: string, label: string) => {
@@ -24,6 +25,11 @@ export function InviteMacros({ people }: { people: { name: string; realm: string
   return (
     <section className="card" aria-label="In-game invites">
       <h3>In-game invites</h3>
+      <div className="stack">
+        <label htmlFor="invite-names">Names</label>
+        <textarea id="invite-names" readOnly value={names} rows={2} onFocus={e => e.target.select()} />
+        <span className="actions"><button type="button" onClick={() => copy(names, 'Names')} aria-label="Copy names">Copy</button></span>
+      </div>
       <p className="muted">Paste each into a macro (Esc → Macros) and run it. A macro holds at most 255 characters, so big rosters need more than one.</p>
       {macros.map((macro, i) => {
         const label = `Macro ${i + 1}`;
