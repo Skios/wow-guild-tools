@@ -213,6 +213,28 @@ describe('EventService.getEventDetail', () => {
     expect(detail.responses[0]!.alternatives).toEqual([{ id: 'c-Main', name: 'Main', class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK' }]);
   });
 
+  test("the role target is the event's own, else the guild default (marked as such)", async () => {
+    prismaMock.character.findMany.mockResolvedValue([]);
+    prismaMock.setting.findUnique.mockResolvedValue({ key: 'roleTarget', value: { mode: 'flex', tanks: 1, healersPer5: 1.5, meleeShare: 30 } });
+
+    prismaMock.event.findUnique.mockResolvedValue({ ...event, roleTarget: null });
+    expect(await new EventService().getEventDetail('e1')).toMatchObject({
+      roleTarget: { mode: 'flex', tanks: 1, healersPer5: 1.5, meleeShare: 30 }, roleTargetIsDefault: true,
+    });
+
+    const own = { mode: 'fixed', size: 10, tanks: 2, healers: 2, melee: 3, ranged: 3 };
+    prismaMock.event.findUnique.mockResolvedValue({ ...event, roleTarget: own });
+    expect(await new EventService().getEventDetail('e1')).toMatchObject({ roleTarget: own, roleTargetIsDefault: false });
+  });
+
+  test('no guild default saved, or a broken one: the built-in default', async () => {
+    prismaMock.character.findMany.mockResolvedValue([]);
+    prismaMock.event.findUnique.mockResolvedValue({ ...event, roleTarget: null });
+    prismaMock.setting.findUnique.mockResolvedValue({ key: 'roleTarget', value: { mode: 'nonsense' } });
+
+    expect((await new EventService().getEventDetail('e1')).roleTarget).toEqual({ mode: 'flex', tanks: 2, healersPer5: 1, meleeShare: 50 });
+  });
+
   test('404 for an unknown event, without querying the roster', async () => {
     prismaMock.event.findUnique.mockResolvedValue(null);
 

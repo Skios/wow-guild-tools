@@ -853,3 +853,101 @@ describe('the spec and character a player brings that night', () => {
     expect(screen.getByText(/save them to switch characters/)).toHaveAttribute('role', 'status');
   });
 });
+
+describe('role target', () => {
+  const summaryItem = (role: string) => within(screen.getByRole('list', { name: 'Roster summary' })).getAllByTitle(role).find(el => el.tagName === 'LI')!;
+
+  test('the summary shows each count with the target in brackets, marking what is short', async () => {
+    // full(): 4 confirmed: Tom (tank), Zed (ranged), Runner (melee, late) + ... flex 2 tanks, 1 per 5 => 1 healer.
+    setup(eventDetail({ responses: [response('Tom', 'TANK', 'IN', true, 'WARRIOR'), response('Zed', 'RANGED_DPS', 'IN', true)] }));
+    await ready();
+
+    expect(summaryItem('Tank')).toHaveTextContent('1 (2)');
+    expect(within(summaryItem('Tank')).getByText('(2)')).toHaveClass('short');
+    expect(summaryItem('Ranged DPS')).toHaveTextContent('1 (0)');
+    expect(screen.getByText(/guild default/)).toBeInTheDocument();
+  });
+
+  test('edit flex for this event: tanks, healers per 5 and the melee/ranged slider', async () => {
+    const api = setup();
+    await ready();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit target' }));
+    const form = screen.getByRole('form', { name: 'Role target' });
+    await userEvent.clear(within(form).getByLabelText('Tanks'));
+    await userEvent.type(within(form).getByLabelText('Tanks'), '3');
+    fireEvent.change(within(form).getByLabelText('Melee share'), { target: { value: '30' } });
+    expect(within(form).getByText('30% melee · 70% ranged')).toBeInTheDocument();
+    await userEvent.click(within(form).getByRole('button', { name: 'Save for this event' }));
+
+    await waitFor(() => expect(api.setEventRoleTarget).toHaveBeenCalledWith('e1', { mode: 'flex', tanks: 3, healersPer5: 1, meleeShare: 30 }));
+    await waitFor(() => expect(api.getEvent).toHaveBeenCalledTimes(2));
+  });
+
+  test('fixed: melee and ranged stay in the DPS left by the raid size; saved as the guild default', async () => {
+    const api = setup();
+    await ready();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit target' }));
+    const form = screen.getByRole('form', { name: 'Role target' });
+    await userEvent.click(within(form).getByLabelText('Fixed'));
+    await userEvent.clear(within(form).getByLabelText('Raid size'));
+    await userEvent.type(within(form).getByLabelText('Raid size'), '20');
+    await userEvent.clear(within(form).getByLabelText('Healers'));
+    await userEvent.type(within(form).getByLabelText('Healers'), '4');
+    expect(within(form).getByText('14 DPS')).toBeInTheDocument();
+    await userEvent.clear(within(form).getByLabelText('Melee'));
+    await userEvent.type(within(form).getByLabelText('Melee'), '4');
+    expect(within(form).getByLabelText('Ranged')).toHaveValue(10);
+    await userEvent.click(within(form).getByRole('button', { name: 'Save as guild default' }));
+
+    await waitFor(() => expect(api.setDefaultRoleTarget).toHaveBeenCalledWith({ mode: 'fixed', size: 20, tanks: 2, healers: 4, melee: 4, ranged: 10 }));
+  });
+
+  test('switching to fixed keeps the counts adding up, whatever the tanks were', async () => {
+    const api = setup(eventDetail({ roleTarget: { mode: 'flex', tanks: 3, healersPer5: 1, meleeShare: 50 }, roleTargetIsDefault: false }));
+    await ready();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit target' }));
+    const form = screen.getByRole('form', { name: 'Role target' });
+    await userEvent.click(within(form).getByLabelText('Fixed'));
+    expect(within(form).getByText('13 DPS')).toBeInTheDocument();
+    await userEvent.clear(within(form).getByLabelText('Raid size'));
+    expect(within(form).getByRole('alert')).toHaveTextContent('Set the raid size.');
+    expect(within(form).getByRole('button', { name: 'Save for this event' })).toBeDisabled();
+    await userEvent.type(within(form).getByLabelText('Raid size'), '5');
+    expect(within(form).getByRole('alert')).toHaveTextContent(/more than the raid size/);
+    expect(api.setEventRoleTarget).not.toHaveBeenCalled();
+  });
+
+  test('with unsaved roster changes the target cannot be saved (the reload would lose them)', async () => {
+    setup();
+    await ready();
+
+    await userEvent.selectOptions(answer('Maybe'), 'BENCH');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit target' }));
+    const form = screen.getByRole('form', { name: 'Role target' });
+
+    expect(within(form).getByRole('button', { name: 'Save for this event' })).toBeDisabled();
+    expect(within(form).getByRole('button', { name: 'Save for this event' })).toHaveAccessibleDescription(/Save the roster first/);
+  });
+
+  test('an event with its own target can go back to the guild default', async () => {
+    const api = setup(eventDetail({ roleTarget: { mode: 'flex', tanks: 1, healersPer5: 1, meleeShare: 50 }, roleTargetIsDefault: false }));
+    await ready();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use the guild default' }));
+    await waitFor(() => expect(api.setEventRoleTarget).toHaveBeenCalledWith('e1', null));
+  });
+
+  test('a role short of its target highlights who can cover it with an off-spec', async () => {
+    const fardina = { ...response('Fardina', 'HEALER', 'IN', true, 'PRIEST'), character: { ...response('Fardina', 'HEALER', 'IN', true, 'PRIEST').character, spec: 'HOLY', offSpecs: ['SHADOW'] } };
+    setup(eventDetail({
+      roleTarget: { mode: 'fixed', size: 3, tanks: 1, healers: 0, melee: 0, ranged: 2 }, roleTargetIsDefault: false,
+      responses: [response('Tom', 'TANK', 'IN', true, 'WARRIOR'), response('Zed', 'RANGED_DPS', 'IN', true), fardina],
+    }));
+    await ready();
+
+    expect(within(region('Healer (1)')).getByText(/can cover/)).toHaveTextContent('can cover Ranged DPS');
+  });
+});

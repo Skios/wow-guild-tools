@@ -1,7 +1,7 @@
 import { formatTime, arrivalTime } from '../format';
 import { MAX_LATE_MINUTES, STATUSES, type RosterRow } from '../roster';
-import type { ResponseStatus } from '../types';
-import { useSpecInfo } from '../context';
+import type { ResponseStatus, RoleId } from '../types';
+import { useMeta, useSpecInfo } from '../context';
 import { CharacterName } from './CharacterName';
 import { OffSpecs } from './OffSpecs';
 import { SpecIcon } from './SpecIcon';
@@ -18,11 +18,14 @@ interface Props {
   onPlaySpec: (spec: string | null) => void;
   /** Missing while switching isn't possible (unsaved changes): the control is hidden. */
   onSwitch?: ((to: string) => void) | undefined;
+  /** Roles under target this character could cover with an off-spec. */
+  cover?: RoleId[] | undefined;
   /** Present when the person can be picked for a message (tentative players). */
   selection?: { selected: boolean; onToggle: (selected: boolean) => void };
 }
 
-export function PersonRow({ row, eventStart, disabled, onStatus, onConfirm, onLateMinutes, onPlaySpec, onSwitch, selection }: Props) {
+export function PersonRow({ row, eventStart, disabled, onStatus, onConfirm, onLateMinutes, onPlaySpec, onSwitch, cover, selection }: Props) {
+  const roles = useMeta().roles;
   const late = row.status === 'LATE';
   const specInfo = useSpecInfo(row.class);
   const mainSpec = row.main?.spec ?? (row.playSpec ? null : row.spec);
@@ -44,6 +47,7 @@ export function PersonRow({ row, eventStart, disabled, onStatus, onConfirm, onLa
         {late && row.lateMinutes !== null && <span className="muted"> ({formatTime(arrivalTime(eventStart, row.lateMinutes))})</span>}
         {row.username && !row.nickname && <span className="muted person-user"> @{row.username}</span>}
         {row.note && <span className="person-note">{row.note}</span>}
+        {cover && <span className="cover">can cover {cover.map(r => roles.find(x => x.id === r)?.label ?? r).join(', ')}</span>}
       </span>
 
       <span className="person-controls">

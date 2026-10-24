@@ -111,7 +111,7 @@ profile and characters, roster approval + new season, notes on answers, Roles pa
 4. [x] On the event board an officer can (a) switch which approved character a player brings (alt -> main; the answer
    moves, like the bot's) and (b) set the spec a character plays that night among its offspecs, which moves it to
    that role's column. Per event only; the roster is unchanged.
-5. Role target: guild default + per-event override. Two modes:
+5. [x] Role target: guild default + per-event override. Two modes:
    - Flex: tanks (default 2), healers "X per 5 people" (+1 offspec ready), DPS split melee/ranged by a slider (%).
    - Fixed: raid size N; tanks, healers; DPS = N - tanks - healers; slider with melee (sword) left and ranged (bow)
      right, both editable, always summing to the DPS total and never over the raid size.

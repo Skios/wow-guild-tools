@@ -49,6 +49,8 @@ export function fakeApi(overrides: Overrides = {}): Api {
     createEvent: vi.fn().mockResolvedValue({}),
     setReminders: vi.fn().mockResolvedValue([]),
     switchCharacter: vi.fn().mockResolvedValue(undefined),
+    setEventRoleTarget: vi.fn().mockResolvedValue(undefined),
+    setDefaultRoleTarget: vi.fn().mockResolvedValue(undefined),
     saveRoster: vi.fn().mockResolvedValue({ success: true }),
     publish: vi.fn().mockResolvedValue({ success: true }),
     message: vi.fn().mockResolvedValue({ results: [] }),
@@ -124,6 +126,7 @@ export const noAnswer = (name: string, over: Partial<NoAnswerEntry> = {}): NoAns
 export const eventDetail = (over: Partial<EventDetail> = {}): EventDetail => ({
   id: 'e1', title: 'Raid Night', startTime: '2099-10-18T19:00:00Z', endTime: '2099-10-18T22:00:00Z',
   description: 'Bring flasks', isPublished: false, noAnswer: [], reminders: [],
+  roleTarget: { mode: 'flex', tanks: 2, healersPer5: 1, meleeShare: 50 }, roleTargetIsDefault: true,
   responses: [
     response('Zed', 'RANGED_DPS', 'IN', true),
     response('Tom', 'TANK', 'IN', true, 'WARRIOR'),

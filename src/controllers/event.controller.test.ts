@@ -330,3 +330,33 @@ describe('POST /events/:id/responses/:characterId/switch', () => {
     expect((await call({ to: FROM })).statusCode).toBe(400); // same character
   });
 });
+
+describe('role target', () => {
+  const flex = { mode: 'flex', tanks: 2, healersPer5: 1, meleeShare: 40 };
+
+  test('PUT /events/:id/role-target sets the event\'s own; null goes back to the guild default', async () => {
+    prismaMock.event.findUnique.mockResolvedValue({ id: EID, responses: [] });
+    prismaMock.event.update.mockResolvedValue({});
+
+    expect((await (await app()).inject({ method: 'PUT', url: `/events/${EID}/role-target`, payload: { target: flex } })).statusCode).toBe(200);
+    expect(prismaMock.event.update).toHaveBeenLastCalledWith({ where: { id: EID }, data: { roleTarget: flex } });
+
+    expect((await (await app()).inject({ method: 'PUT', url: `/events/${EID}/role-target`, payload: { target: null } })).statusCode).toBe(200);
+    expect(prismaMock.event.update.mock.lastCall![0].data.roleTarget).toBeDefined(); // Prisma.DbNull
+  });
+
+  test('PUT /role-target/default saves the guild default', async () => {
+    prismaMock.setting.upsert.mockResolvedValue({});
+
+    const res = await (await app()).inject({ method: 'PUT', url: '/role-target/default', payload: { target: flex } });
+
+    expect(res.statusCode).toBe(200);
+    expect(prismaMock.setting.upsert).toHaveBeenCalledWith({ where: { key: 'roleTarget' }, create: { key: 'roleTarget', value: flex }, update: { value: flex } });
+  });
+
+  test('a bad target is a 400', async () => {
+    const res = await (await app()).inject({ method: 'PUT', url: '/role-target/default', payload: { target: { ...flex, meleeShare: 200 } } });
+    expect(res.statusCode).toBe(400);
+    expect(prismaMock.setting.upsert).not.toHaveBeenCalled();
+  });
+});

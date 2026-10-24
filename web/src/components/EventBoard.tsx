@@ -14,6 +14,8 @@ export interface BoardHandlers {
   onPlaySpec: (characterId: string, spec: string | null) => void;
   /** Switch the answer to another of the player's characters; undefined while it can't (unsaved changes). */
   onSwitch?: (characterId: string, to: string) => void;
+  /** Roles a character could cover with an off-spec, where the target is short. */
+  cover?: Map<string, RoleId[]>;
   /** People who can be messaged from this list (tentative). */
   selected: Set<string>;
   onSelect: (characterId: string, selected: boolean) => void;
@@ -32,6 +34,7 @@ function People({ rows, handlers, selectable = false }: { rows: RosterRow[]; han
           onConfirm={c => handlers.onConfirm(row.characterId, c)}
           onLateMinutes={m => handlers.onLateMinutes(row.characterId, m)}
           onPlaySpec={spec => handlers.onPlaySpec(row.characterId, spec)}
+          cover={handlers.cover?.get(row.characterId)}
           onSwitch={handlers.onSwitch && (to => handlers.onSwitch!(row.characterId, to))}
           {...(selectable && {
             selection: { selected: handlers.selected.has(row.characterId), onToggle: (on: boolean) => handlers.onSelect(row.characterId, on) },

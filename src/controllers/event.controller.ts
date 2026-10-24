@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { sendError } from '../lib/http-error.js';
 import { requireCapability } from '../plugins/auth.js';
 import { EventService } from '../services/event.service.js';
+import { SetDefaultRoleTargetSchema, SetRoleTargetSchema } from '../validators/role-target.validator.js';
 import { CreateEventSchema, EventParamsSchema, FinalizeRosterSchema, ListEventsQuerySchema, MessageSchema, SetRemindersSchema, SwitchCharacterParamsSchema, SwitchCharacterSchema } from '../validators/event.validator.js';
 
 export async function eventRoutes(fastify: FastifyInstance) {
@@ -55,6 +56,27 @@ export async function eventRoutes(fastify: FastifyInstance) {
       const { to } = SwitchCharacterSchema.parse(request.body);
       if (to === characterId) return reply.code(400).send({ error: 'Already answering with that character' });
       await eventService.switchCharacter(id, characterId, to);
+      return reply.send({ success: true });
+    } catch (error) {
+      return sendError(request, reply, error);
+    }
+  });
+
+  fastify.put('/events/:id/role-target', async (request, reply) => {
+    try {
+      const { id } = EventParamsSchema.parse(request.params);
+      const { target } = SetRoleTargetSchema.parse(request.body);
+      await eventService.setEventRoleTarget(id, target);
+      return reply.send({ success: true });
+    } catch (error) {
+      return sendError(request, reply, error);
+    }
+  });
+
+  fastify.put('/role-target/default', async (request, reply) => {
+    try {
+      const { target } = SetDefaultRoleTargetSchema.parse(request.body);
+      await eventService.setDefaultRoleTarget(target);
       return reply.send({ success: true });
     } catch (error) {
       return sendError(request, reply, error);

@@ -1,3 +1,4 @@
+import type { RoleTarget } from './roleTarget';
 export type ResponseStatus = 'IN' | 'OUT' | 'TENTATIVE' | 'BENCH' | 'LATE';
 export type RoleId = 'TANK' | 'HEALER' | 'DPS' | 'RANGED_DPS';
 
@@ -123,6 +124,9 @@ export interface EventDetail extends Omit<EventSummary, 'counts'> {
   responses: EventResponse[];
   noAnswer: NoAnswerEntry[];
   reminders: Reminder[];
+  /** The target in use: the event's own, or the guild default when roleTargetIsDefault. */
+  roleTarget: RoleTarget;
+  roleTargetIsDefault: boolean;
 }
 
 export interface NewEvent {

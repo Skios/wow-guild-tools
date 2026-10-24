@@ -1,6 +1,7 @@
 import type {
   Account, CharacterSuggestion, ClaimableCharacter, EventDetail, Profile, RosterAccount, SiteRoleSummary, EventSummary, Meta, MessageResult, NewEvent, Officer, Reminder, RosterCharacter, RosterEntryInput, RosterSelection, RoleInput,
 } from './types';
+import type { RoleTarget } from './roleTarget';
 
 const BASE = '/api';
 const EVENTS_PAGE = 50;
@@ -110,6 +111,9 @@ export function createApi({ fetchImpl = fetch, getToken = async () => null, onUn
     createEvent: (event: NewEvent) => request<EventSummary>('/events', send('POST', event)),
     switchCharacter: (eventId: string, characterId: string, to: string) =>
       request<void>(`/events/${id(eventId)}/responses/${id(characterId)}/switch`, send('POST', { to })),
+    setEventRoleTarget: (eventId: string, target: RoleTarget | null) =>
+      request<void>(`/events/${id(eventId)}/role-target`, send('PUT', { target })),
+    setDefaultRoleTarget: (target: RoleTarget) => request<void>('/role-target/default', send('PUT', { target })),
     setReminders: (eventId: string, minutesBefore: number[]) =>
       request<Reminder[]>(`/events/${id(eventId)}/reminders`, send('PUT', { minutesBefore })),
     saveRoster: (eventId: string, selections: RosterSelection[]) =>

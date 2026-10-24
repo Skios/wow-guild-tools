@@ -145,6 +145,7 @@ model Event {
   isPublished  Boolean    @default(false)
   responses   Response[]
   reminders   Reminder[]
+  roleTarget  Json?      // the event's own role target (src/validators/role-target.validator.ts); null = the guild default
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -196,4 +197,13 @@ model ChatDraft {
 
   @@unique([kind, platform, platformUserId])
   @@map("chat_drafts")
+}
+
+// Guild-wide settings, one row per key (e.g. "roleTarget": the default role target of new events).
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
 }

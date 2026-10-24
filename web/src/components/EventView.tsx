@@ -12,6 +12,8 @@ import { EventBoard } from './EventBoard';
 import { EventReminders } from './EventReminders';
 import { InviteMacros } from './InviteMacros';
 import { PublishDialog } from './PublishDialog';
+import { RoleTargetEditor } from './RoleTargetEditor';
+import { coverSuggestions, targetCounts, type RoleTarget } from '../roleTarget';
 import { NoAnswerPanel } from './NoAnswerPanel';
 import { RoleIcon } from './RoleIcon';
 
@@ -32,6 +34,7 @@ export function EventView({ id }: { id: string }) {
   const [messageText, setMessageText] = useState('');
   const [results, setResults] = useState<MessageResult[] | null>(null);
   const publishButton = useRef<HTMLButtonElement>(null);
+  const [editingTarget, setEditingTarget] = useState(false);
 
   // Rebuild the editable rows whenever fresh data arrives. Done during render (not in an effect)
   // so the board never flashes empty for a frame.
@@ -118,6 +121,10 @@ export function EventView({ id }: { id: string }) {
 
   const data = event.data;
   const canPublish = !published && summary.confirmed > 0;
+  const target = targetCounts(data.roleTarget, summary.confirmed);
+  const cover = coverSuggestions(rows, summary.byRole, target, roleOf);
+  const saveTarget = (action: () => Promise<unknown>, done: string) =>
+    run('saving', async () => { await action(); setEditingTarget(false); }, done);
   const defaultMessage = `Reminder: ${data.title} on ${formatDateTime(data.startTime)}. Are you coming?`;
 
   return (
@@ -135,12 +142,35 @@ export function EventView({ id }: { id: string }) {
         <ul className="summary" aria-label="Roster summary">
           <li><strong>{summary.confirmed}</strong> confirmed</li>
           {meta.roles.map(r => (
-            <li key={r.id} title={r.label}><RoleIcon role={r.id} /> {summary.byRole[r.id]}</li>
+            <li key={r.id} title={r.label}>
+              <RoleIcon role={r.id} /> {summary.byRole[r.id]}{' '}
+              <span className={`target${summary.byRole[r.id] < target[r.id] ? ' short' : ''}`}>({target[r.id]})</span>
+            </li>
           ))}
           <li className="muted">
             {summary.byStatus.IN} in · {summary.byStatus.LATE} late · {summary.byStatus.TENTATIVE} tentative · {summary.byStatus.BENCH} bench · {summary.byStatus.OUT} out · {pending.length} no answer
           </li>
         </ul>
+        <p className="muted target-line">
+          Target in brackets: {data.roleTargetIsDefault ? 'the guild default' : 'this event\'s own'}
+          {data.roleTarget.mode === 'flex' ? `, flex (${data.roleTarget.tanks} tanks, ${data.roleTarget.healersPer5} healer per 5, ${data.roleTarget.meleeShare}% melee DPS)` : `, ${data.roleTarget.size} players`}.
+          {!published && !editingTarget && (
+            <>
+              {' '}<button type="button" className="link" onClick={() => setEditingTarget(true)}>Edit target</button>
+              {!data.roleTargetIsDefault && <>{' '}<button type="button" className="link" disabled={locked || dirty} title={dirty ? 'Save the roster first' : undefined} onClick={() => saveTarget(() => api.setEventRoleTarget(id, null), 'Back to the guild default.')}>Use the guild default</button></>}
+            </>
+          )}
+        </p>
+        {editingTarget && (
+          <RoleTargetEditor
+            initial={data.roleTarget}
+            busy={busy !== null}
+            blocked={dirty ? 'Save the roster first: saving the target reloads the board.' : undefined}
+            onCancel={() => setEditingTarget(false)}
+            onSaveEvent={(t: RoleTarget) => saveTarget(() => api.setEventRoleTarget(id, t), 'Target saved for this event.')}
+            onSaveDefault={(t: RoleTarget) => saveTarget(() => api.setDefaultRoleTarget(t), 'Saved as the guild default.')}
+          />
+        )}
       </header>
 
       {published && (
@@ -158,6 +188,7 @@ export function EventView({ id }: { id: string }) {
             onStatus: (cid, status: ResponseStatus) => edit(cid, r => setStatus(r, status)),
             onConfirm: (cid, confirmed) => edit(cid, r => confirmRow(r, confirmed)),
             onLateMinutes: (cid, minutes) => edit(cid, r => setLateMinutes(r, minutes)),
+            cover,
             onPlaySpec: (cid, spec) => edit(cid, r => setPlaySpec(r, spec, spec ? roleOf(r.class, spec) : undefined)),
             ...(!dirty && {
               onSwitch: (cid: string, to: string) => {

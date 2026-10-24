@@ -1,4 +1,4 @@
-import type { Event, ResponseStatus } from '@prisma/client';
+import { Prisma, type Event, type ResponseStatus } from '@prisma/client';
 import { prisma } from '../config/db.js';
 import { shownNickname } from './roster.service.js';
 import { ROLE_ORDER, specRole } from '../domain/wow.js';
@@ -6,6 +6,7 @@ import { TelegramAdapter } from '../integrations/telegram/telegram.adapter.js';
 import { AppError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { EventRepository } from '../repositories/event.repository.js';
 import type { CreateEventInput } from '../validators/event.validator.js';
+import { DEFAULT_ROLE_TARGET, RoleTargetSchema, type RoleTarget } from '../validators/role-target.validator.js';
 import { NotificationService } from './notification.service.js';
 import { ResponseService } from './response.service.js';
 
@@ -60,6 +61,13 @@ function buildRoster(rows: RosterRow[]) {
 }
 
 const MINUTE_MS = 60_000;
+const ROLE_TARGET_KEY = 'roleTarget';
+
+/** A stored target, or the fallback if it's missing or no longer valid. */
+const readTarget = (value: unknown, fallback: RoleTarget) => {
+  const parsed = RoleTargetSchema.safeParse(value);
+  return parsed.success ? parsed.data : fallback;
+};
 
 /** Reminders still ahead of now; one already due would go out at once, on top of the invite. */
 const stillAhead = (startTime: Date, minutesBefore: number[] | undefined) =>
@@ -135,6 +143,21 @@ export class EventService {
       await prisma.event.updateMany({ where: { id: eventId }, data: { isPublished: false } });
       throw error;
     }
+  }
+
+  async defaultRoleTarget(): Promise<RoleTarget> {
+    const row = await prisma.setting.findUnique({ where: { key: ROLE_TARGET_KEY } });
+    return readTarget(row?.value, DEFAULT_ROLE_TARGET);
+  }
+
+  async setDefaultRoleTarget(target: RoleTarget) {
+    await prisma.setting.upsert({ where: { key: ROLE_TARGET_KEY }, create: { key: ROLE_TARGET_KEY, value: target }, update: { value: target } });
+  }
+
+  /** The event's own target; null = follow the guild default. */
+  async setEventRoleTarget(eventId: string, target: RoleTarget | null) {
+    await this.getEvent(eventId);
+    await prisma.event.update({ where: { id: eventId }, data: { roleTarget: target ?? Prisma.DbNull } });
   }
 
   /** An officer swaps which of a player's characters comes to the event. */
@@ -260,7 +283,9 @@ export class EventService {
     const responses = event.responses.map(r => ({
       ...r, character: { ...r.character, nickname: shownNickname(r.character) }, alternatives: alternativesOf(r.character.userId),
     }));
-    return { ...event, responses, noAnswer };
+    const own = event.roleTarget === null || event.roleTarget === undefined ? null : readTarget(event.roleTarget, DEFAULT_ROLE_TARGET);
+    const roleTarget = own ?? await this.defaultRoleTarget();
+    return { ...event, responses, noAnswer, roleTarget, roleTargetIsDefault: own === null };
   }
 
   async listEvents(limit: number = 20, offset: number = 0) {
