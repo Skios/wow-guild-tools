@@ -1,7 +1,8 @@
 import { Prisma, type Event, type ResponseStatus } from '@prisma/client';
 import { prisma } from '../config/db.js';
 import { shownNickname } from './roster.service.js';
-import { ROLE_ORDER, specRole } from '../domain/wow.js';
+import { ROLE_ORDER, specLabel, specRole } from '../domain/wow.js';
+import { eventState } from '../domain/event-state.js';
 import { TelegramAdapter } from '../integrations/telegram/telegram.adapter.js';
 import { AppError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { EventRepository } from '../repositories/event.repository.js';
@@ -111,12 +112,15 @@ export class EventService {
   async publishEvent(eventId: string) {
     const event = await this.getEvent(eventId);
 
-    // Claim the lock atomically so a second publish cannot post twice.
-    const claimed = await prisma.event.updateMany({
-      where: { id: eventId, isPublished: false },
-      data: { isPublished: true },
-    });
-    if (claimed.count === 0) throw new ConflictError('Event already published');
+    if (event.canceledAt) throw new ConflictError('This event is cancelled');
+
+    // The first publish claims the lock atomically; later ones post an update. A cancel landing meanwhile wins.
+    // ponytail: two publishes at the same instant both post (final, then update); the UI disables the button.
+    const claimed = await prisma.event.updateMany({ where: { id: eventId, isPublished: false, canceledAt: null }, data: { isPublished: true } });
+    const first = claimed.count === 1;
+    if (!first && (await prisma.event.findUnique({ where: { id: eventId }, select: { canceledAt: true } }))?.canceledAt) {
+      throw new ConflictError('This event is cancelled');
+    }
 
     try {
       const responses = await prisma.response.findMany({ where: { eventId }, include: { character: true } });
@@ -129,15 +133,85 @@ export class EventService {
         startTime: event.startTime,
         description: event.description,
         roster,
+        updated: !first,
       });
       if (!channels.some(c => c.success)) throw new AppError('Publication failed on every channel', 502);
-
-      return { published: true, channels };
     } catch (error) {
-      // Nothing reached the channel: let the officers fix the roster and retry.
-      await prisma.event.updateMany({ where: { id: eventId }, data: { isPublished: false } });
+      // Nothing reached the channel: a first publish goes back to open so the officers can fix it and retry.
+      if (first) await prisma.event.updateMany({ where: { id: eventId }, data: { isPublished: false } });
       throw error;
     }
+    // The roster is out: whatever happens with the DMs, sign-ups stay closed.
+    const told = await this.tellAssignments(event).catch(error => {
+      console.error('Telling players their assignment failed:', error);
+      return 0;
+    });
+    return { published: true, updated: !first, told };
+  }
+
+  /**
+   * Tells each confirmed player what an officer changed for them: another of their characters, or an off-spec.
+   * Each change is told once (Response.toldAssignment); a change back to normal is told too.
+   */
+  private async tellAssignments(event: { id: string; title: string; startTime: Date }) {
+    const answers = await prisma.response.findMany({
+      where: { eventId: event.id, isConfirmed: true, status: { in: ['IN', 'LATE'] } },
+      select: {
+        id: true, characterId: true, spec: true, switchedFrom: true, toldAssignment: true,
+        character: { select: { name: true, class: true, spec: true, user: { select: { identities: { where: { platform: 'telegram' }, select: { platformUserId: true } } } } } },
+      },
+    });
+    const originals = await prisma.character.findMany({
+      where: { id: { in: answers.flatMap(a => (a.switchedFrom ? [a.switchedFrom] : [])) } }, select: { id: true, name: true },
+    });
+    let told = 0;
+    for (const a of answers) {
+      const assignment = `${a.characterId}|${a.spec ?? ''}`;
+      const changed = Boolean(a.switchedFrom || a.spec);
+      if (assignment === a.toldAssignment || (!changed && a.toldAssignment === null)) continue;
+      const telegramId = a.character.user?.identities[0]?.platformUserId;
+      if (!telegramId) continue;
+      const from = originals.find(o => o.id === a.switchedFrom)?.name;
+      const spec = a.spec ? specLabel(a.character.class, a.spec) : 'your main spec';
+      const text = `${event.title} on ${event.startTime.toLocaleString()}: you're in with ${a.character.name}${from ? ` (not ${from})` : ''}, playing ${spec}.`;
+      const sent = await this.notificationService.sendDirect('telegram', telegramId, { text });
+      if (!sent.success) continue;
+      await prisma.response.update({ where: { id: a.id }, data: { toldAssignment: changed ? assignment : null } });
+      told += 1;
+    }
+    return told;
+  }
+
+  /** Cancels an event that hasn't started: a post in the channel and a DM to whoever said they'd come or might. */
+  async cancelEvent(eventId: string) {
+    const event = await this.getEvent(eventId);
+    if (event.startTime <= new Date()) throw new ConflictError('The event has already started');
+    // Conditional, so two cancels at once announce once.
+    const done = await prisma.event.updateMany({ where: { id: eventId, canceledAt: null }, data: { canceledAt: new Date() } });
+    if (done.count === 0) throw new ConflictError('Already cancelled');
+    const text = `${event.title} on ${event.startTime.toLocaleString()} is cancelled.`;
+    const channels = await this.notificationService.announce(`❌ ${text}`);
+    // Unsent reminders stay: while cancelled they are used up unsent, and the ones still ahead come back on reopen.
+    const answered = await prisma.response.findMany({
+      where: { eventId, status: { in: ['IN', 'LATE', 'TENTATIVE'] } },
+      select: { character: { select: { user: { select: { identities: { where: { platform: 'telegram' }, select: { platformUserId: true } } } } } } },
+    });
+    const ids = [...new Set(answered.flatMap(a => a.character.user?.identities.map(i => i.platformUserId) ?? []))];
+    let messages = 0;
+    for (const telegramId of ids) {
+      if ((await this.notificationService.sendDirect('telegram', telegramId, { text })).success) messages += 1;
+    }
+    return { channels, messages };
+  }
+
+  /** Undoes a cancel before the start: the event is open again (published stays published). */
+  async reopenEvent(eventId: string) {
+    const event = await this.getEvent(eventId);
+    if (event.startTime <= new Date()) throw new ConflictError('The event has already started');
+    const done = await prisma.event.updateMany({ where: { id: eventId, canceledAt: { not: null } }, data: { canceledAt: null } });
+    if (done.count === 0) throw new ConflictError('The event is not cancelled');
+    const channels = await this.notificationService.announce(`✅ ${event.title} on ${event.startTime.toLocaleString()} is back on.`);
+    return { channels };
   }
 
   async defaultRoleTarget(): Promise<RoleTarget> {
@@ -163,6 +237,7 @@ export class EventService {
   async messageCharacters(eventId: string, characterIds: string[], customText?: string) {
     const event = await this.getEvent(eventId);
     if (event.isPublished) throw new ConflictError('Event already published');
+    if (event.canceledAt) throw new ConflictError('This event is cancelled');
 
     const text = customText ?? reminderText(event);
     const found = await prisma.character.findMany({
@@ -205,7 +280,7 @@ export class EventService {
     const now = new Date();
     const unsent = await prisma.reminder.findMany({
       where: { sentAt: null },
-      select: { id: true, minutesBefore: true, event: { select: { id: true, title: true, startTime: true, isPublished: true } } },
+      select: { id: true, minutesBefore: true, event: { select: { id: true, title: true, startTime: true, isPublished: true, canceledAt: true } } },
     });
     const due = unsent.filter(r => r.event.startTime.getTime() - r.minutesBefore * MINUTE_MS <= now.getTime());
 
@@ -215,7 +290,7 @@ export class EventService {
       const claimed = await prisma.reminder.updateMany({ where: { id: r.id, sentAt: null }, data: { sentAt: now } });
       if (claimed.count === 0) continue;
       reminders += 1;
-      if (r.event.isPublished || r.event.startTime <= now) continue;
+      if (r.event.isPublished || r.event.canceledAt || r.event.startTime <= now) continue;
       const entry = events.get(r.event.id) ?? { event: r.event, ids: [] };
       events.set(r.event.id, { ...entry, ids: [...entry.ids, r.id] });
     }
@@ -279,7 +354,7 @@ export class EventService {
     }));
     const own = event.roleTarget === null || event.roleTarget === undefined ? null : readTarget(event.roleTarget);
     const roleTarget = own ?? await this.defaultRoleTarget();
-    return { ...event, responses, noAnswer, roleTarget, roleTargetIsDefault: own === null };
+    return { ...event, state: eventState(event), responses, noAnswer, roleTarget, roleTargetIsDefault: own === null };
   }
 
   async listEvents(limit: number = 20, offset: number = 0) {
@@ -289,6 +364,7 @@ export class EventService {
     ]);
     return events.map(({ responses, ...event }: Event & { responses: ListedResponse[] }) => ({
       ...event,
+      state: eventState(event),
       counts: countResponses(responses, rosterSize),
     }));
   }

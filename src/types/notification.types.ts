@@ -10,12 +10,14 @@ export interface PublicationPayload extends NotificationPayload {
     team: string[];
     bench: string[];
   };
+  /** Published again after changes: posted as an update. */
+  updated?: boolean;
 }
 
 export interface DirectMessage {
   text: string;
-  /** The event the message is about; the channel attaches the answer buttons for it. */
-  eventId: string;
+  /** The event to answer: the channel attaches its answer buttons. Without it the message is information only. */
+  eventId?: string;
 }
 
 export interface NotificationAdapter {
@@ -24,4 +26,6 @@ export interface NotificationAdapter {
   publishFinalRoster(payload: PublicationPayload): Promise<{ success: boolean; error?: string }>;
   /** Optional: write to one person privately. `platformUserId` is the id on this platform. */
   sendDirect?(platformUserId: string, message: DirectMessage): Promise<{ success: boolean; error?: string }>;
+  /** A plain announcement in the guild channel (e.g. an event cancelled). */
+  announce?(text: string): Promise<{ success: boolean; error?: string }>;
 }

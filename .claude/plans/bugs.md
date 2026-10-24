@@ -16,6 +16,12 @@ Collected as reported; fixed in one pass later, not mixed into feature rounds.
   show it next to the name, e.g. "Kerlink (alt)".
 - **Roster "Add a character" has no search (2026-10-24).** The Profile's add form searches the character
   (GET /characters/search); the Roster page's form doesn't. Reuse the same search there.
+- **Approved alts show under "No answer" (2026-10-24).** A player who answered with the main still has their
+  approved alts listed (and counted) as not answered, on the event page's No answer panel and in the no-answer
+  counts (events list, dashboard). No answer should be per player: any of their characters answered = answered.
+- **Times in bot messages are the server's (2026-10-24).** Invite, reminder, cancel, "back on" and assignment
+  texts use `toLocaleString()` on the server (UTC, no zone shown). One shared formatter with the guild's time zone
+  (setting or env) and the zone in the text.
 
 ## Polish (to do later, not now)
 - **Roster: role distribution at the top (2026-10-24).** Count characters by main role (shield, sword, bow, cross),
@@ -23,3 +29,11 @@ Collected as reported; fixed in one pass later, not mixed into feature rounds.
   Note: the "Roster totals" line already has a per-role count with icons; check whether it shows what's wanted
   (main roles only, readable at a glance) or needs to be more visible.
 - **Roster: "New season" inside the table's card (2026-10-24)**, like the totals at the top, not a card of its own.
+- **Dashboard: only events not over (2026-10-24).** Keep just the events that haven't ended (the API already
+  filters on endTime > now for "Your next events" and the glance table: check what still shows, e.g. cancelled ones).
+- **Dashboard: the player's events as a glance table (2026-10-24).** Like "Events at a glance": one row per event,
+  an "Action" column with the character dropdown (coloured by class) and, under it, In / Late / Tentative / Out as
+  small icon buttons. The note dialog stays as it is.
+- **Contacted by an officer: every timestamp (2026-10-24).** For players an officer messaged (No answer panel, DMs
+  from the event page), show each time they were contacted. Needs a small log of officer DMs (event, character,
+  when); today the results are only shown once after sending.

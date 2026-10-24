@@ -52,7 +52,7 @@ function otherCharacters(eventId: string, characters: Candidate[], chosen: Candi
 }
 
 function closedOrMissing(error: unknown): CallbackResult {
-  if (error instanceof EventLockedError) return { text: 'Sign-ups are closed for this event.' };
+  if (error instanceof EventLockedError) return { text: `${error.message}.` };
   if (error instanceof NotFoundError) return { text: 'This event no longer exists.' };
   throw error;
 }

@@ -41,7 +41,7 @@ export class TelegramAdapter implements NotificationAdapter {
   async publishFinalRoster(payload: PublicationPayload): Promise<{ success: boolean; error?: string }> {
     try {
       const list = (names: string[]) => names.map(c => `• ${escapeHtml(c)}`).join('\n') || 'Empty';
-      const text = `🏆 <b>FINAL ROSTER: ${escapeHtml(payload.eventTitle)}</b> 🏆\n` +
+      const text = `🏆 <b>${payload.updated ? 'UPDATED ROSTER' : 'FINAL ROSTER'}: ${escapeHtml(payload.eventTitle)}</b> 🏆\n` +
                    `---------------------------------\n` +
                    `⚔️ <b>RAID TEAM</b>:\n${list(payload.roster.team)}\n\n` +
                    `🛋️ <b>BENCH</b>:\n${list(payload.roster.bench)}\n` +
@@ -59,8 +59,17 @@ export class TelegramAdapter implements NotificationAdapter {
     try {
       await this.client.sendMessage(platformUserId, escapeHtml(message.text), {
         parse_mode: 'HTML',
-        reply_markup: { inline_keyboard: [answerButtons(message.eventId)] },
+        ...(message.eventId && { reply_markup: { inline_keyboard: [answerButtons(message.eventId)] } }),
       });
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async announce(text: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.client.sendMessage(telegramConfig.channelId, escapeHtml(text), { parse_mode: 'HTML' });
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };

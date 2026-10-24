@@ -2,6 +2,7 @@ import type { ResponseStatus, WoWRole } from '@prisma/client';
 import { prisma } from '../config/db.js';
 import { specRole } from '../domain/wow.js';
 import { NotFoundError } from '../lib/errors.js';
+import { eventState } from '../domain/event-state.js';
 import { ResponseService } from './response.service.js';
 import { defaultRoleTarget, readTarget, seasonStart } from './settings.service.js';
 
@@ -37,7 +38,7 @@ export class DashboardService {
       }),
       prisma.event.findMany({
         where: { endTime: { gt: new Date() } }, orderBy: { startTime: 'asc' }, take: UPCOMING,
-        select: { id: true, title: true, startTime: true, endTime: true, isPublished: true },
+        select: { id: true, title: true, startTime: true, endTime: true, isPublished: true, canceledAt: true },
       }),
     ]);
     const answers = characters.length && events.length
@@ -46,7 +47,7 @@ export class DashboardService {
         select: { eventId: true, characterId: true, status: true, isConfirmed: true, arrivalTime: true, note: true },
       })
       : [];
-    return { characters, events: events.map(e => ({ ...e, answer: answers.find(a => a.eventId === e.id) ?? null })) };
+    return { characters, events: events.map(e => ({ ...e, state: eventState(e), answer: answers.find(a => a.eventId === e.id) ?? null })) };
   }
 
   /** The player answers from the site: with the character they pick (the answer moves if another was answering). */
@@ -66,9 +67,10 @@ export class DashboardService {
     const now = new Date();
     const [events, rosterSize, fallback] = await Promise.all([
       prisma.event.findMany({
-        where: { isPublished: false, endTime: { gt: now } }, orderBy: { startTime: 'asc' }, take: UPCOMING,
+        // Not over and not cancelled: open ones and published ones still being adjusted.
+        where: { canceledAt: null, endTime: { gt: now } }, orderBy: { startTime: 'asc' }, take: UPCOMING,
         select: {
-          id: true, title: true, startTime: true, roleTarget: true,
+          id: true, title: true, startTime: true, endTime: true, isPublished: true, canceledAt: true, roleTarget: true,
           responses: { select: { status: true, isConfirmed: true, spec: true, character: { select: { class: true, role: true, inRoster: true } } } },
           reminders: { where: { sentAt: null }, select: { minutesBefore: true } },
         },
@@ -86,6 +88,7 @@ export class DashboardService {
       const upcoming = reminders.map(r => event.startTime.getTime() - r.minutesBefore * MINUTE_MS).filter(t => t > now.getTime());
       return {
         ...event,
+        state: eventState(event, now),
         confirmed: team.length,
         byRole,
         noAnswer: Math.max(0, rosterSize - responses.filter(r => r.character.inRoster).length),
@@ -105,7 +108,7 @@ export class DashboardService {
     }
     if (can('events.manage')) {
       result.toPublish = await prisma.event.findMany({
-        where: { isPublished: false, startTime: { gt: now, lte: new Date(now.getTime() + PUBLISH_SOON_MS) } },
+        where: { isPublished: false, canceledAt: null, startTime: { gt: now, lte: new Date(now.getTime() + PUBLISH_SOON_MS) } },
         orderBy: { startTime: 'asc' }, select: { id: true, title: true, startTime: true },
       });
       const unreachable = await prisma.user.findMany({
@@ -126,7 +129,7 @@ export class DashboardService {
     const since = span === 'season' ? await seasonStart() : null;
     const events = await prisma.event.findMany({
       // Published ahead of time doesn't count until it has started.
-      where: { isPublished: true, startTime: { lte: new Date(), ...(since && { gte: since }) } },
+      where: { isPublished: true, canceledAt: null, startTime: { lte: new Date(), ...(since && { gte: since }) } },
       orderBy: { startTime: 'desc' }, ...(span !== 'season' && { take: span }), select: { id: true },
     });
     const players = await prisma.user.findMany({ where: { characters: { some: { inRoster: true } } }, select: { id: true, username: true, nickname: true } });

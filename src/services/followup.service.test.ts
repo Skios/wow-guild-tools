@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
 
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
@@ -13,7 +13,12 @@ const expectLateMinutes = (id: number, eventId: string, characterId: string) => 
 const expectNote = (id: number, eventId: string, characterId: string) => expectFollowUp(id, eventId, characterId, false);
 const start = new Date('2026-10-18T19:00:00Z');
 
+afterEach(() => vi.useRealTimers());
+
+// Before the events' start (19:00): answers are still open.
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-18T10:00:00Z'));
   resetPrismaMock();
   prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, startTime: start });
   prismaMock.response.upsert.mockResolvedValue({});

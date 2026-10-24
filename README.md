@@ -33,6 +33,11 @@ migration (enforced by a test), because Supabase would otherwise serve it throug
   also see the open events against their role target, a to-do list (approvals, events to publish within a day,
   players without Telegram) and attendance per player (played / late / bench / out / tentative / no answer) over the
   last 5, 10 or 20 published events or the whole season (since the last New season).
+- **Event states**: Open -> Closed (published) or Cancelled, before the start; Started and Ended follow the clock.
+  Players answer only while Open and not started. Officers keep fixing the board after publishing and after the
+  start, and **Publish again** posts an update; at each publish players switched to another character or an
+  off-spec get a DM, once per change. **Cancel** (before the start) tells the channel and DMs whoever said in, late
+  or maybe; unsent reminders stop; **Reopen** until the start.
 - Pages: **Events** (list, create, board; a **role target** per event (guild default, or the event's own): flex =
   tanks + healers per 5 + a melee/ranged slider, growing with the confirmed players; fixed = raid size, tanks, healers
   and a melee/ranged split that always adds up. The summary shows each count with the target in brackets, and on a
@@ -129,7 +134,7 @@ pg_net's request log for a while: whoever can read the database's `net` schema c
 Every route is under `/api` (the same domain serves the admin site on Vercel). Main routes: `GET/POST /roster`, `PUT/DELETE /roster/:id`, `POST /roster/:id/release`,
 `GET /roster/pending`, `POST /roster/:id/approve`, `POST /roster/:id/revoke`, `DELETE /roster/:id/pending`, `POST /roster/new-season`,
 `GET/POST /events`, `GET /events/:id`, `PATCH /events/:id/roster`, `POST /events/:id/publish`,
-`POST /events/:id/message`, `PUT /events/:id/reminders`, `POST /events/:id/responses/:characterId/switch`, `PUT /events/:id/role-target`, `PUT /role-target/default`, `GET /meta/wow`, `GET /auth/me`, `GET/POST /roles`, `PUT/DELETE /roles/:id`,
+`POST /events/:id/message`, `PUT /events/:id/reminders`, `POST /events/:id/responses/:characterId/switch`, `PUT /events/:id/role-target`, `PUT /role-target/default`, `POST /events/:id/cancel`, `POST /events/:id/reopen`, `GET /meta/wow`, `GET /auth/me`, `GET/POST /roles`, `PUT/DELETE /roles/:id`,
 `GET /roles/capabilities`, `PUT /users/:id/role`, `GET /users`, `POST /users/:id/password-reset`,
 `POST /auth/password`, `GET/POST/DELETE /me/telegram`, `POST /me/telegram/bot-link`, `POST /me/password-reset-link`, `GET/PUT /me/profile`,
 `GET /me/claimable`, `POST /me/characters`, `POST /me/characters/:id/claim`, `PUT/DELETE /me/characters/:id`,

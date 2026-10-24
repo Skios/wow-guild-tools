@@ -630,29 +630,62 @@ describe('publishing', () => {
 });
 
 describe('published event', () => {
-  test('is read-only: no save, add, publish or message controls, and every input is disabled', async () => {
-    setup(eventDetail({ ...full(), isPublished: true }));
+  test('closed: officers still change the board and publish again; nobody is messaged from the panel', async () => {
+    const api = setup(eventDetail({ ...full(), isPublished: true, state: 'CLOSED' }));
     await ready();
 
-    expect(screen.getByText('Published')).toBeInTheDocument();
-    expect(screen.getByText(/can no longer be changed/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Save roster/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Publish roster' })).not.toBeInTheDocument();
-    expect(answer('Tom')).toBeDisabled();
-    expect(confirmBox('Tom')).toBeDisabled();
-    expect(pick('Silent')).toBeDisabled();
+    expect(screen.getByText('Closed')).toBeInTheDocument();
+    expect(screen.getByText(/publish again to post an update/)).toBeInTheDocument();
+    expect(answer('Tom')).toBeEnabled();
     expect(send()).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Publish again' }));
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Publish the roster' })).getByRole('button', { name: 'Yes, publish' }));
+    await waitFor(() => expect(api.publish).toHaveBeenCalledWith('e1'));
+    expect(await screen.findByText('Update posted.')).toBeInTheDocument();
   });
 
-  test('a locked event rejects edits even if the page was opened before it was published', async () => {
-    const saveRoster = vi.fn().mockRejectedValue(new ApiError('Event is locked: responses cannot be changed after publication', 409));
+  test('a change the server refuses shows why', async () => {
+    const saveRoster = vi.fn().mockRejectedValue(new ApiError('This event is cancelled', 409));
     setup(undefined, { saveRoster });
     await ready();
 
     fireEvent.change(answer('Maybe'), { target: { value: 'BENCH' } });
     await userEvent.click(save());
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/locked/);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/cancelled/);
+  });
+});
+
+describe('cancel and reopen', () => {
+  test('cancel asks first, then tells the server and reloads', async () => {
+    const api = setup();
+    await ready();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel the event…' }));
+    expect(api.cancelEvent).not.toHaveBeenCalled();
+    await userEvent.click(within(screen.getByRole('group', { name: 'Confirm cancelling' })).getByRole('button', { name: 'Yes, cancel it' }));
+
+    await waitFor(() => expect(api.cancelEvent).toHaveBeenCalledWith('e1'));
+    expect(await screen.findByText('Event cancelled.')).toBeInTheDocument();
+  });
+
+  test('a cancelled event is frozen and can be reopened before it starts', async () => {
+    const api = setup(eventDetail({ ...full(), state: 'CANCELED', canceledAt: '2099-01-01T00:00:00Z' }));
+    await ready();
+
+    expect(screen.getByText('Cancelled')).toBeInTheDocument();
+    expect(answer('Tom')).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /Publish/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Reopen the event' }));
+    await waitFor(() => expect(api.reopenEvent).toHaveBeenCalledWith('e1'));
+  });
+
+  test('once started there is no cancel', async () => {
+    setup(eventDetail({ ...full(), state: 'STARTED' }));
+    await ready();
+    expect(screen.queryByRole('region', { name: 'Cancel event' })).not.toBeInTheDocument();
+    expect(answer('Tom')).toBeEnabled(); // officers still fix the board
   });
 });
 

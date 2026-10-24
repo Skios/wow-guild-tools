@@ -6,6 +6,7 @@ import { formatRange } from '../format';
 import { useAsync } from '../useAsync';
 import type { EventSummary } from '../types';
 import { NewEventForm } from './NewEventForm';
+import { EventStateBadge } from './EventStateBadge';
 
 function Counts({ event }: { event: EventSummary }) {
   const { counts } = event;
@@ -50,9 +51,7 @@ export function EventsView() {
                   <td><Link href={`/events/${encodeURIComponent(event.id)}`}>{event.title}</Link></td>
                   <td>{formatRange(event.startTime, event.endTime)}</td>
                   <td>
-                    <span className={`badge ${event.isPublished ? 'badge-published' : 'badge-open'}`}>
-                      {event.isPublished ? 'Published' : 'Open'}
-                    </span>
+                    <EventStateBadge state={event.state} />
                   </td>
                   <td><Counts event={event} /></td>
                 </tr>

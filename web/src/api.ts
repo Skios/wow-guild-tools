@@ -109,6 +109,8 @@ export function createApi({ fetchImpl = fetch, getToken = async () => null, onUn
     listEvents: () => request<EventSummary[]>(`/events?limit=${EVENTS_PAGE}`),
     getEvent: (eventId: string) => request<EventDetail>(`/events/${id(eventId)}`),
     createEvent: (event: NewEvent) => request<EventSummary>('/events', send('POST', event)),
+    cancelEvent: (eventId: string) => request<unknown>(`/events/${id(eventId)}/cancel`, send('POST', {})),
+    reopenEvent: (eventId: string) => request<unknown>(`/events/${id(eventId)}/reopen`, send('POST', {})),
     switchCharacter: (eventId: string, characterId: string, to: string) =>
       request<void>(`/events/${id(eventId)}/responses/${id(characterId)}/switch`, send('POST', { to })),
     setEventRoleTarget: (eventId: string, target: RoleTarget | null) =>

@@ -137,7 +137,7 @@ sections the caller may see (ponytail: one endpoint, not one per widget; no char
 4. Officers - attendance: per player over the last 10 published events, IN / LATE / BENCH / OUT / no answer
    (bench included to track rotations). Computed in JS (about 60 players x 10 events), shown as a table.
 
-## Next: event states (user decisions 2026-10-24)
+## Done: event states (user decisions 2026-10-24; CANCELED stored as canceledAt, CLOSED stays isPublished)
 States shown everywhere (events list, event page, dashboard). Stored: OPEN | CLOSED | CANCELED (`Event.status`
 replaces `isPublished`; published events become CLOSED). Derived from the clock: STARTED (start <= now < end) and
 ENDED (now >= end). CANCELED stays CANCELED. No cron: the API and the site compute it.

@@ -40,13 +40,16 @@ We'll know we're right when **the time spent by officers on roster coordination 
 | # | Milestone | Outcome | Status | Plan |
 |---|---|---|---|---|
 | 1 | Core Engine | Ability to create event and store responses | done | .claude/plans/wow-guild-tools.plan.md |
-| 2 | Notification Layer | Automated invites sent to the channel | in-progress | .claude/plans/wow-guild-tools.plan.md |
-| 3 | Roster Finalizer | Officer can select final team and publish table | in-progress | .claude/plans/wow-guild-tools.plan.md |
-| 4 | Nudge System | Automated reminders for non-responders | pending | — |
+| 2 | Notification Layer | Automated invites sent to the channel | done (Telegram) | .claude/plans/supabase-migration.plan.md |
+| 3 | Roster Finalizer | Officer can select final team and publish table | done | .claude/plans/supabase-migration.plan.md |
+| 4 | Nudge System | Automated reminders for non-responders | done, delivery on dev to verify (bugs.md) | .claude/plans/supabase-migration.plan.md |
+
+Status 2026-10-24: all four built and live on dev; next are the bug round (.claude/plans/bugs.md), an alpha with
+testers and production. Beyond the MVP: accounts and roles, alts and off-specs, Raider.IO name search, the dashboard.
 
 ## Open Questions
 - [x] Which API is most stable for the chosen notification platform? -> Telegram Bot API via Telegraf (webhook).
-- [ ] How to handle "Late" communication if it's not in the MVP response set?
+- [x] How to handle "Late" communication if it's not in the MVP response set? -> LATE is an answer; the bot asks the minutes (and a note).
 - [x] How to uniquely identify users across different chat platforms? -> `Identity(platform, platformUserId)` per User; linking accounts via one-time code is planned, not built.
 
 ## Risks
@@ -56,4 +59,4 @@ We'll know we're right when **the time spent by officers on roster coordination 
 | User Apathy | High | Medium | Focus on the "Nudge" system to be helpful, not annoying |
 
 ---
-*Status: DRAFT — requirements only. Implementation planning pending via /plan.*
+*Status: MVP built (2026-10-24). Success metrics to measure during the alpha.*

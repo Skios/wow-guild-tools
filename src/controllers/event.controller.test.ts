@@ -129,10 +129,14 @@ describe('PATCH /events/:id/roster', () => {
     expect((await patch(`/events/${EID}/roster`, { selections })).statusCode).toBe(404);
   });
 
-  test('409 once the event is published', async () => {
-    prismaMock.event.findUnique.mockResolvedValue({ isPublished: true });
+  test('officers still fix the board after publishing; a cancelled event is a 409', async () => {
+    prismaMock.event.findUnique.mockResolvedValue({ isPublished: true, canceledAt: null, startTime: new Date(inHours(24)) });
+    expect((await patch(`/events/${EID}/roster`, { selections })).statusCode).toBe(200);
+
+    prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, canceledAt: new Date(), startTime: new Date(inHours(24)) });
     const res = await patch(`/events/${EID}/roster`, { selections });
     expect(res.statusCode).toBe(409);
+    expect(res.json().error).toMatch(/cancelled/);
   });
 
   test('409 for a character that does not exist or is not approved for the roster', async () => {
@@ -161,9 +165,10 @@ describe('POST /events/:id/publish', () => {
     expect((await post(`/events/${EID}/publish`)).statusCode).toBe(404);
   });
 
-  test('409 when already published', async () => {
+  test('publishing again posts an update', async () => {
     prismaMock.event.updateMany.mockResolvedValue({ count: 0 });
-    expect((await post(`/events/${EID}/publish`)).statusCode).toBe(409);
+    expect((await post(`/events/${EID}/publish`)).statusCode).toBe(200);
+    expect(adapter.publishFinalRoster).toHaveBeenCalledWith(expect.objectContaining({ updated: true }));
   });
 
   test('409 when nobody is confirmed', async () => {
@@ -358,5 +363,19 @@ describe('role target', () => {
     const res = await (await app()).inject({ method: 'PUT', url: '/role-target/default', payload: { target: { ...flex, meleeShare: 200 } } });
     expect(res.statusCode).toBe(400);
     expect(prismaMock.setting.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('cancel and reopen routes', () => {
+  test('POST /events/:id/cancel and /reopen', async () => {
+    const start = new Date(inHours(24));
+    prismaMock.event.findUnique.mockResolvedValue({ id: EID, title: 'Raid', startTime: start, canceledAt: null, responses: [] });
+    prismaMock.event.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.response.findMany.mockResolvedValue([]);
+    expect((await post(`/events/${EID}/cancel`)).statusCode).toBe(200);
+    expect((await post(`/events/${EID}/reopen`)).statusCode).toBe(200);
+
+    prismaMock.event.updateMany.mockResolvedValue({ count: 0 });
+    expect((await post(`/events/${EID}/cancel`)).statusCode).toBe(409);
   });
 });

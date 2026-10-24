@@ -21,7 +21,7 @@ beforeEach(() => {
   prismaMock.character.findMany.mockResolvedValue([MAIN]);
   prismaMock.character.count.mockImplementation(async (args: { where: { id: { in: string[] } } }) => args.where.id.in.length);
   prismaMock.response.findFirst.mockResolvedValue(null);
-  prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, startTime: new Date() });
+  prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, startTime: new Date(Date.now() + 86_400_000) });
   prismaMock.response.upsert.mockResolvedValue({});
 });
 
@@ -108,6 +108,9 @@ describe('handleCallbackQuery: answering', () => {
   test('closed or missing events are reported; other errors are rethrown', async () => {
     prismaMock.event.findUnique.mockResolvedValue({ isPublished: true });
     expect((await handleCallbackQuery(query(`raid_out_${EVENT_ID}`))).text).toMatch(/closed/i);
+
+    prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, canceledAt: new Date(), startTime: new Date(Date.now() + 86_400_000) });
+    expect((await handleCallbackQuery(query(`raid_in_${EVENT_ID}`))).text).toBe('This event is cancelled.');
 
     prismaMock.event.findUnique.mockResolvedValue(null);
     expect((await handleCallbackQuery(query(`raid_in_${EVENT_ID}`))).text).toMatch(/no longer exists/i);

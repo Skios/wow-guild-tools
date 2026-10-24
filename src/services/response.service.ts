@@ -3,10 +3,20 @@ import { AppError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { ResponseStatus } from '@prisma/client';
 
 export class EventLockedError extends ConflictError {
-  constructor() {
-    super('Event is locked: responses cannot be changed after publication');
+  constructor(message = 'Sign-ups are closed for this event') {
+    super(message);
   }
 }
+
+/** A kind of closed: everywhere a closed event is handled (bot buttons, follow-ups), so is a cancelled one. */
+export class EventCanceledError extends EventLockedError {
+  constructor() {
+    super('This event is cancelled');
+  }
+}
+
+/** Players answer only while sign-ups are open; officers fix the board until the event is cancelled. */
+export type Actor = 'player' | 'officer';
 
 export class NotApprovedError extends ConflictError {
   constructor() {
@@ -48,10 +58,11 @@ async function playedSpecs(selections: { characterId: string; spec?: string | nu
 }
 
 export class ResponseService {
-  private async openEvent(eventId: string) {
-    const event = await prisma.event.findUnique({ where: { id: eventId }, select: { isPublished: true, startTime: true } });
+  private async openEvent(eventId: string, actor: Actor = 'player') {
+    const event = await prisma.event.findUnique({ where: { id: eventId }, select: { isPublished: true, canceledAt: true, startTime: true } });
     if (!event) throw new NotFoundError('Event not found');
-    if (event.isPublished) throw new EventLockedError();
+    if (event.canceledAt) throw new EventCanceledError();
+    if (actor === 'player' && (event.isPublished || event.startTime <= new Date())) throw new EventLockedError();
     return event;
   }
 
@@ -82,7 +93,7 @@ export class ResponseService {
     eventId: string,
     selections: { characterId: string; status: ResponseStatus; isConfirmed: boolean; lateMinutes?: number | undefined; spec?: string | null | undefined }[],
   ) {
-    const event = await this.openEvent(eventId);
+    const event = await this.openEvent(eventId, 'officer');
     await requireApproved(selections.map(s => s.characterId));
     const specs = await playedSpecs(selections);
 
@@ -111,13 +122,19 @@ export class ResponseService {
    * The player answers with another of their characters: status, arrival and note move; an officer confirms again.
    * Upsert, so a double tap (or a target an officer already answered for) ends with one answer, not a conflict.
    */
-  async moveResponse(eventId: string, fromCharacterId: string, toCharacterId: string, { keepConfirmed = false } = {}) {
-    await this.openEvent(eventId);
+  async moveResponse(eventId: string, fromCharacterId: string, toCharacterId: string, { keepConfirmed = false, actor = 'player' as Actor } = {}) {
+    await this.openEvent(eventId, actor);
     await requireApproved([toCharacterId]);
     const answer = await prisma.response.findUnique({ where: { eventId_characterId: { eventId, characterId: fromCharacterId } } });
     if (!answer) throw new NotFoundError('No answer to move');
     // The spec played was the old character's; the new one plays its main until an officer says otherwise.
-    const moved = { status: answer.status, arrivalTime: answer.arrivalTime, note: answer.note, isConfirmed: keepConfirmed && answer.isConfirmed, spec: null };
+    // An officer's switch remembers what the player answered with (to tell them at publish); theirs forgets it.
+    const original = answer.switchedFrom ?? fromCharacterId;
+    const switchedFrom = actor === 'officer' && original !== toCharacterId ? original : null;
+    const moved = {
+      status: answer.status, arrivalTime: answer.arrivalTime, note: answer.note, isConfirmed: keepConfirmed && answer.isConfirmed,
+      spec: null, switchedFrom, toldAssignment: answer.toldAssignment ?? null,
+    };
     await prisma.$transaction([
       prisma.response.deleteMany({ where: { eventId, characterId: fromCharacterId } }),
       prisma.response.upsert({
@@ -137,6 +154,6 @@ export class ResponseService {
     const taken = await prisma.response.findUnique({ where: { eventId_characterId: { eventId, characterId: toCharacterId } }, select: { id: true } });
     if (taken) throw new ConflictError('That character has already answered for this event');
     // ponytail: read-then-move outside one transaction; a concurrent edit of the same answer can be lost. Fine at guild scale.
-    await this.moveResponse(eventId, fromCharacterId, toCharacterId, { keepConfirmed: true });
+    await this.moveResponse(eventId, fromCharacterId, toCharacterId, { keepConfirmed: true, actor: 'officer' });
   }
 }

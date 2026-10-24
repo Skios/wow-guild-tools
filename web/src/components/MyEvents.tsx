@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { formatRange } from '../format';
 import type { MyCharacterChoice, MyEvent, QuickAnswer, QuickStatus } from '../types';
+import { EventStateBadge } from './EventStateBadge';
 
 const BUTTONS: { status: QuickStatus; label: string }[] = [
   { status: 'IN', label: 'In' }, { status: 'LATE', label: 'Late' }, { status: 'TENTATIVE', label: 'Tentative' }, { status: 'OUT', label: 'Out' },
@@ -13,9 +14,11 @@ const minutesLate = (event: MyEvent) => {
   return at ? Math.max(0, Math.round((Date.parse(at) - Date.parse(event.startTime)) / 60_000)) : null;
 };
 
-/** Where a published roster put me. */
-function publishedLine(event: MyEvent, characters: MyCharacterChoice[]) {
+/** Where I stand once answers are closed (published, started, cancelled). */
+function closedLine(event: MyEvent, characters: MyCharacterChoice[]) {
+  if (event.state === 'CANCELED') return 'This event is cancelled.';
   const a = event.answer;
+  if (!event.isPublished) return a ? `Sign-ups are closed: you said ${a.status.toLowerCase()}.` : 'Sign-ups are closed.';
   if (!a) return 'Published without your answer.';
   const name = characters.find(c => c.id === a.characterId)?.name ?? 'your character';
   if ((a.status === 'IN' || a.status === 'LATE') && a.isConfirmed) return `You're in the team with ${name}.`;
@@ -84,10 +87,10 @@ function EventCard({ event, characters, busy, onAnswer }: {
     <article className="card stack my-event" aria-label={event.title}>
       <div className="row">
         <h3><Link href={`/events/${event.id}`}>{event.title}</Link></h3>
-        {event.isPublished && <span className="badge badge-published">Published</span>}
+        {event.state !== 'OPEN' && <EventStateBadge state={event.state} />}
       </div>
       <p className="muted">{formatRange(event.startTime, event.endTime)}</p>
-      {event.isPublished ? <p>{publishedLine(event, characters)}</p> : characters.length > 0 && (
+      {event.state !== 'OPEN' ? <p>{closedLine(event, characters)}</p> : characters.length > 0 && (
         <>
           {characters.length > 1 && (
             <div className="actions">

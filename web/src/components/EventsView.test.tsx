@@ -29,9 +29,13 @@ describe('events list', () => {
     expect(await screen.findByText('5 in · 2 late')).toBeInTheDocument();
   });
 
-  test('marks published events', async () => {
-    renderWith(<EventsView />, withData([eventSummary({ isPublished: true })]));
-    expect(await screen.findByText('Published')).toBeInTheDocument();
+  test('shows each event\'s state', async () => {
+    renderWith(<EventsView />, withData([
+      eventSummary({ id: 'a', isPublished: true, state: 'CLOSED' }),
+      eventSummary({ id: 'b', title: 'Off night', state: 'CANCELED', canceledAt: '2099-01-01T00:00:00Z' }),
+    ]));
+    expect(await screen.findByText('Closed')).toBeInTheDocument();
+    expect(screen.getByText('Cancelled')).toBeInTheDocument();
   });
 
   test('upcoming events are listed before past ones', async () => {

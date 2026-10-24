@@ -3,6 +3,7 @@ import { useMeta } from '../context';
 import { formatDateTime } from '../format';
 import { targetCounts } from '../roleTarget';
 import type { AttendanceRow, CompositionRow, DashboardTodo, RoleId, Span } from '../types';
+import { EventStateBadge } from './EventStateBadge';
 import { RoleIcon } from './RoleIcon';
 
 const ROLES: RoleId[] = ['TANK', 'HEALER', 'DPS', 'RANGED_DPS'];
@@ -30,7 +31,7 @@ export function Glance({ rows }: { rows: CompositionRow[] }) {
               const target = targetCounts(row.roleTarget, row.confirmed);
               return (
                 <tr key={row.id}>
-                  <th scope="row"><Link href={`/events/${row.id}`}>{row.title}</Link><span className="muted block">{formatDateTime(row.startTime)}</span></th>
+                  <th scope="row"><Link href={`/events/${row.id}`}>{row.title}</Link> <EventStateBadge state={row.state} /><span className="muted block">{formatDateTime(row.startTime)}</span></th>
                   <td>{row.confirmed}</td>
                   {ROLES.map(r => (
                     <td key={r}>{row.byRole[r]} <span className={`target${row.byRole[r] < target[r] ? ' short' : ''}`}>({target[r]}){row.byRole[r] < target[r] && <span className="sr-only"> short</span>}</span></td>

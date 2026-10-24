@@ -17,6 +17,10 @@ export class NotificationService {
     return this.fanOut(adapter => adapter.publishFinalRoster(payload));
   }
 
+  async announce(text: string) {
+    return this.fanOut(async adapter => (adapter.announce ? adapter.announce(text) : { success: false, error: `${adapter.name} cannot announce` }));
+  }
+
   /** Privately message one person through the channel they signed up with. */
   async sendDirect(platform: string, platformUserId: string, message: DirectMessage): Promise<Result> {
     const adapter = this.adapters.get(platform);

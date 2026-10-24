@@ -81,7 +81,7 @@ export async function handleFollowUp(message: { from: { id: number }; text: stri
     if (parsed.minutes !== undefined) await responses.updateResponse(draft.eventId, draft.characterId, 'LATE', undefined, parsed.minutes);
     if (parsed.note) await responses.setNote(draft.eventId, draft.characterId, parsed.note);
   } catch (error) {
-    const closed = error instanceof EventLockedError ? 'Sign-ups are closed for this event.'
+    const closed = error instanceof EventLockedError ? `${error.message}.`
       : error instanceof NotFoundError ? 'This event or your answer no longer exists.'
         : error instanceof NotApprovedError ? GONE : null;
     if (!closed) throw error; // keep the question open so the player can retry

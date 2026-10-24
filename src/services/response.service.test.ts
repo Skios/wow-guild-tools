@@ -1,12 +1,17 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
 
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 
 import { ConflictError, NotFoundError } from '../lib/errors.js';
-import { EventLockedError, NotApprovedError, ResponseService } from './response.service.js';
+import { EventCanceledError, EventLockedError, NotApprovedError, ResponseService } from './response.service.js';
 
+afterEach(() => vi.useRealTimers());
+
+// Before the events' start (19:00): answers are still open.
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-18T10:00:00Z'));
   resetPrismaMock();
   prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, startTime: new Date('2026-10-18T19:00:00Z') });
   prismaMock.response.upsert.mockImplementation(async (args: { create: object }) => ({ ...args.create }));
@@ -83,8 +88,8 @@ describe('ResponseService.moveResponse (the player answers with another characte
     expect(prismaMock.response.deleteMany).toHaveBeenCalledWith({ where: { eventId: 'e1', characterId: 'main' } });
     expect(prismaMock.response.upsert).toHaveBeenCalledWith({
       where: { eventId_characterId: { eventId: 'e1', characterId: 'alt' } },
-      create: { eventId: 'e1', characterId: 'alt', ...answer, isConfirmed: false, spec: null },
-      update: { ...answer, isConfirmed: false, spec: null },
+      create: { eventId: 'e1', characterId: 'alt', ...answer, isConfirmed: false, spec: null, switchedFrom: null, toldAssignment: null },
+      update: { ...answer, isConfirmed: false, spec: null, switchedFrom: null, toldAssignment: null },
     });
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
   });
@@ -160,6 +165,15 @@ describe('ResponseService.updateResponse', () => {
     expect(error).toBeInstanceOf(ConflictError);
     expect(prismaMock.response.upsert).not.toHaveBeenCalled();
   });
+
+  test('a player can no longer answer once the event has started, or when it is cancelled', async () => {
+    prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, canceledAt: null, startTime: new Date('2026-10-18T09:00:00Z') });
+    await expect(new ResponseService().updateResponse('e1', 'c1', 'IN')).rejects.toBeInstanceOf(EventLockedError);
+
+    prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, canceledAt: new Date(), startTime: new Date('2026-10-18T19:00:00Z') });
+    await expect(new ResponseService().updateResponse('e1', 'c1', 'IN')).rejects.toBeInstanceOf(EventCanceledError);
+    expect(prismaMock.response.upsert).not.toHaveBeenCalled();
+  });
 });
 
 describe('late arrivals', () => {
@@ -231,11 +245,12 @@ describe('ResponseService.bulkUpdateResponses', () => {
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 
-  test('409 once the event is published', async () => {
-    prismaMock.event.findUnique.mockResolvedValue({ isPublished: true });
+  test('officers still change it after publishing and after the start; a cancelled event refuses', async () => {
+    prismaMock.event.findUnique.mockResolvedValue({ isPublished: true, canceledAt: null, startTime: new Date('2026-10-18T09:00:00Z') });
+    await expect(new ResponseService().bulkUpdateResponses('e1', selections)).resolves.toBeDefined();
 
-    await expect(new ResponseService().bulkUpdateResponses('e1', selections)).rejects.toBeInstanceOf(EventLockedError);
-    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    prismaMock.event.findUnique.mockResolvedValue({ isPublished: false, canceledAt: new Date(), startTime: new Date('2026-10-18T19:00:00Z') });
+    await expect(new ResponseService().bulkUpdateResponses('e1', selections)).rejects.toBeInstanceOf(EventCanceledError);
   });
 
   test('a failing write rejects the whole call', async () => {
@@ -266,6 +281,21 @@ describe('ResponseService.switchCharacter (an officer swaps which character a pl
 
     expect(prismaMock.response.deleteMany).toHaveBeenCalledWith({ where: { eventId: 'e1', characterId: 'alt' } });
     expect(prismaMock.response.upsert.mock.calls[0]![0].create).toMatchObject({ characterId: 'main', isConfirmed: true });
+  });
+
+  test('the answer remembers what the player answered with; switching back forgets it', async () => {
+    prismaMock.character.findMany.mockResolvedValue([{ id: 'main', userId: 'u1' }, { id: 'alt', userId: 'u1' }]);
+    prismaMock.response.findUnique.mockImplementation(async (args: { where: { eventId_characterId: { characterId: string } } }) =>
+      (args.where.eventId_characterId.characterId === 'alt' ? { id: 'r1', isConfirmed: true, status: 'IN', arrivalTime: null, note: null, switchedFrom: null } : null));
+
+    await new ResponseService().switchCharacter('e1', 'alt', 'main');
+    expect(prismaMock.response.upsert.mock.calls[0]![0].create).toMatchObject({ characterId: 'main', switchedFrom: 'alt' });
+
+    prismaMock.response.upsert.mockClear();
+    prismaMock.response.findUnique.mockImplementation(async (args: { where: { eventId_characterId: { characterId: string } } }) =>
+      (args.where.eventId_characterId.characterId === 'main' ? { id: 'r1', isConfirmed: true, status: 'IN', arrivalTime: null, note: null, switchedFrom: 'alt' } : null));
+    await new ResponseService().switchCharacter('e1', 'main', 'alt');
+    expect(prismaMock.response.upsert.mock.calls[0]![0].create).toMatchObject({ characterId: 'alt', switchedFrom: null });
   });
 
   test('a target that already answered is refused, never overwritten', async () => {

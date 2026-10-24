@@ -1,14 +1,14 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test, vi } from 'vitest';
-import type { Dashboard } from '../types';
+import type { Dashboard, MyEvent } from '../types';
 import { OFFICER, fakeApi, renderWith } from '../test/render';
 import { DashboardView } from './DashboardView';
 
 const RAIDER: typeof OFFICER = { ...OFFICER, role: 'Raider', capabilities: [] };
 const MAIN = { id: 'c-main', name: 'Ulfgaar', class: 'WARRIOR', spec: 'PROTECTION', role: 'TANK' as const };
 const ALT = { id: 'c-alt', name: 'Kerlink', class: 'MAGE', spec: 'FIRE', role: 'RANGED_DPS' as const };
-const event = (over = {}) => ({ id: 'e1', title: 'Raid Night', startTime: '2099-10-18T19:00:00Z', endTime: '2099-10-18T22:00:00Z', isPublished: false, answer: null, ...over });
+const event = (over: Partial<MyEvent> = {}): MyEvent => ({ id: 'e1', title: 'Raid Night', startTime: '2099-10-18T19:00:00Z', endTime: '2099-10-18T22:00:00Z', isPublished: false, state: 'OPEN', answer: null, ...over });
 const board = (over: Partial<Dashboard> = {}): Dashboard => ({ me: { characters: [MAIN, ALT], events: [event()] }, ...over });
 
 const setup = (data: Dashboard = board(), officer = RAIDER, over = {}) => {
@@ -73,11 +73,24 @@ describe('my next events', () => {
   });
 
   test('a published event is read-only and says where you are', async () => {
-    setup(board({ me: { characters: [MAIN], events: [event({ isPublished: true, answer: { eventId: 'e1', characterId: 'c-main', status: 'IN', isConfirmed: true, arrivalTime: null, note: null } })] } }));
+    setup(board({ me: { characters: [MAIN], events: [event({ isPublished: true, state: 'CLOSED', answer: { eventId: 'e1', characterId: 'c-main', status: 'IN', isConfirmed: true, arrivalTime: null, note: null } })] } }));
     const raid = await card();
 
     expect(within(raid).getByText(/You're in the team with Ulfgaar/)).toBeInTheDocument();
     expect(within(raid).queryByRole('button', { name: 'In' })).not.toBeInTheDocument();
+  });
+
+  test('started or cancelled: no buttons, says why', async () => {
+    setup(board({ me: { characters: [MAIN], events: [
+      event({ state: 'STARTED', answer: { eventId: 'e1', characterId: 'c-main', status: 'IN', isConfirmed: false, arrivalTime: null, note: null } }),
+      event({ id: 'e2', title: 'Alt run', state: 'CANCELED' }),
+    ] } }));
+    const raid = await card();
+
+    expect(within(raid).getByText('Sign-ups are closed: you said in.')).toBeInTheDocument();
+    expect(within(raid).getByText('Started')).toBeInTheDocument();
+    expect(within(raid).queryByRole('button', { name: 'In' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('article', { name: 'Alt run' })).getByText('This event is cancelled.')).toBeInTheDocument();
   });
 
   test('no approved character yet: says how to get one', async () => {
@@ -145,7 +158,7 @@ describe('my next events', () => {
 describe('officer sections', () => {
   const officerBoard = board({
     composition: [{
-      id: 'e1', title: 'Raid Night', startTime: '2099-10-18T19:00:00Z', confirmed: 10, noAnswer: 4, nextReminder: '2099-10-17T19:00:00Z',
+      id: 'e1', title: 'Raid Night', startTime: '2099-10-18T19:00:00Z', state: 'OPEN', confirmed: 10, noAnswer: 4, nextReminder: '2099-10-17T19:00:00Z',
       byRole: { TANK: 1, HEALER: 2, DPS: 3, RANGED_DPS: 4 }, roleTarget: { mode: 'flex', tanks: 2, healersPer5: 1, meleeShare: 50 },
     }],
     todo: { pendingApprovals: 3, toPublish: [{ id: 'e1', title: 'Raid Night', startTime: '2099-10-18T19:00:00Z' }], noTelegram: [{ id: 'u9', name: 'Shh' }] },

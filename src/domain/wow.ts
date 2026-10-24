@@ -97,6 +97,9 @@ function findSpec(cls: unknown, id: unknown): SpecInfo | undefined {
 
 export const isValidSpec = (cls: unknown, id: unknown) => findSpec(cls, id) !== undefined;
 
+/** A spec's name ("Protection"), or the id itself when unknown. */
+export const specLabel = (cls: unknown, id: string): string => findSpec(cls, id)?.label ?? id;
+
 /** The role a spec plays, or undefined for an unknown pair. */
 export const specRole = (cls: unknown, id: unknown): WoWRole | undefined => findSpec(cls, id)?.role;
 

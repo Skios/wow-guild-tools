@@ -126,7 +126,7 @@ describe('officers: to do', () => {
     const todo = await new DashboardService().todo(['roster.approve', 'events.manage']);
 
     expect(todo).toEqual({ pendingApprovals: 3, toPublish: [{ id: 'e1', title: 'Raid', startTime: inHours(5) }], noTelegram: [{ id: 'u9', name: 'Shh' }] });
-    expect(prismaMock.event.findMany.mock.calls[0]![0].where).toEqual({ isPublished: false, startTime: { gt: NOW, lte: inHours(24) } });
+    expect(prismaMock.event.findMany.mock.calls[0]![0].where).toEqual({ isPublished: false, canceledAt: null, startTime: { gt: NOW, lte: inHours(24) } });
   });
 
   test('only what the role covers', async () => {
@@ -181,7 +181,7 @@ describe('officers: attendance', () => {
 
     const result = await new DashboardService().attendance('season');
 
-    expect(prismaMock.event.findMany.mock.calls[0]![0].where).toEqual({ isPublished: true, startTime: { lte: NOW, gte: new Date('2026-09-01T00:00:00.000Z') } });
+    expect(prismaMock.event.findMany.mock.calls[0]![0].where).toEqual({ isPublished: true, canceledAt: null, startTime: { lte: NOW, gte: new Date('2026-09-01T00:00:00.000Z') } });
     expect(prismaMock.event.findMany.mock.calls[0]![0]).not.toHaveProperty('take');
     expect(result.span).toBe('season');
   });
@@ -192,6 +192,6 @@ describe('officers: attendance', () => {
 
     await new DashboardService().attendance('season');
 
-    expect(prismaMock.event.findMany.mock.calls[0]![0].where).toEqual({ isPublished: true, startTime: { lte: NOW } });
+    expect(prismaMock.event.findMany.mock.calls[0]![0].where).toEqual({ isPublished: true, canceledAt: null, startTime: { lte: NOW } });
   });
 });

@@ -3,13 +3,14 @@ import { prismaMock, resetPrismaMock } from '../test/prisma-mock.js';
 
 vi.mock('../config/db.js', () => ({ prisma: prismaMock }));
 
-const adapter = vi.hoisted(() => ({ sendInvite: vi.fn(), publishFinalRoster: vi.fn(), sendDirect: vi.fn() }));
+const adapter = vi.hoisted(() => ({ sendInvite: vi.fn(), publishFinalRoster: vi.fn(), sendDirect: vi.fn(), announce: vi.fn() }));
 vi.mock('../integrations/telegram/telegram.adapter.js', () => ({
   TelegramAdapter: class {
     name = 'telegram';
     sendInvite = adapter.sendInvite;
     publishFinalRoster = adapter.publishFinalRoster;
     sendDirect = adapter.sendDirect;
+    announce = adapter.announce;
   },
 }));
 
@@ -37,6 +38,7 @@ beforeEach(() => {
   adapter.sendInvite.mockResolvedValue({ success: true });
   adapter.publishFinalRoster.mockResolvedValue({ success: true });
   adapter.sendDirect.mockResolvedValue({ success: true });
+  adapter.announce.mockResolvedValue({ success: true });
 });
 
 describe('EventService.createEvent', () => {
@@ -317,13 +319,6 @@ describe('EventService.publishEvent', () => {
     expect(prismaMock.event.updateMany).not.toHaveBeenCalled();
   });
 
-  test('409 when already published, and does not post a second time', async () => {
-    prismaMock.event.updateMany.mockResolvedValue({ count: 0 });
-
-    await expect(new EventService().publishEvent('e1')).rejects.toBeInstanceOf(ConflictError);
-    expect(adapter.publishFinalRoster).not.toHaveBeenCalled();
-  });
-
   test('refuses to publish with nobody confirmed, and unlocks the event', async () => {
     prismaMock.response.findMany.mockResolvedValue([row('Maybe', 'IN', false), row('Out', 'OUT', false)]);
 
@@ -363,14 +358,29 @@ describe('EventService.publishEvent', () => {
     await expect(new EventService().publishEvent('e1')).resolves.toMatchObject({ published: true });
   });
 
-  test('two simultaneous publishes post once', async () => {
+  test('only the first publish is the final roster; the next ones post updates', async () => {
     prismaMock.event.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValue({ count: 0 });
     const service = new EventService();
 
-    const results = await Promise.allSettled([service.publishEvent('e1'), service.publishEvent('e1')]);
+    await service.publishEvent('e1');
+    await service.publishEvent('e1');
 
-    expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
-    expect(adapter.publishFinalRoster).toHaveBeenCalledTimes(1);
+    expect(adapter.publishFinalRoster.mock.calls.map(c => c[0].updated)).toEqual([false, true]);
+  });
+
+  test('a failed update does not reopen sign-ups', async () => {
+    prismaMock.event.updateMany.mockResolvedValue({ count: 0 });
+    adapter.publishFinalRoster.mockResolvedValue({ success: false, error: 'boom' });
+
+    await expect(new EventService().publishEvent('e1')).rejects.toThrow('Publication failed');
+    expect(prismaMock.event.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  test('a cancelled event cannot be published', async () => {
+    prismaMock.event.findUnique.mockResolvedValue({ ...event, canceledAt: new Date() });
+
+    await expect(new EventService().publishEvent('e1')).rejects.toBeInstanceOf(ConflictError);
+    expect(prismaMock.event.updateMany).not.toHaveBeenCalled();
   });
 });
 
@@ -552,5 +562,131 @@ describe('reminders', () => {
 
     expect(await new EventService().sendDueReminders()).toEqual({ reminders: 1, messages: 1 });
     expect(adapter.sendDirect).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('cancel and reopen', () => {
+  const NOW = new Date('2026-10-17T12:00:00Z');
+  const future = { ...event, startTime: new Date('2026-10-18T19:00:00Z'), endTime: new Date('2026-10-18T22:00:00Z'), canceledAt: null };
+  const tg = (id: string) => ({ character: { user: { identities: [{ platformUserId: id }] } } });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    prismaMock.event.updateMany.mockResolvedValue({ count: 1 });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  test('cancel: marks it, tells the channel, and DMs each player who said in, late or maybe (once each, no buttons)', async () => {
+    prismaMock.event.findUnique.mockResolvedValue(future);
+    prismaMock.response.findMany.mockResolvedValue([tg('1'), tg('2'), tg('1'), { character: { user: null } }]);
+
+    const result = await new EventService().cancelEvent('e1');
+
+    expect(prismaMock.event.updateMany).toHaveBeenCalledWith({ where: { id: 'e1', canceledAt: null }, data: { canceledAt: NOW } });
+    expect(prismaMock.response.findMany.mock.calls[0]![0].where).toEqual({ eventId: 'e1', status: { in: ['IN', 'LATE', 'TENTATIVE'] } });
+    expect(adapter.announce).toHaveBeenCalledWith(expect.stringMatching(/Raid .* is cancelled/));
+    expect(adapter.sendDirect).toHaveBeenCalledTimes(2);
+    expect(adapter.sendDirect.mock.calls[0]![1]).not.toHaveProperty('eventId');
+    expect(result.messages).toBe(2);
+  });
+
+  test('cannot cancel twice (two at once announce once), or once it started', async () => {
+    prismaMock.event.findUnique.mockResolvedValue(future);
+    prismaMock.event.updateMany.mockResolvedValue({ count: 0 });
+    await expect(new EventService().cancelEvent('e1')).rejects.toThrow(/Already cancelled/);
+    expect(adapter.announce).not.toHaveBeenCalled();
+
+    prismaMock.event.updateMany.mockClear();
+    prismaMock.event.findUnique.mockResolvedValue({ ...future, startTime: new Date('2026-10-17T11:00:00Z') });
+    await expect(new EventService().cancelEvent('e1')).rejects.toThrow(/started/);
+    expect(prismaMock.event.updateMany).not.toHaveBeenCalled();
+  });
+
+  test('reopen before the start: back on, announced', async () => {
+    prismaMock.event.findUnique.mockResolvedValue({ ...future, canceledAt: NOW });
+
+    await new EventService().reopenEvent('e1');
+
+    expect(prismaMock.event.updateMany).toHaveBeenCalledWith({ where: { id: 'e1', canceledAt: { not: null } }, data: { canceledAt: null } });
+    expect(adapter.announce).toHaveBeenCalledWith(expect.stringMatching(/back on/));
+  });
+
+  test('reopen refuses an event not cancelled, or already started', async () => {
+    prismaMock.event.findUnique.mockResolvedValue(future);
+    prismaMock.event.updateMany.mockResolvedValue({ count: 0 });
+    await expect(new EventService().reopenEvent('e1')).rejects.toBeInstanceOf(ConflictError);
+    prismaMock.event.findUnique.mockResolvedValue({ ...future, canceledAt: NOW, startTime: new Date('2026-10-17T11:00:00Z') });
+    await expect(new EventService().reopenEvent('e1')).rejects.toThrow(/started/);
+  });
+
+  test("a cancelled event's due reminders are used up unsent", async () => {
+    prismaMock.reminder.findMany.mockResolvedValue([{ id: 'r1', minutesBefore: 1440 * 2, event: { id: 'e1', title: 'Raid', startTime: future.startTime, isPublished: false, canceledAt: NOW } }]);
+    prismaMock.reminder.updateMany.mockResolvedValue({ count: 1 });
+
+    expect(await new EventService().sendDueReminders()).toEqual({ reminders: 1, messages: 0 });
+    expect(adapter.sendDirect).not.toHaveBeenCalled();
+  });
+});
+
+describe('telling players what an officer changed, at publish', () => {
+  const answer = (over = {}) => ({
+    id: 'r1', characterId: 'c-main', spec: null, switchedFrom: null, toldAssignment: null,
+    character: { name: 'Ulfgaar', class: 'WARRIOR', spec: 'ARMS', user: { identities: [{ platformUserId: '42' }] } }, ...over,
+  });
+
+  beforeEach(() => {
+    prismaMock.event.findUnique.mockResolvedValue(event);
+    prismaMock.event.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.response.update.mockResolvedValue({});
+    prismaMock.character.findMany.mockResolvedValue([{ id: 'c-alt', name: 'Kerlink' }]);
+  });
+  const publishWith = (answers: unknown[]) => {
+    prismaMock.response.findMany.mockResolvedValueOnce([row('Tank', 'IN', true, 'TANK')]).mockResolvedValueOnce(answers);
+    return new EventService().publishEvent('e1');
+  };
+
+  test('switched character and an off-spec: one DM, then remembered', async () => {
+    const result = await publishWith([answer({ switchedFrom: 'c-alt', spec: 'PROTECTION' })]);
+
+    expect(adapter.sendDirect).toHaveBeenCalledWith('42', { text: expect.stringMatching(/you're in with Ulfgaar \(not Kerlink\), playing Protection/) });
+    expect(prismaMock.response.update).toHaveBeenCalledWith({ where: { id: 'r1' }, data: { toldAssignment: 'c-main|PROTECTION' } });
+    expect(result.told).toBe(1);
+  });
+
+  test('already told this, or nothing changed: no DM', async () => {
+    await publishWith([answer({ spec: 'PROTECTION', toldAssignment: 'c-main|PROTECTION' }), answer({ id: 'r2' })]);
+    expect(adapter.sendDirect).not.toHaveBeenCalled();
+  });
+
+  test('back to normal after being told: told again, and forgotten', async () => {
+    await publishWith([answer({ toldAssignment: 'c-main|PROTECTION' })]);
+
+    expect(adapter.sendDirect).toHaveBeenCalledWith('42', { text: expect.stringMatching(/playing your main spec/) });
+    expect(prismaMock.response.update).toHaveBeenCalledWith({ where: { id: 'r1' }, data: { toldAssignment: null } });
+  });
+
+  test('a database error while telling players never reopens sign-ups: the roster is already out', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    prismaMock.response.update.mockRejectedValue(new Error('db down'));
+
+    const result = await publishWith([answer({ spec: 'PROTECTION' })]);
+
+    expect(result).toMatchObject({ published: true, told: 0 });
+    expect(prismaMock.event.updateMany).toHaveBeenCalledTimes(1); // the claim, no rollback
+  });
+
+  test('a cancel that lands just before a later publish stops it', async () => {
+    prismaMock.event.updateMany.mockResolvedValue({ count: 0 });
+    prismaMock.event.findUnique.mockResolvedValueOnce(event).mockResolvedValueOnce({ canceledAt: new Date() });
+
+    await expect(new EventService().publishEvent('e1')).rejects.toThrow(/cancelled/);
+    expect(adapter.publishFinalRoster).not.toHaveBeenCalled();
+  });
+
+  test('a failed DM is tried again at the next publish (nothing remembered)', async () => {
+    adapter.sendDirect.mockResolvedValue({ success: false, error: 'blocked' });
+    await publishWith([answer({ spec: 'PROTECTION' })]);
+    expect(prismaMock.response.update).not.toHaveBeenCalled();
   });
 });

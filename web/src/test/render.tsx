@@ -51,6 +51,8 @@ export function fakeApi(overrides: Overrides = {}): Api {
     dashboard: vi.fn().mockResolvedValue({ me: { characters: [], events: [] } }),
     answerEvent: vi.fn().mockResolvedValue(undefined),
     switchCharacter: vi.fn().mockResolvedValue(undefined),
+    cancelEvent: vi.fn().mockResolvedValue({}),
+    reopenEvent: vi.fn().mockResolvedValue({}),
     setEventRoleTarget: vi.fn().mockResolvedValue(undefined),
     setDefaultRoleTarget: vi.fn().mockResolvedValue(undefined),
     saveRoster: vi.fn().mockResolvedValue({ success: true }),
@@ -109,7 +111,7 @@ export function renderWith(ui: ReactElement, api: Api = fakeApi(), meta: Meta = 
 
 export const eventSummary = (over: Partial<EventSummary> = {}): EventSummary => ({
   id: 'e1', title: 'Raid Night', startTime: '2099-10-18T19:00:00Z', endTime: '2099-10-18T22:00:00Z', description: null,
-  isPublished: false, counts: { in: 5, out: 2, tentative: 1, bench: 1, late: 0, confirmed: 3, noAnswer: 4 }, ...over,
+  isPublished: false, canceledAt: null, state: 'OPEN', counts: { in: 5, out: 2, tentative: 1, bench: 1, late: 0, confirmed: 3, noAnswer: 4 }, ...over,
 });
 
 export const response = (
@@ -127,7 +129,7 @@ export const noAnswer = (name: string, over: Partial<NoAnswerEntry> = {}): NoAns
 
 export const eventDetail = (over: Partial<EventDetail> = {}): EventDetail => ({
   id: 'e1', title: 'Raid Night', startTime: '2099-10-18T19:00:00Z', endTime: '2099-10-18T22:00:00Z',
-  description: 'Bring flasks', isPublished: false, noAnswer: [], reminders: [],
+  description: 'Bring flasks', isPublished: false, canceledAt: null, state: 'OPEN', noAnswer: [], reminders: [],
   roleTarget: { mode: 'flex', tanks: 2, healersPer5: 1, meleeShare: 50 }, roleTargetIsDefault: true,
   responses: [
     response('Zed', 'RANGED_DPS', 'IN', true),

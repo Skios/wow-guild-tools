@@ -10,6 +10,7 @@ import { errorMessage, useAsync } from '../useAsync';
 import type { EventDetail, MessageResult, NoAnswerEntry, ResponseStatus } from '../types';
 import { EventBoard } from './EventBoard';
 import { EventReminders } from './EventReminders';
+import { EventStateBadge } from './EventStateBadge';
 import { InviteMacros } from './InviteMacros';
 import { PublishDialog } from './PublishDialog';
 import { RoleTargetEditor } from './RoleTargetEditor';
@@ -53,7 +54,12 @@ export function EventView({ id }: { id: string }) {
   );
   const dirty = isDirty(rows);
   const published = event.data?.isPublished ?? false;
-  const locked = published || busy !== null;
+  const state = event.data?.state ?? 'OPEN';
+  const canceled = state === 'CANCELED';
+  const beforeStart = state === 'OPEN' || state === 'CLOSED' || (canceled && Date.parse(event.data!.startTime) > Date.now());
+  // Officers keep fixing the board after publishing and after the start; only a cancelled event is frozen.
+  const locked = canceled || busy !== null;
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     if (!dirty) return;
@@ -120,7 +126,7 @@ export function EventView({ id }: { id: string }) {
   if (!event.data) return <p className="muted" role="status">Loading event…</p>;
 
   const data = event.data;
-  const canPublish = !published && summary.confirmed > 0;
+  const canPublish = !canceled && summary.confirmed > 0;
   const target = targetCounts(data.roleTarget, summary.confirmed);
   const cover = coverSuggestions(rows, summary.byRole, target, roleOf);
   const saveTarget = (action: () => Promise<unknown>, done: string) =>
@@ -134,7 +140,7 @@ export function EventView({ id }: { id: string }) {
       <header className="card">
         <div className="row">
           <h2>{data.title}</h2>
-          <span className={`badge ${published ? 'badge-published' : 'badge-open'}`}>{published ? 'Published' : 'Open'}</span>
+          <EventStateBadge state={state} />
         </div>
         <p className="muted">{formatRange(data.startTime, data.endTime)}</p>
         {data.description && <p>{data.description}</p>}
@@ -154,7 +160,7 @@ export function EventView({ id }: { id: string }) {
         <p className="muted target-line">
           Target in brackets: {data.roleTargetIsDefault ? 'the guild default' : 'this event\'s own'}
           {data.roleTarget.mode === 'flex' ? `, flex (${data.roleTarget.tanks} tanks, ${data.roleTarget.healersPer5} healer per 5, ${data.roleTarget.meleeShare}% melee DPS)` : `, ${data.roleTarget.size} players`}.
-          {!published && !editingTarget && (
+          {!canceled && !editingTarget && (
             <>
               {' '}<button type="button" className="link" onClick={() => setEditingTarget(true)}>Edit target</button>
               {!data.roleTargetIsDefault && <>{' '}<button type="button" className="link" disabled={locked || dirty} title={dirty ? 'Save the roster first' : undefined} onClick={() => saveTarget(() => api.setEventRoleTarget(id, null), 'Back to the guild default.')}>Use the guild default</button></>}
@@ -173,8 +179,9 @@ export function EventView({ id }: { id: string }) {
         )}
       </header>
 
-      {published && (
-        <p className="notice" role="status">This roster has been published to the channel. It can no longer be changed.</p>
+      {canceled && <p className="notice" role="status">This event is cancelled.{beforeStart && ' You can reopen it until it starts.'}</p>}
+      {published && !canceled && (
+        <p className="notice" role="status">The roster is published: sign-ups are closed. You can still change the board and publish again to post an update.</p>
       )}
       {notice && <p className="notice" role="status">{notice}</p>}
       {(problem || event.error) && <p role="alert" className="error">{problem ?? event.error}</p>}
@@ -205,7 +212,7 @@ export function EventView({ id }: { id: string }) {
           people={pending}
           selected={selected}
           recipientCount={askable.length}
-          disabled={locked}
+          disabled={locked || published}
           defaultMessage={defaultMessage}
           text={messageText}
           sending={busy === 'messaging'}
@@ -219,7 +226,7 @@ export function EventView({ id }: { id: string }) {
         />
       </div>
 
-      {!published && (
+      {!canceled && (
         <section className="card" aria-label="Save roster">
           <div className="actions">
             <button
@@ -246,16 +253,17 @@ export function EventView({ id }: { id: string }) {
       <InviteMacros people={rows.filter(r => isAttending(r.status) && r.isConfirmed)} />
 
       {/* Keyed on the list: a reload with reminders sent meanwhile starts it afresh. */}
-      <EventReminders key={data.reminders.map(r => `${r.minutesBefore}:${r.sentAt ?? ''}`).join()} eventId={id} initial={data.reminders} closed={published} />
+      <EventReminders key={data.reminders.map(r => `${r.minutesBefore}:${r.sentAt ?? ''}`).join()} eventId={id} initial={data.reminders} closed={published || canceled} />
 
-      {!published && (
+      {!canceled && (
         <section className="card" aria-label="Publish">
           <h3>Publish</h3>
           <p className="muted">
-            Posts the roster to the channel and closes sign-ups. {summary.confirmed === 0 ? 'Confirm at least one player first.' : dirty ? 'Unsaved changes are saved with it.' : ''}
+            {published ? 'Posts the updated roster to the channel; players switched to another character or spec get a message.' : 'Posts the roster to the channel and closes sign-ups.'}{' '}
+            {summary.confirmed === 0 ? 'Confirm at least one player first.' : dirty ? 'Unsaved changes are saved with it.' : ''}
           </p>
           <button type="button" ref={publishButton} className="primary" disabled={!canPublish || locked} onClick={() => setConfirming(true)}>
-            Publish roster
+            {published ? 'Publish again' : 'Publish roster'}
           </button>
           {confirming && (
             <PublishDialog
@@ -273,8 +281,24 @@ export function EventView({ id }: { id: string }) {
                 } catch (e) {
                   throw changes.length > 0 ? new Error(`Roster saved, but publishing failed: ${errorMessage(e)}`) : e;
                 }
-              }, 'Roster published.')}
+              }, published ? 'Update posted.' : 'Roster published.')}
             />
+          )}
+        </section>
+      )}
+
+      {beforeStart && (
+        <section className="card" aria-label="Cancel event">
+          {canceled ? (
+            <button type="button" disabled={busy !== null} onClick={() => run('saving', () => api.reopenEvent(id), 'The event is back on.')}>Reopen the event</button>
+          ) : cancelling ? (
+            <div className="actions" role="group" aria-label="Confirm cancelling">
+              <span>Cancel {data.title}? The channel is told, and everyone who said in, late or maybe gets a message.</span>
+              <button type="button" className="danger" disabled={busy !== null} onClick={() => { setCancelling(false); void run('saving', () => api.cancelEvent(id), 'Event cancelled.'); }}>Yes, cancel it</button>
+              <button type="button" disabled={busy !== null} onClick={() => setCancelling(false)}>Keep it</button>
+            </div>
+          ) : (
+            <button type="button" disabled={busy !== null} onClick={() => setCancelling(true)}>Cancel the event…</button>
           )}
         </section>
       )}

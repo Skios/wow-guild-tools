@@ -62,6 +62,8 @@ export interface EventSummary {
   endTime: string;
   description: string | null;
   isPublished: boolean;
+  canceledAt: string | null;
+  state: EventState;
   counts: ResponseCounts;
 }
 
@@ -119,6 +121,9 @@ export interface Reminder {
   minutesBefore: number;
   sentAt: string | null;
 }
+
+/** Stored: OPEN, CLOSED (published), CANCELED; from the clock: STARTED, ENDED. */
+export type EventState = 'OPEN' | 'CLOSED' | 'CANCELED' | 'STARTED' | 'ENDED';
 
 export interface EventDetail extends Omit<EventSummary, 'counts'> {
   responses: EventResponse[];
@@ -243,9 +248,9 @@ export interface MyCharacterChoice { id: string; name: string; class: string; sp
 export interface MyAnswer {
   eventId: string; characterId: string; status: ResponseStatus; isConfirmed: boolean; arrivalTime: string | null; note: string | null;
 }
-export interface MyEvent { id: string; title: string; startTime: string; endTime: string; isPublished: boolean; answer: MyAnswer | null }
+export interface MyEvent { id: string; title: string; startTime: string; endTime: string; isPublished: boolean; state: EventState; answer: MyAnswer | null }
 export interface CompositionRow {
-  id: string; title: string; startTime: string; confirmed: number; noAnswer: number; nextReminder: string | null;
+  id: string; title: string; startTime: string; state: EventState; confirmed: number; noAnswer: number; nextReminder: string | null;
   byRole: Record<RoleId, number>; roleTarget: RoleTarget;
 }
 export interface DashboardTodo {

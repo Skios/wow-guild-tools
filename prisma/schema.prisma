@@ -142,7 +142,8 @@ model Event {
   description String?
   createdBy   String?    // optional until officers have logins
   creator     User?      @relation(fields: [createdBy], references: [id])
-  isPublished  Boolean    @default(false)
+  isPublished  Boolean    @default(false) // CLOSED: the roster went out; officers may still edit and publish again
+  canceledAt  DateTime?  // CANCELED (src/domain/event-state.ts); null = not cancelled
   responses   Response[]
   reminders   Reminder[]
   roleTarget  Json?      // the event's own role target (src/validators/role-target.validator.ts); null = the guild default
@@ -177,6 +178,8 @@ model Response {
   arrivalTime  DateTime?
   note         String?
   spec         String?        // the off-spec played that night, set by an officer; null = the main spec
+  switchedFrom String?        // the character the player answered with, when an officer switched it
+  toldAssignment String?      // "<characterId>|<spec>" last told to the player at publish, so each change is told once
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 

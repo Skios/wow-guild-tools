@@ -62,6 +62,24 @@ export async function eventRoutes(fastify: FastifyInstance) {
     }
   });
 
+  fastify.post('/events/:id/cancel', async (request, reply) => {
+    try {
+      const { id } = EventParamsSchema.parse(request.params);
+      return reply.send(await eventService.cancelEvent(id));
+    } catch (error) {
+      return sendError(request, reply, error);
+    }
+  });
+
+  fastify.post('/events/:id/reopen', async (request, reply) => {
+    try {
+      const { id } = EventParamsSchema.parse(request.params);
+      return reply.send(await eventService.reopenEvent(id));
+    } catch (error) {
+      return sendError(request, reply, error);
+    }
+  });
+
   fastify.put('/events/:id/role-target', async (request, reply) => {
     try {
       const { id } = EventParamsSchema.parse(request.params);

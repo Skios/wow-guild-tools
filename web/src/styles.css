@@ -162,7 +162,10 @@ button.danger { background: var(--danger); border-color: var(--danger); color: #
 
 .badge { display: inline-block; padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; border: 1px solid; }
 .badge-open { color: var(--accent); border-color: var(--accent); }
-.badge-published { color: var(--ok); border-color: var(--ok); }
+.badge-published, .badge-closed { color: var(--ok); border-color: var(--ok); }
+.badge-started { color: var(--accent-ink, #fff); background: var(--accent); border-color: var(--accent); }
+.badge-ended { color: var(--muted); border-color: var(--border); }
+.badge-canceled { color: var(--danger); border-color: var(--danger); text-decoration: line-through; }
 .table select { width: auto; min-width: 9rem; min-height: 34px; padding: 0.2rem 0.4rem; }
 .users-table td:last-child { width: 1%; white-space: nowrap; }
 .users-table td:last-child .actions { justify-content: flex-end; }
